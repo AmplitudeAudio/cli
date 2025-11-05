@@ -1,0 +1,13 @@
+[package]
+name = "ampm"
+version = "0.1.0"
+description = "Amplitude Project Manager"
+authors = ["Sparky Studios"]
+edition = "2024"
+
+[dependencies]
+anyhow = "1.0.100"
+clap = { version = "4.5.51", features = ["derive"] }
+promkit = { version = "0.10.1", features = ["readline"] }
+rusqlite = "0.37.0"
+tokio = "1.48.0"
