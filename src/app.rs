@@ -1,11 +1,11 @@
 use clap::{Parser, Subcommand};
 
-use crate::commands::project::ProjectCommands;
+use crate::commands::{project::ProjectCommands, sudo::SudoCommands};
 
 #[derive(Parser)]
-#[command(name = "ampm", version, about, long_about = None)]
+#[command(name = "am", version, about, long_about = None)]
 #[command(after_help = "Example:
-  ampm project init my_awesome_project --template=o3de
+  am project init my_awesome_project --template=o3de
 
 For more information, visit https://docs.amplitudeaudiosdk.com
 ")]
@@ -24,11 +24,17 @@ pub struct App {
     pub command: Commands,
 }
 
-#[derive(Subcommand)]
+#[derive(Subcommand, Debug)]
 pub enum Commands {
     /// Amplitude project-related tasks
     Project {
         #[command(subcommand)]
         command: ProjectCommands,
+    },
+
+    /// Administrative and destructive operations
+    Sudo {
+        #[command(subcommand)]
+        command: SudoCommands,
     },
 }
