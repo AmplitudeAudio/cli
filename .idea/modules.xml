@@ -2,7 +2,7 @@
 <project version="4">
   <component name="ProjectModuleManager">
     <modules>
-      <module fileurl="file://$PROJECT_DIR$/.idea/tool-ampm.iml" filepath="$PROJECT_DIR$/.idea/tool-ampm.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/am.iml" filepath="$PROJECT_DIR$/.idea/am.iml" />
     </modules>
   </component>
 </project>
