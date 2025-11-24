@@ -121,7 +121,8 @@ async fn handle_init_project_command(
     let project_name = transform_name(name);
 
     if !no_register {
-        if let Some(p) = db_get_project_by_name(project_name.as_str(), database.clone())? {
+        if let Some(Some(p)) = db_get_project_by_name(project_name.as_str(), database.clone()).ok()
+        {
             println!(
                 "A project with the name '{}' is already registered.",
                 project_name

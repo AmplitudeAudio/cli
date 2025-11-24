@@ -116,7 +116,7 @@ pub fn db_get_project_by_name(
 
     results
         .first()
-        .ok_or_else(|| anyhow::anyhow!("Could not find template with name {}", name))
+        .ok_or_else(|| anyhow::anyhow!("Could not find project with name {}", name))
         .map(|template| Some(template.clone()))
 }
 
