@@ -4,6 +4,7 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+use crate::app::Resource;
 use crate::database::db_forget_project;
 use crate::database::db_get_project_by_name;
 use crate::database::{
@@ -66,7 +67,7 @@ pub async fn handler(
                 Template {
                     id: Some(0),
                     name: DEFAULT_TEMPLATE.into(),
-                    path: String::new(),
+                    path: "bundled".to_string(),
                 },
             );
 
@@ -198,9 +199,29 @@ async fn handle_init_project_command(
         )?;
         fs::create_dir_all(project_path.join("sources").join(PROJECT_DIR_SWITCHES))?;
 
-        // TODO: Create default config file
-        // TODO: Create default buses file
-        // TODO: Create default pipeline file
+        if let Some(file) = Resource::get("default.config.json") {
+            fs::write(
+                project_path.join("sources").join("pc.config.json"),
+                file.data,
+            )?;
+        }
+
+        if let Some(file) = Resource::get("default.buses.json") {
+            fs::write(
+                project_path.join("sources").join("pc.buses.json"),
+                file.data,
+            )?;
+        }
+
+        if let Some(file) = Resource::get("default.pipeline.json") {
+            fs::write(
+                project_path
+                    .join("sources")
+                    .join(PROJECT_DIR_PIPELINES)
+                    .join("pc.pipeline.json"),
+                file.data,
+            )?;
+        }
 
         // Create the project's 'build' directory
         fs::create_dir_all(project_path.join("build"))?;

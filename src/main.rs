@@ -2,7 +2,6 @@ mod app;
 mod commands;
 mod common;
 mod database;
-mod widgets;
 
 use crate::{
     app::{App, Commands},

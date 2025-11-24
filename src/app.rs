@@ -1,6 +1,11 @@
 use clap::{Parser, Subcommand};
+use rust_embed::RustEmbed;
 
 use crate::commands::{project::ProjectCommands, sudo::SudoCommands};
+
+#[derive(RustEmbed)]
+#[folder = "resources/"]
+pub struct Resource;
 
 #[derive(Parser)]
 #[command(name = "am", version, about, long_about = None)]
