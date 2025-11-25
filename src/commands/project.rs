@@ -7,14 +7,15 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use crate::app::Resource;
-use crate::database::db_forget_project;
-use crate::database::db_get_project_by_name;
-use crate::database::{
-    Database, db_create_project, db_get_template_by_name, db_get_templates,
-    entities::{ProjectConfiguration, Template},
+use crate::{
+    app::Resource,
+    database::{
+        Database, db_create_project, db_forget_project, db_get_project_by_name,
+        db_get_template_by_name, db_get_templates,
+        entities::{ProjectConfiguration, Template},
+    },
+    success,
 };
-use crate::success;
 use clap::{Subcommand, value_parser};
 use inquire::Confirm;
 use inquire::{
@@ -38,11 +39,14 @@ const DEFAULT_TEMPLATE: &str = "default";
 pub enum ProjectCommands {
     /// Create a new project
     Init {
+        /// The name of the project to create
         name: Option<String>,
 
+        /// The project template. Must be registered
         #[arg(short, long)]
         template: Option<String>,
 
+        /// Create a new project without registering it
         #[arg(long, value_parser = value_parser!(bool))]
         no_register: bool,
     },
@@ -51,6 +55,16 @@ pub enum ProjectCommands {
     Register {
         #[arg(value_parser = value_parser!(PathBuf))]
         path: Option<PathBuf>,
+    },
+
+    /// Unregister a project
+    Unregister {
+        /// The name of the project to unregister
+        name: String,
+
+        /// Delete the project files as well
+        #[arg(long, value_parser = value_parser!(bool))]
+        delete_files: bool,
     },
 }
 
@@ -120,6 +134,10 @@ pub async fn handler(
 
             handle_register_project_command(project_path, database).await
         }
+        ProjectCommands::Unregister {
+            name,
+            delete_files: delete,
+        } => handle_unregister_project_command(name.as_str(), delete, database).await,
     }
 }
 
@@ -259,7 +277,7 @@ async fn handle_init_project_command(
         amproject.write_all(serde_json::to_string(project)?.as_bytes())?;
     }
 
-    success!("Project '{}' created successfully", name);
+    success!("Project {} created successfully", name.cyan());
 
     Ok(())
 }
@@ -300,7 +318,30 @@ async fn handle_register_project_command(
 
     register_project(&project_config, path, database)?;
 
-    success!("Project '{}' registered successfully", project_config.name);
+    success!(
+        "Project {} registered successfully",
+        project_config.name.cyan()
+    );
+
+    Ok(())
+}
+
+async fn handle_unregister_project_command(
+    name: &str,
+    delete: &bool,
+    database: Option<Arc<Database>>,
+) -> anyhow::Result<()> {
+    if let Some(Some(p)) = db_get_project_by_name(name, database.clone()).ok() {
+        info!("Unregistering project...");
+        db_forget_project(p.id.unwrap(), database.clone())?;
+
+        if *delete && fs::exists(p.path.clone())? {
+            info!("Deleting project directory...");
+            fs::remove_dir_all(p.path)?;
+        }
+    }
+
+    success!("Project {} unregistered successfully", name.cyan());
 
     Ok(())
 }
