@@ -162,9 +162,9 @@ async fn handle_init_project_command(
     let cwd = env::current_dir()?;
     let project_path = &cwd.join(project_name.clone());
 
-    if project_path.exists() {
+    if project_path.exists() && project_path.read_dir()?.next().is_some() {
         warn!(
-            "The project path {} already exists",
+            "The project path {} already exists and is not empty",
             project_path.to_str().unwrap_or_default().cyan()
         );
 
