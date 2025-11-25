@@ -1,3 +1,6 @@
+use anyhow::Result;
+use colored::*;
+use log::{info, warn};
 use std::env;
 use std::fs;
 use std::io::Write;
@@ -11,6 +14,7 @@ use crate::database::{
     Database, db_create_project, db_get_template_by_name, db_get_templates,
     entities::{ProjectConfiguration, Template},
 };
+use crate::success;
 use clap::{Subcommand, value_parser};
 use inquire::Confirm;
 use inquire::{
@@ -108,7 +112,13 @@ pub async fn handler(
             .await
         }
         ProjectCommands::Register { path } => {
-            handle_register_project_command(path.as_deref().unwrap(), database).await
+            let cwd = env::current_dir()?;
+            let project_path = match path {
+                Some(path) => path,
+                None => &cwd,
+            };
+
+            handle_register_project_command(project_path, database).await
         }
     }
 }
@@ -124,14 +134,16 @@ async fn handle_init_project_command(
     if !no_register {
         if let Some(Some(p)) = db_get_project_by_name(project_name.as_str(), database.clone()).ok()
         {
-            println!(
-                "A project with the name '{}' is already registered.",
-                project_name
+            warn!(
+                "A project with the name {} is already registered at path {}",
+                project_name.cyan(),
+                p.path.cyan()
             );
-            println!("  • Project path: {}", p.path);
 
-            if Confirm::new("Do you want to forget this project and create a new one?").prompt()? {
-                println!("Unregistering previous project...");
+            if Confirm::new("Do you want to forget that project and create this new one?")
+                .prompt()?
+            {
+                info!("Unregistering previous project...");
                 db_forget_project(p.id.unwrap(), database.clone())?;
             } else {
                 return Err(anyhow::Error::msg(
@@ -141,15 +153,19 @@ async fn handle_init_project_command(
         }
     }
 
-    println!("Initializing project '{name}' using template '{template}'...");
+    info!(
+        "Initializing project {} using template {}...",
+        project_name.cyan(),
+        template.cyan()
+    );
 
     let cwd = env::current_dir()?;
     let project_path = &cwd.join(project_name.clone());
 
     if project_path.exists() {
-        println!(
-            "The project path '{}' already exists.",
-            project_path.display()
+        warn!(
+            "The project path {} already exists",
+            project_path.to_str().unwrap_or_default().cyan()
         );
 
         if Confirm::new(
@@ -183,40 +199,31 @@ async fn handle_init_project_command(
             return Err(anyhow::Error::msg("The selected template was not found"));
         }
     } else {
+        let sources_dir = project_path.join("sources");
+
         // Create project 'sources' directories
-        fs::create_dir_all(project_path.join("sources").join(PROJECT_DIR_ATTENUATORS))?;
-        fs::create_dir_all(project_path.join("sources").join(PROJECT_DIR_COLLECTIONS))?;
-        fs::create_dir_all(project_path.join("sources").join(PROJECT_DIR_EFFECTS))?;
-        fs::create_dir_all(project_path.join("sources").join(PROJECT_DIR_EVENTS))?;
-        fs::create_dir_all(project_path.join("sources").join(PROJECT_DIR_PIPELINES))?;
-        fs::create_dir_all(project_path.join("sources").join(PROJECT_DIR_RTPC))?;
-        fs::create_dir_all(project_path.join("sources").join(PROJECT_DIR_SOUND_BANKS))?;
-        fs::create_dir_all(project_path.join("sources").join(PROJECT_DIR_SOUNDS))?;
-        fs::create_dir_all(
-            project_path
-                .join("sources")
-                .join(PROJECT_DIR_SWITCH_CONTAINERS),
-        )?;
-        fs::create_dir_all(project_path.join("sources").join(PROJECT_DIR_SWITCHES))?;
+        fs::create_dir_all(sources_dir.join(PROJECT_DIR_ATTENUATORS))?;
+        fs::create_dir_all(sources_dir.join(PROJECT_DIR_COLLECTIONS))?;
+        fs::create_dir_all(sources_dir.join(PROJECT_DIR_EFFECTS))?;
+        fs::create_dir_all(sources_dir.join(PROJECT_DIR_EVENTS))?;
+        fs::create_dir_all(sources_dir.join(PROJECT_DIR_PIPELINES))?;
+        fs::create_dir_all(sources_dir.join(PROJECT_DIR_RTPC))?;
+        fs::create_dir_all(sources_dir.join(PROJECT_DIR_SOUND_BANKS))?;
+        fs::create_dir_all(sources_dir.join(PROJECT_DIR_SOUNDS))?;
+        fs::create_dir_all(sources_dir.join(PROJECT_DIR_SWITCH_CONTAINERS))?;
+        fs::create_dir_all(sources_dir.join(PROJECT_DIR_SWITCHES))?;
 
         if let Some(file) = Resource::get("default.config.json") {
-            fs::write(
-                project_path.join("sources").join("pc.config.json"),
-                file.data,
-            )?;
+            fs::write(sources_dir.join("pc.config.json"), file.data)?;
         }
 
         if let Some(file) = Resource::get("default.buses.json") {
-            fs::write(
-                project_path.join("sources").join("pc.buses.json"),
-                file.data,
-            )?;
+            fs::write(sources_dir.join("pc.buses.json"), file.data)?;
         }
 
         if let Some(file) = Resource::get("default.pipeline.json") {
             fs::write(
-                project_path
-                    .join("sources")
+                sources_dir
                     .join(PROJECT_DIR_PIPELINES)
                     .join("pc.pipeline.json"),
                 file.data,
@@ -246,33 +253,54 @@ async fn handle_init_project_command(
         };
 
         if !no_register {
-            println!("Registering project '{name}'...");
-
-            db_create_project(
-                &project.to_project(project_path.to_str().unwrap()),
-                database.clone(),
-            )?;
+            register_project(project, project_path, database)?;
         }
 
         amproject.write_all(serde_json::to_string(project)?.as_bytes())?;
     }
 
-    println!("Project '{}' created successfully", name);
+    success!("Project '{}' created successfully", name);
 
     Ok(())
 }
 
 async fn handle_register_project_command(
-    path: &Path,
+    path: &PathBuf,
     database: Option<Arc<Database>>,
 ) -> anyhow::Result<()> {
     println!("Registering project '{}'...", path.display());
+    let amproject = path.join(".amproject");
 
-    if !path.join(".amproject").exists() {
+    if !amproject.exists() {
         Err(anyhow::Error::msg(
-            "Invalid project path. No '.amproject' file detected in the specified path.",
+            "Invalid project path. No '.amproject' file detected in the specified path",
         ))?;
     }
+
+    let amproject_content = fs::read_to_string(&amproject)?;
+    let project_config: ProjectConfiguration = serde_json::from_str(&amproject_content)?;
+    let project_name = project_config.name.clone();
+
+    if let Some(Some(p)) = db_get_project_by_name(project_name.as_str(), database.clone()).ok() {
+        warn!(
+            "A project with the name {} is already registered at path {}",
+            project_name.cyan(),
+            p.path.cyan()
+        );
+
+        if Confirm::new("Do you want to forget that project and register this one?").prompt()? {
+            info!("Unregistering previous project...");
+            db_forget_project(p.id.unwrap(), database.clone())?;
+        } else {
+            return Err(anyhow::Error::msg(
+                "Cannot register project, a project with the same name is already registered.",
+            ));
+        }
+    }
+
+    register_project(&project_config, path, database)?;
+
+    success!("Project '{}' registered successfully", project_config.name);
 
     Ok(())
 }
@@ -294,4 +322,14 @@ fn validate_name(name: &str) -> Result<Validation, CustomUserError> {
 
 fn transform_name(name: &str) -> String {
     name.to_lowercase().replace(' ', "_").replace('-', "_")
+}
+
+fn register_project(
+    config: &ProjectConfiguration,
+    path: &PathBuf,
+    database: Option<Arc<Database>>,
+) -> Result<bool> {
+    info!("Registering project {}...", config.name.cyan());
+
+    db_create_project(&config.to_project(path.to_str().unwrap()), database.clone())
 }

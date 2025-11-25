@@ -1,6 +1,6 @@
 use super::Database;
 use anyhow::{Context, Result};
-use log::{Level, log};
+use log::debug;
 use std::collections::BTreeMap;
 
 /// Represents a single database migration
@@ -192,11 +192,7 @@ impl MigrationManager {
     pub fn run_migrations(&self, db: &Database) -> Result<()> {
         let current_version = self.get_current_version(db)?;
 
-        log!(
-            Level::Debug,
-            "Current database version: {}",
-            current_version
-        );
+        debug!("Current database version: {}", current_version);
 
         let pending_migrations: Vec<_> = self
             .migrations
@@ -205,32 +201,26 @@ impl MigrationManager {
             .collect();
 
         if pending_migrations.is_empty() {
-            log!(Level::Debug, "Database is up to date");
+            debug!("Database is up to date");
             return Ok(());
         }
 
-        log!(
-            Level::Debug,
-            "Found {} pending migration(s)",
-            pending_migrations.len()
-        );
+        debug!("Found {} pending migration(s)", pending_migrations.len());
 
         for (&version, migration) in pending_migrations {
             self.apply_migration(db, migration)
                 .with_context(|| format!("Failed to apply migration {}", version))?;
         }
 
-        log!(Level::Debug, "All migrations completed successfully");
+        debug!("All migrations completed successfully");
         Ok(())
     }
 
     /// Apply a single migration
     fn apply_migration(&self, db: &Database, migration: &Migration) -> Result<()> {
-        log!(
-            Level::Debug,
+        debug!(
             "Applying migration {}: {}",
-            migration.version,
-            migration.description
+            migration.version, migration.description
         );
 
         let transaction = db.transaction()?;
@@ -258,11 +248,7 @@ impl MigrationManager {
 
         transaction.commit()?;
 
-        log!(
-            Level::Debug,
-            "Migration {} applied successfully",
-            migration.version
-        );
+        debug!("Migration {} applied successfully", migration.version);
         Ok(())
     }
 
@@ -274,11 +260,9 @@ impl MigrationManager {
             .ok_or_else(|| anyhow::anyhow!("Migration {} not found", version))?;
 
         if let Some(down_sql) = &migration.down_sql {
-            log!(
-                Level::Debug,
+            debug!(
                 "Rolling back migration {}: {}",
-                migration.version,
-                migration.description
+                migration.version, migration.description
             );
 
             let transaction = db.transaction()?;
@@ -300,11 +284,7 @@ impl MigrationManager {
 
             transaction.commit()?;
 
-            log!(
-                Level::Debug,
-                "Migration {} rolled back successfully",
-                version
-            );
+            debug!("Migration {} rolled back successfully", migration.version);
         } else {
             return Err(anyhow::anyhow!(
                 "Migration {} does not support rollback",

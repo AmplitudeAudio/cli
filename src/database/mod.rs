@@ -40,6 +40,23 @@ pub fn cleanup(database: Option<Database>) {
     }
 }
 
+/// Cleanup the given database on application panic
+pub fn setup_crash_db_cleanup(db: Option<Arc<Database>>) {
+    let default_hook = std::panic::take_hook();
+    let db_clone = db.clone();
+    std::panic::set_hook(Box::new(move |panic_info| {
+        eprintln!("Application panicked: {}", panic_info);
+
+        if let Some(db) = &db_clone {
+            if let Ok(db) = Arc::try_unwrap(db.clone()) {
+                cleanup(Some(db));
+            }
+        }
+
+        default_hook(panic_info);
+    }));
+}
+
 /// Get all templates from the database
 pub fn db_get_templates(database: Option<Arc<Database>>) -> Result<Vec<entities::Template>> {
     let query = database

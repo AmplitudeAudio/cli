@@ -25,6 +25,10 @@ Copyright (c) 2025-present Sparky Studios. All rights reserved.
 {after-help}
 ")]
 pub struct App {
+    /// Enable verbose logging
+    #[arg(short, long, global = true)]
+    pub verbose: bool,
+
     #[command(subcommand)]
     pub command: Commands,
 }
