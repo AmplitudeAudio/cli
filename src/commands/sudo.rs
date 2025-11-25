@@ -1,9 +1,13 @@
 use anyhow::Result;
 use clap::Subcommand;
 use inquire::Confirm;
+use log::{info, warn};
 use std::sync::Arc;
 
-use crate::database::{Database, get_database_path};
+use crate::{
+    database::{Database, get_database_path},
+    success,
+};
 
 #[derive(Subcommand, Debug)]
 pub enum SudoCommands {
@@ -42,12 +46,9 @@ async fn handle_database_command(
 }
 
 async fn reset_database(skip_confirmation: bool, database: Option<Arc<Database>>) -> Result<()> {
-    println!("⚠️  WARNING: Database Reset");
-    println!("============================");
     println!("This operation will:");
     println!("  • Delete ALL projects from the database");
     println!("  • Clear ALL configuration settings");
-    println!("  • Remove ALL command history");
     println!("  • Reset the database to its initial state");
     println!();
     println!("This action cannot be undone!");
@@ -59,11 +60,9 @@ async fn reset_database(skip_confirmation: bool, database: Option<Arc<Database>>
             Confirm::new("Are you absolutely sure you want to reset the database?").prompt()?;
 
         if !confirmed {
-            println!("Database reset cancelled.");
+            success!("Database reset cancelled.");
             return Ok(());
         }
-
-        println!();
     }
 
     println!("Resetting database...");
@@ -81,9 +80,9 @@ async fn reset_database(skip_confirmation: bool, database: Option<Arc<Database>>
     if db_path.exists() {
         std::fs::remove_file(&db_path)
             .map_err(|e| anyhow::anyhow!("Failed to delete database file: {}", e))?;
-        println!("✓ Database file deleted");
+        success!("Database file deleted");
     } else {
-        println!("ℹ Database file does not exist");
+        warn!("Database file does not exist, skipping deletion");
     }
 
     // Also clean up any WAL or journal files that might exist
@@ -94,21 +93,20 @@ async fn reset_database(skip_confirmation: bool, database: Option<Arc<Database>>
     if wal_path.exists() {
         std::fs::remove_file(&wal_path).ok();
     }
+
     if shm_path.exists() {
         std::fs::remove_file(&shm_path).ok();
     }
+
     if journal_path.exists() {
         std::fs::remove_file(&journal_path).ok();
     }
 
     // Recreate and initialize a fresh database
-    println!("Creating fresh database...");
+    info!("Creating fresh database...");
     let new_db = crate::database::initialize().await?;
 
-    println!("✓ Database has been reset successfully");
-    println!();
-    println!("The database has been restored to its initial state.");
-    println!("All data has been permanently deleted.");
+    success!("Database has been reset successfully");
 
     // Clean up the new database connection
     drop(new_db);
