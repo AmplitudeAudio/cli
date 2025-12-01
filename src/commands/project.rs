@@ -262,7 +262,6 @@ async fn handle_init_project_command(
 
         let project = &ProjectConfiguration {
             name: project_name,
-            template: template.to_string(),
             default_configuration: "pc.config.amconfig".to_string(),
             build_dir: "build".to_string(),
             data_dir: "data".to_string(),

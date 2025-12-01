@@ -102,14 +102,10 @@ pub fn db_create_project(project: &Project, database: Option<Arc<Database>>) -> 
     let query = database
         .as_ref()
         .unwrap()
-        .prepare("INSERT INTO projects (name, path, template) VALUES ($1, $2, $3)")?;
+        .prepare("INSERT INTO projects (name, path) VALUES ($1, $2)")?;
 
     query
-        .execute([
-            project.name.clone(),
-            project.path.clone(),
-            project.template.clone(),
-        ])
+        .execute([project.name.clone(), project.path.clone()])
         .map(|_| true)
 }
 
@@ -127,7 +123,6 @@ pub fn db_get_project_by_name(
             id: row.get(0)?,
             name: row.get(1)?,
             path: row.get(2)?,
-            template: row.get(3)?,
         })
     })?;
 

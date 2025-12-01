@@ -57,7 +57,6 @@ impl MigrationManager {
                         id INTEGER PRIMARY KEY AUTOINCREMENT,
                         name TEXT NOT NULL UNIQUE,
                         path TEXT NOT NULL,
-                        template TEXT,
                         created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
                         updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
                         metadata TEXT -- JSON data for additional project info

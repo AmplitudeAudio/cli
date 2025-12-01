@@ -5,7 +5,6 @@ use std::fmt::Display;
 #[serde(rename_all = "snake_case")]
 pub struct ProjectConfiguration {
     pub name: String,
-    pub template: String,
     pub default_configuration: String,
     pub sources_dir: String,
     pub data_dir: String,
@@ -19,7 +18,6 @@ pub struct Project {
     pub id: Option<i32>,
     pub name: String,
     pub path: String,
-    pub template: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -36,7 +34,6 @@ impl ProjectConfiguration {
             id: None,
             name: self.name.clone(),
             path: path.to_string(),
-            template: self.template.clone(),
         }
     }
 }
