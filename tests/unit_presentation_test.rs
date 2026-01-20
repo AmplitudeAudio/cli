@@ -327,3 +327,51 @@ fn test_p2_output_multiple_progress_calls_tracked() {
     assert_eq!(output.progress_count(), 3);
     assert_eq!(output.last_progress(), Some("Step 3".to_string()));
 }
+
+// ============================================================================
+// P1: create_output() Factory Function Tests
+// ============================================================================
+
+#[test]
+fn test_p1_create_output_returns_interactive_by_default() {
+    // GIVEN: json_mode is false
+    // WHEN: Calling create_output
+    let output = am::presentation::create_output(false);
+
+    // THEN: Should return a valid Output implementation
+    // Verify by calling methods (no panic = success)
+    output.success(json!("test"), None);
+    output.progress("testing...");
+}
+
+#[test]
+fn test_p1_create_output_with_json_mode_still_returns_interactive() {
+    // GIVEN: json_mode is true (JsonOutput not yet implemented)
+    // WHEN: Calling create_output
+    let output = am::presentation::create_output(true);
+
+    // THEN: Should still return InteractiveOutput (Story 1.2 will add JsonOutput)
+    // Verify by calling methods (no panic = success)
+    output.success(json!("test"), None);
+    output.progress("testing...");
+}
+
+#[test]
+fn test_p1_create_output_returns_boxed_output() {
+    // GIVEN: Any mode
+    // WHEN: Calling create_output
+    let output: Box<dyn Output> = am::presentation::create_output(false);
+
+    // THEN: Should return Box<dyn Output> that can be used
+    output.success(json!({"status": "ok"}), None);
+}
+
+#[test]
+fn test_p2_create_output_result_is_send_sync() {
+    // GIVEN: create_output result
+    let output = am::presentation::create_output(false);
+
+    // WHEN/THEN: Can be passed to a function requiring Send + Sync
+    fn assert_send_sync<T: Send + Sync + ?Sized>(_: &T) {}
+    assert_send_sync(&*output);
+}
