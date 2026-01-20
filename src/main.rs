@@ -2,12 +2,14 @@ mod app;
 mod commands;
 mod common;
 mod database;
+mod presentation;
 
 use crate::{
     app::{App, Commands},
     commands::{project::handler as handle_project_command, sudo::handler as handle_sudo_command},
     common::logger::{init_logger, setup_crash_logging, write_crash_log_on_error},
     database::{Database, setup_crash_db_cleanup},
+    presentation::{Output, create_output},
 };
 use clap::Parser;
 use log::{debug, error, warn};
@@ -60,7 +62,10 @@ async fn main() -> anyhow::Result<()> {
         std::process::exit(0);
     });
 
-    let result = run_command(&cli, database.clone()).await;
+    // Create output handler (interactive for now, JSON mode in Story 1.2)
+    let output = create_output(false);
+
+    let result = run_command(&cli, database.clone(), output.as_ref()).await;
 
     // Clean up database on normal exit
     if let Some(db) = database {
@@ -80,9 +85,13 @@ async fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn run_command(cli: &App, database: Option<Arc<Database>>) -> anyhow::Result<()> {
+async fn run_command(
+    cli: &App,
+    database: Option<Arc<Database>>,
+    output: &dyn Output,
+) -> anyhow::Result<()> {
     match &cli.command {
-        Commands::Project { command } => handle_project_command(command, database).await,
-        Commands::Sudo { command } => handle_sudo_command(command, database).await,
+        Commands::Project { command } => handle_project_command(command, database, output).await,
+        Commands::Sudo { command } => handle_sudo_command(command, database, output).await,
     }
 }

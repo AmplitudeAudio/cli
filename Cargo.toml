@@ -20,3 +20,6 @@ rust-embed = "8.9.0"
 string_template = "0.2.1"
 colored = "3.0.0"
 chrono = "0.4"
+
+[dev-dependencies]
+tempfile = "3.24.0"

@@ -1,13 +1,14 @@
 use anyhow::Result;
 use clap::Subcommand;
 use inquire::Confirm;
-use log::{info, warn};
+use log::warn;
 use std::sync::Arc;
 
 use crate::{
     database::{Database, get_database_path},
-    success,
+    presentation::Output,
 };
+use serde_json::json;
 
 #[derive(Subcommand, Debug)]
 pub enum SudoCommands {
@@ -28,31 +29,40 @@ pub enum DatabaseCommands {
     },
 }
 
-pub async fn handler(command: &SudoCommands, database: Option<Arc<Database>>) -> Result<()> {
+pub async fn handler(
+    command: &SudoCommands,
+    database: Option<Arc<Database>>,
+    output: &dyn Output,
+) -> Result<()> {
     match command {
-        SudoCommands::Database { command } => handle_database_command(command, database).await,
+        SudoCommands::Database { command } => handle_database_command(command, database, output).await,
     }
 }
 
 async fn handle_database_command(
     command: &DatabaseCommands,
     database: Option<Arc<Database>>,
+    output: &dyn Output,
 ) -> Result<()> {
     match command {
         DatabaseCommands::Reset { skip_confirmation } => {
-            reset_database(*skip_confirmation, database).await
+            reset_database(*skip_confirmation, database, output).await
         }
     }
 }
 
-async fn reset_database(skip_confirmation: bool, database: Option<Arc<Database>>) -> Result<()> {
-    println!("This operation will:");
-    println!("  • Delete ALL projects from the database");
-    println!("  • Clear ALL configuration settings");
-    println!("  • Reset the database to its initial state");
-    println!();
-    println!("This action cannot be undone!");
-    println!();
+async fn reset_database(
+    skip_confirmation: bool,
+    database: Option<Arc<Database>>,
+    output: &dyn Output,
+) -> Result<()> {
+    output.progress("This operation will:");
+    output.progress("  • Delete ALL projects from the database");
+    output.progress("  • Clear ALL configuration settings");
+    output.progress("  • Reset the database to its initial state");
+    output.progress("");
+    output.progress("This action cannot be undone!");
+    output.progress("");
 
     // Check if we should ask for confirmation
     if !skip_confirmation {
@@ -60,12 +70,12 @@ async fn reset_database(skip_confirmation: bool, database: Option<Arc<Database>>
             Confirm::new("Are you absolutely sure you want to reset the database?").prompt()?;
 
         if !confirmed {
-            success!("Database reset cancelled.");
+            output.success(json!("Database reset cancelled."), None);
             return Ok(());
         }
     }
 
-    println!("Resetting database...");
+    output.progress("Resetting database...");
 
     // Get the database path
     let db_path = get_database_path()?;
@@ -80,7 +90,7 @@ async fn reset_database(skip_confirmation: bool, database: Option<Arc<Database>>
     if db_path.exists() {
         std::fs::remove_file(&db_path)
             .map_err(|e| anyhow::anyhow!("Failed to delete database file: {}", e))?;
-        success!("Database file deleted");
+        output.progress("Database file deleted");
     } else {
         warn!("Database file does not exist, skipping deletion");
     }
@@ -103,10 +113,10 @@ async fn reset_database(skip_confirmation: bool, database: Option<Arc<Database>>
     }
 
     // Recreate and initialize a fresh database
-    info!("Creating fresh database...");
+    output.progress("Creating fresh database...");
     let new_db = crate::database::initialize().await?;
 
-    success!("Database has been reset successfully");
+    output.success(json!("Database has been reset successfully"), None);
 
     // Clean up the new database connection
     drop(new_db);
