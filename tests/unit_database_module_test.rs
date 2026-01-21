@@ -7,7 +7,7 @@
 //! - P1: Cleanup functions, crash handling
 //! - P2: Edge cases, error conditions
 
-use am::database::{cleanup, get_database_path, initialize, setup_crash_db_cleanup, Database};
+use am::database::{Database, cleanup, get_database_path, initialize, setup_crash_db_cleanup};
 use std::sync::Arc;
 use tempfile::tempdir;
 
@@ -117,7 +117,8 @@ async fn test_p0_initialize_runs_migrations() {
 
     // THEN: Migrations should have run (projects table should exist)
     if let Ok(db) = result {
-        let stmt = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='projects'");
+        let stmt =
+            db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='projects'");
         if let Ok(s) = stmt {
             let tables: Vec<String> = s.query_map([], |row| row.get(0)).unwrap_or_default();
             assert!(
@@ -257,10 +258,7 @@ fn test_p2_database_path_structure() {
         );
 
         // Should end with database filename
-        assert!(
-            path_str.ends_with("am.db"),
-            "Path should end with am.db"
-        );
+        assert!(path_str.ends_with("am.db"), "Path should end with am.db");
 
         // Should have parent directory
         assert!(path.parent().is_some(), "Path should have parent directory");

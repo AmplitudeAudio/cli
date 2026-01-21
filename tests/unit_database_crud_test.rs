@@ -1,10 +1,8 @@
 //! Unit tests for database CRUD operations.
 
 use am::database::{
-    db_create_project, db_forget_project, db_get_project_by_name, db_get_template_by_name,
-    db_get_templates,
-    entities::Project,
-    Database,
+    Database, db_create_project, db_forget_project, db_get_project_by_name,
+    db_get_template_by_name, db_get_templates, entities::Project,
 };
 use std::sync::Arc;
 use tempfile::tempdir;
@@ -14,9 +12,7 @@ async fn setup_test_database() -> (Arc<Database>, tempfile::TempDir) {
     let temp_dir = tempdir().expect("Failed to create temp dir");
     let db_path = temp_dir.path().join("test.db");
     let mut db = Database::new(&db_path).expect("Failed to create database");
-    db.run_migrations()
-        .await
-        .expect("Failed to run migrations");
+    db.run_migrations().await.expect("Failed to run migrations");
     (Arc::new(db), temp_dir)
 }
 
@@ -81,7 +77,10 @@ async fn test_p1_db_create_project_allows_same_path_different_name() {
 
     let result = db_create_project(&project2, Some(db.clone()));
 
-    assert!(result.is_ok(), "Same path with different name should succeed");
+    assert!(
+        result.is_ok(),
+        "Same path with different name should succeed"
+    );
 }
 
 // =============================================================================
@@ -184,7 +183,10 @@ async fn test_p1_db_get_templates_returns_empty_for_fresh_db() {
 
     assert!(result.is_ok(), "Query should succeed");
     let templates = result.unwrap();
-    assert!(templates.is_empty(), "Fresh database should have no templates");
+    assert!(
+        templates.is_empty(),
+        "Fresh database should have no templates"
+    );
 }
 
 #[tokio::test]

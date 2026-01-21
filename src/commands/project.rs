@@ -16,13 +16,13 @@ use crate::{
     },
     presentation::Output,
 };
-use serde_json::json;
 use clap::{Subcommand, value_parser};
 use inquire::Confirm;
 use inquire::{
     CustomUserError, Select, Text, required,
     validator::{StringValidator, Validation},
 };
+use serde_json::json;
 
 const PROJECT_DIR_ATTENUATORS: &str = "attenuators";
 const PROJECT_DIR_COLLECTIONS: &str = "collections";
@@ -280,7 +280,10 @@ async fn handle_init_project_command(
         amproject.write_all(serde_json::to_string(project)?.as_bytes())?;
     }
 
-    output.success(json!(format!("Project {} created successfully", name)), None);
+    output.success(
+        json!(format!("Project {} created successfully", name)),
+        None,
+    );
 
     Ok(())
 }
@@ -323,7 +326,10 @@ async fn handle_register_project_command(
     register_project(&project_config, path, database)?;
 
     output.success(
-        json!(format!("Project {} registered successfully", project_config.name)),
+        json!(format!(
+            "Project {} registered successfully",
+            project_config.name
+        )),
         None,
     );
 
@@ -346,7 +352,10 @@ async fn handle_unregister_project_command(
         }
     }
 
-    output.success(json!(format!("Project {} unregistered successfully", name)), None);
+    output.success(
+        json!(format!("Project {} unregistered successfully", name)),
+        None,
+    );
 
     Ok(())
 }

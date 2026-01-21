@@ -29,7 +29,7 @@ impl Output for InteractiveOutput {
             success!("{}", s);
             return;
         }
-        
+
         // For complex data, pretty-print the JSON
         match serde_json::to_string_pretty(&data) {
             Ok(json) => success!("{}", json),

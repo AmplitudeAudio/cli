@@ -35,7 +35,9 @@ pub async fn handler(
     output: &dyn Output,
 ) -> Result<()> {
     match command {
-        SudoCommands::Database { command } => handle_database_command(command, database, output).await,
+        SudoCommands::Database { command } => {
+            handle_database_command(command, database, output).await
+        }
     }
 }
 

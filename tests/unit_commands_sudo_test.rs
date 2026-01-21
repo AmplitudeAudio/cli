@@ -55,9 +55,7 @@ impl Output for MockOutput {
     }
 
     fn error(&self, err: &anyhow::Error, code: i32, _request_id: Option<i64>) {
-        self.error_calls
-            .borrow_mut()
-            .push((err.to_string(), code));
+        self.error_calls.borrow_mut().push((err.to_string(), code));
     }
 
     fn progress(&self, message: &str) {
@@ -297,7 +295,10 @@ fn test_p1_skip_confirmation_flag_true() {
     // THEN: Should skip the interactive prompt
     match cmd {
         DatabaseCommands::Reset { skip_confirmation } => {
-            assert!(skip_confirmation, "Should skip confirmation when flag is set");
+            assert!(
+                skip_confirmation,
+                "Should skip confirmation when flag is set"
+            );
         }
     }
 }

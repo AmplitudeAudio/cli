@@ -1,9 +1,8 @@
 //! Feature tests for project lifecycle operations.
 
 use am::database::{
-    db_create_project, db_forget_project, db_get_project_by_name,
+    Database, db_create_project, db_forget_project, db_get_project_by_name,
     entities::{Project, ProjectConfiguration},
-    Database,
 };
 use std::fs;
 use std::sync::Arc;
@@ -14,9 +13,7 @@ async fn setup_test_database() -> (Arc<Database>, tempfile::TempDir) {
     let temp_dir = tempdir().expect("Failed to create temp dir");
     let db_path = temp_dir.path().join("test.db");
     let mut db = Database::new(&db_path).expect("Failed to create database");
-    db.run_migrations()
-        .await
-        .expect("Failed to run migrations");
+    db.run_migrations().await.expect("Failed to run migrations");
     (Arc::new(db), temp_dir)
 }
 
@@ -120,14 +117,24 @@ async fn test_p1_project_registration_prevents_duplicate_names() {
     let project1 = Project {
         id: None,
         name: "unique_name".to_string(),
-        path: temp_dir.path().join("project1").to_str().unwrap().to_string(),
+        path: temp_dir
+            .path()
+            .join("project1")
+            .to_str()
+            .unwrap()
+            .to_string(),
     };
     db_create_project(&project1, Some(db.clone())).expect("First registration should succeed");
 
     let project2 = Project {
         id: None,
         name: "unique_name".to_string(),
-        path: temp_dir.path().join("project2").to_str().unwrap().to_string(),
+        path: temp_dir
+            .path()
+            .join("project2")
+            .to_str()
+            .unwrap()
+            .to_string(),
     };
     let result = db_create_project(&project2, Some(db.clone()));
 
@@ -181,7 +188,10 @@ async fn test_p1_project_unregistration_does_not_delete_files_by_default() {
 
     db_forget_project(found.id.unwrap(), Some(db.clone())).expect("Unregister should succeed");
 
-    assert!(project_path.exists(), "Project directory should still exist");
+    assert!(
+        project_path.exists(),
+        "Project directory should still exist"
+    );
     assert!(amproject_path.exists(), ".amproject should still exist");
 }
 
@@ -243,7 +253,12 @@ async fn test_p1_re_register_after_unregister() {
     let project = Project {
         id: None,
         name: "re_register_test".to_string(),
-        path: temp_dir.path().join("re_register").to_str().unwrap().to_string(),
+        path: temp_dir
+            .path()
+            .join("re_register")
+            .to_str()
+            .unwrap()
+            .to_string(),
     };
 
     db_create_project(&project, Some(db.clone())).expect("First registration should succeed");

@@ -21,9 +21,7 @@ async fn test_p0_run_migrations_creates_schema_migrations_table() {
     assert!(result.is_ok(), "Migrations should succeed");
 
     let stmt = db
-        .prepare(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name='schema_migrations'",
-        )
+        .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='schema_migrations'")
         .expect("Failed to prepare");
     let tables: Vec<String> = stmt
         .query_map([], |row| row.get(0))
@@ -39,7 +37,9 @@ async fn test_p0_run_migrations_creates_projects_table() {
     let mut db = Database::new(&db_path).expect("Failed to create database");
 
     // WHEN: Running migrations
-    db.run_migrations().await.expect("Migrations should succeed");
+    db.run_migrations()
+        .await
+        .expect("Migrations should succeed");
 
     // THEN: Projects table should exist
     let stmt = db
@@ -59,7 +59,9 @@ async fn test_p0_run_migrations_creates_templates_table() {
     let mut db = Database::new(&db_path).expect("Failed to create database");
 
     // WHEN: Running migrations
-    db.run_migrations().await.expect("Migrations should succeed");
+    db.run_migrations()
+        .await
+        .expect("Migrations should succeed");
 
     // THEN: Templates table should exist
     let stmt = db
@@ -79,7 +81,9 @@ async fn test_p0_run_migrations_creates_configuration_table() {
     let mut db = Database::new(&db_path).expect("Failed to create database");
 
     // WHEN: Running migrations
-    db.run_migrations().await.expect("Migrations should succeed");
+    db.run_migrations()
+        .await
+        .expect("Migrations should succeed");
 
     // THEN: Configuration table should exist
     let stmt = db
@@ -99,7 +103,9 @@ async fn test_p1_run_migrations_records_migration_versions() {
     let mut db = Database::new(&db_path).expect("Failed to create database");
 
     // WHEN: Running migrations
-    db.run_migrations().await.expect("Migrations should succeed");
+    db.run_migrations()
+        .await
+        .expect("Migrations should succeed");
 
     // THEN: Migration versions should be recorded
     let stmt = db
@@ -109,7 +115,10 @@ async fn test_p1_run_migrations_records_migration_versions() {
         .query_map([], |row| row.get(0))
         .expect("Failed to query");
 
-    assert!(versions.len() >= 4, "Should have at least 4 migrations recorded");
+    assert!(
+        versions.len() >= 4,
+        "Should have at least 4 migrations recorded"
+    );
     assert_eq!(versions[0], 1, "First migration should be version 1");
     assert_eq!(versions[1], 2, "Second migration should be version 2");
     assert_eq!(versions[2], 3, "Third migration should be version 3");
@@ -124,7 +133,9 @@ async fn test_p1_run_migrations_stores_checksums() {
     let mut db = Database::new(&db_path).expect("Failed to create database");
 
     // WHEN: Running migrations
-    db.run_migrations().await.expect("Migrations should succeed");
+    db.run_migrations()
+        .await
+        .expect("Migrations should succeed");
 
     // THEN: Checksums should be stored
     let stmt = db
@@ -176,7 +187,9 @@ async fn test_p1_migrations_insert_default_configuration() {
     let mut db = Database::new(&db_path).expect("Failed to create database");
 
     // WHEN: Running migrations
-    db.run_migrations().await.expect("Migrations should succeed");
+    db.run_migrations()
+        .await
+        .expect("Migrations should succeed");
 
     // THEN: Default configuration values should exist
     let stmt = db
@@ -210,7 +223,9 @@ async fn test_p1_projects_table_has_correct_columns() {
     let temp_dir = tempdir().expect("Failed to create temp dir");
     let db_path = temp_dir.path().join("test.db");
     let mut db = Database::new(&db_path).expect("Failed to create database");
-    db.run_migrations().await.expect("Migrations should succeed");
+    db.run_migrations()
+        .await
+        .expect("Migrations should succeed");
 
     // WHEN: Querying table info
     let stmt = db
@@ -246,7 +261,9 @@ async fn test_p2_projects_table_has_unique_name_constraint() {
     let temp_dir = tempdir().expect("Failed to create temp dir");
     let db_path = temp_dir.path().join("test.db");
     let mut db = Database::new(&db_path).expect("Failed to create database");
-    db.run_migrations().await.expect("Migrations should succeed");
+    db.run_migrations()
+        .await
+        .expect("Migrations should succeed");
 
     db.execute(
         "INSERT INTO projects (name, path) VALUES ('test_project', '/path/to/project')",

@@ -42,9 +42,15 @@ fn test_p1_log_entry_new_success_creates_entry() {
     let entry = LogEntry::new_success(target.to_string(), message.to_string());
 
     let formatted = entry.format_for_file();
-    assert!(formatted.contains("SUCCESS"), "Should contain SUCCESS level");
+    assert!(
+        formatted.contains("SUCCESS"),
+        "Should contain SUCCESS level"
+    );
     assert!(formatted.contains("test_module"), "Should contain target");
-    assert!(formatted.contains("Operation completed"), "Should contain message");
+    assert!(
+        formatted.contains("Operation completed"),
+        "Should contain message"
+    );
 }
 
 #[test]
@@ -53,7 +59,10 @@ fn test_p1_log_entry_format_for_file_includes_timestamp() {
 
     let formatted = entry.format_for_file();
 
-    assert!(formatted.starts_with('['), "Should start with timestamp bracket");
+    assert!(
+        formatted.starts_with('['),
+        "Should start with timestamp bracket"
+    );
     assert!(formatted.contains('-'), "Should contain date separators");
     assert!(formatted.contains(':'), "Should contain time separators");
 }
@@ -78,7 +87,10 @@ fn test_p1_log_entry_format_for_file_includes_all_fields() {
 fn test_p1_logger_verbose_mode_check() {
     // Verbose mode can be true or false depending on test ordering
     let is_verbose = Logger::is_verbose();
-    assert!(is_verbose || !is_verbose, "Verbose mode should be a boolean");
+    assert!(
+        is_verbose || !is_verbose,
+        "Verbose mode should be a boolean"
+    );
 }
 
 #[test]
