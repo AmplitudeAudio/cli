@@ -78,6 +78,11 @@ impl Output for MockOutput {
     fn progress(&self, message: &str) {
         self.progress_calls.borrow_mut().push(message.to_string());
     }
+
+    fn prompt(&self, _prompt: &str) -> anyhow::Result<String> {
+        // MockOutput returns a mock response for testing
+        Ok("mock_input".to_string())
+    }
 }
 
 // Safety: MockOutput is only used in single-threaded tests
@@ -114,7 +119,7 @@ fn test_p0_boxed_output_works() {
 
     // WHEN: Calling methods through the box
     // THEN: Should work without panic
-    output.success(json!("test"), None);
+    // Note: progress() goes through log macros which is acceptable
     output.progress("testing...");
 }
 
@@ -339,8 +344,7 @@ fn test_p1_create_output_returns_interactive_by_default() {
     let output = am::presentation::create_output(OutputMode::Interactive);
 
     // THEN: Should return a valid Output implementation
-    // Verify by calling methods (no panic = success)
-    output.success(json!("test"), None);
+    // Verify by calling progress (goes through log macros)
     output.progress("testing...");
 }
 
@@ -350,9 +354,13 @@ fn test_p1_create_output_with_json_mode_returns_json_output() {
     // WHEN: Calling create_output
     let output = am::presentation::create_output(OutputMode::Json);
 
-    // THEN: Should return JsonOutput
-    // Verify by calling methods (no panic = success)
-    output.success(json!("test"), None);
+    // THEN: Should return JsonOutput (verify by checking prompt() returns error)
+    let result = output.prompt("test");
+    assert!(
+        result.is_err(),
+        "JsonOutput.prompt() should return an error"
+    );
+    // Progress is a no-op for JsonOutput
     output.progress("testing...");
 }
 
@@ -363,7 +371,8 @@ fn test_p1_create_output_returns_boxed_output() {
     let output: Box<dyn Output> = am::presentation::create_output(OutputMode::Interactive);
 
     // THEN: Should return Box<dyn Output> that can be used
-    output.success(json!({"status": "ok"}), None);
+    // Verify by calling progress (goes through log macros)
+    output.progress("testing...");
 }
 
 #[test]

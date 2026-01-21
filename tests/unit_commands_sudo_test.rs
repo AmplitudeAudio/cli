@@ -61,6 +61,11 @@ impl Output for MockOutput {
     fn progress(&self, message: &str) {
         self.progress_calls.borrow_mut().push(message.to_string());
     }
+
+    fn prompt(&self, _prompt: &str) -> anyhow::Result<String> {
+        // MockOutput returns a mock response for testing
+        Ok("mock_input".to_string())
+    }
 }
 
 // Safety: MockOutput is only used in single-threaded tests

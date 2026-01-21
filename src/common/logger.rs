@@ -164,6 +164,12 @@ impl Logger {
     }
 }
 
+impl Default for Logger {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Log for Logger {
     fn enabled(&self, _metadata: &Metadata) -> bool {
         true
