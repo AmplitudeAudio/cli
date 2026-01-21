@@ -8,19 +8,85 @@ mod presentation;
 use crate::{
     app::{App, Commands},
     commands::{project::handler as handle_project_command, sudo::handler as handle_sudo_command},
-    common::errors::CliError,
+    common::errors::{CliError, determine_exit_code, exit_codes},
     common::logger::{init_logger, setup_crash_logging, write_crash_log_on_error},
     database::{Database, setup_crash_db_cleanup},
-    input::{create_input, Input, InputMode},
-    presentation::{create_output, Output, OutputMode},
+    input::{Input, InputMode, create_input},
+    presentation::{Output, OutputMode, create_output},
 };
 use clap::Parser;
 use log::{debug, error, warn};
-use std::sync::Arc;
+use std::{panic, sync::Arc};
 use tokio::signal;
 
-#[tokio::main]
-async fn main() -> anyhow::Result<()> {
+fn main() {
+    // We manually create a runtime to be able to use `catch_unwind` on the async logic.
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    let result = panic::catch_unwind(|| rt.block_on(async_main()));
+
+    // This block handles the result of the program execution, including panics.
+    // It is responsible for setting the final exit code.
+    let exit_code = match result {
+        // The program executed without panicking
+        Ok(Ok(())) => exit_codes::SUCCESS,
+        Ok(Err(e)) => {
+            // The program returned a normal error, determine exit code from it.
+            // We need to re-parse CLI args to get the output mode.
+            let cli = App::parse();
+            let output_mode = if cli.json {
+                OutputMode::Json
+            } else {
+                OutputMode::Interactive
+            };
+            let output = create_output(output_mode);
+            let error_code = e.downcast_ref::<CliError>().map(|ce| ce.code).unwrap_or(-1);
+            let exit_code = determine_exit_code(&e);
+
+            output.error(&e, error_code, None);
+
+            if output_mode == OutputMode::Interactive {
+                if let Some(log_path) = write_crash_log_on_error() {
+                    eprintln!("Error log written to: {}", log_path.display());
+                }
+            }
+            exit_code
+        }
+        // The program panicked
+        Err(panic_payload) => {
+            let cli = App::parse();
+            let output_mode = if cli.json {
+                OutputMode::Json
+            } else {
+                OutputMode::Interactive
+            };
+            let output = create_output(output_mode);
+
+            // Create a generic error message for the panic
+            let err_msg = if let Some(s) = panic_payload.downcast_ref::<&'static str>() {
+                format!("Internal panic: {}", s)
+            } else if let Some(s) = panic_payload.downcast_ref::<String>() {
+                format!("Internal panic: {}", s)
+            } else {
+                "An unexpected internal error occurred".to_string()
+            };
+
+            let panic_err = anyhow::anyhow!(err_msg);
+            output.error(&panic_err, -1, None);
+
+            if let Some(log_path) = write_crash_log_on_error() {
+                if output_mode == OutputMode::Interactive {
+                    eprintln!("A crash log has been written to: {}", log_path.display());
+                }
+            }
+
+            exit_codes::SYSTEM_ERROR
+        }
+    };
+
+    std::process::exit(exit_code);
+}
+
+async fn async_main() -> anyhow::Result<()> {
     // Parse CLI arguments first to get verbose flag
     let cli = App::parse();
 
@@ -91,39 +157,8 @@ async fn main() -> anyhow::Result<()> {
         }
     }
 
-    // Handle result and exit appropriately
-    match result {
-        Ok(()) => std::process::exit(0),
-        Err(ref e) => {
-            // Extract error code from CliError if present, otherwise use -1
-            let error_code = e.downcast_ref::<CliError>().map(|ce| ce.code).unwrap_or(-1);
-
-            // Determine exit code based on the error category
-            // Story 1.5 will refine this with proper exit code standardization
-            let exit_code = if let Some(cli_err) = e.downcast_ref::<CliError>() {
-                match cli_err.code {
-                    // SDK errors are system/environment issues
-                    -28999..=-28000 => 2,
-                    // All others are user errors
-                    _ => 1,
-                }
-            } else {
-                1 // Default to user error
-            };
-
-            // Output error through the appropriate handler (JSON or Interactive)
-            output.error(e, error_code, None);
-
-            if input_mode == InputMode::Interactive {
-                // In interactive mode, also write a crash log
-                if let Some(log_path) = write_crash_log_on_error() {
-                    eprintln!("Error log written to: {}", log_path.display());
-                }
-            }
-
-            std::process::exit(exit_code);
-        }
-    }
+    // Return the result to be handled by the synchronous main function
+    result
 }
 
 async fn run_command(

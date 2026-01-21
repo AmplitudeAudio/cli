@@ -235,7 +235,9 @@ pub fn error_suggestion(code: i32) -> String {
         codes::ERR_VALIDATION_SCHEMA => {
             "Check that your JSON structure matches the expected schema".to_string()
         }
-        codes::ERR_VALIDATION_FIELD => "Check your input values and correct the invalid field".to_string(),
+        codes::ERR_VALIDATION_FIELD => {
+            "Check your input values and correct the invalid field".to_string()
+        }
         codes::ERR_VALIDATION_FORMAT => "Check the format of your input and try again".to_string(),
 
         // Generic fallbacks by range
@@ -357,6 +359,60 @@ macro_rules! cli_error {
     };
 }
 
+// =============================================================================
+// Exit Code Determination
+// =============================================================================
+
+/// Exit codes for the CLI process.
+///
+/// These codes follow standard Unix conventions:
+/// - `0`: Success - command completed successfully
+/// - `1`: User Error - error caused by invalid user input or state
+/// - `2`: System Error - error caused by environment or system issues
+pub mod exit_codes {
+    /// Command completed successfully.
+    pub const SUCCESS: i32 = 0;
+
+    /// Error caused by invalid user input or state.
+    /// Examples: invalid input, missing file, validation failure, asset not found.
+    pub const USER_ERROR: i32 = 1;
+
+    /// Error caused by environment or system issues.
+    /// Examples: database failure, disk full, SDK not found, unexpected panic.
+    pub const SYSTEM_ERROR: i32 = 2;
+}
+
+/// Determine the appropriate exit code based on an error.
+///
+/// Maps error codes to exit codes according to these rules:
+/// - `-28xxx` (SDK errors) → exit code 2 (system error)
+/// - `-29xxx` (Project errors) → exit code 1 (user error)
+/// - `-30xxx` (Asset errors) → exit code 1 (user error)
+/// - `-31xxx` (Validation errors) → exit code 1 (user error)
+/// - Unknown/other errors → exit code 1 (user error, safe default)
+///
+/// # Arguments
+///
+/// * `error` - The error to analyze
+///
+/// # Returns
+///
+/// The appropriate exit code (0, 1, or 2)
+pub fn determine_exit_code(error: &anyhow::Error) -> i32 {
+    if let Some(cli_err) = error.downcast_ref::<CliError>() {
+        match cli_err.code {
+            // SDK errors (-28xxx) are system/environment issues
+            -28999..=-28000 => exit_codes::SYSTEM_ERROR,
+            // All other CliError codes are user errors
+            _ => exit_codes::USER_ERROR,
+        }
+    } else {
+        // Non-CliError errors default to system error
+        // (conservative choice: unexpected errors are more likely system/environment issues)
+        exit_codes::SYSTEM_ERROR
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -376,5 +432,60 @@ mod tests {
         assert!((-30999..=-30000).contains(&codes::ERR_ASSET_NOT_FOUND));
         assert!((-29999..=-29000).contains(&codes::ERR_PROJECT_NOT_REGISTERED));
         assert!((-28999..=-28000).contains(&codes::ERR_SDK_NOT_FOUND));
+    }
+
+    #[test]
+    fn test_determine_exit_code_sdk_error() {
+        // SDK errors should return exit code 2 (system error)
+        let err = CliError::new(
+            codes::ERR_SDK_NOT_FOUND,
+            "SDK not found",
+            "AM_SDK_PATH not set",
+        );
+        let anyhow_err: anyhow::Error = err.into();
+        assert_eq!(determine_exit_code(&anyhow_err), exit_codes::SYSTEM_ERROR);
+    }
+
+    #[test]
+    fn test_determine_exit_code_project_error() {
+        // Project errors should return exit code 1 (user error)
+        let err = CliError::new(
+            codes::ERR_PROJECT_NOT_REGISTERED,
+            "Project not registered",
+            "Not in database",
+        );
+        let anyhow_err: anyhow::Error = err.into();
+        assert_eq!(determine_exit_code(&anyhow_err), exit_codes::USER_ERROR);
+    }
+
+    #[test]
+    fn test_determine_exit_code_asset_error() {
+        // Asset errors should return exit code 1 (user error)
+        let err = CliError::new(
+            codes::ERR_ASSET_NOT_FOUND,
+            "Asset not found",
+            "Does not exist",
+        );
+        let anyhow_err: anyhow::Error = err.into();
+        assert_eq!(determine_exit_code(&anyhow_err), exit_codes::USER_ERROR);
+    }
+
+    #[test]
+    fn test_determine_exit_code_validation_error() {
+        // Validation errors should return exit code 1 (user error)
+        let err = CliError::new(
+            codes::ERR_VALIDATION_FIELD,
+            "Invalid field",
+            "Value out of range",
+        );
+        let anyhow_err: anyhow::Error = err.into();
+        assert_eq!(determine_exit_code(&anyhow_err), exit_codes::USER_ERROR);
+    }
+
+    #[test]
+    fn test_determine_exit_code_non_cli_error() {
+        // Non-CliError errors should default to exit code 2 (system error)
+        let anyhow_err = anyhow::anyhow!("Some generic I/O error or other system issue");
+        assert_eq!(determine_exit_code(&anyhow_err), exit_codes::SYSTEM_ERROR);
     }
 }

@@ -9,12 +9,11 @@ use std::sync::Arc;
 
 use crate::{
     app::Resource,
-    common::errors::{codes, project_already_exists, project_not_initialized, CliError},
+    common::errors::{CliError, codes, project_already_exists, project_not_initialized},
     database::{
-        db_create_project, db_forget_project, db_get_project_by_name, db_get_template_by_name,
-        db_get_templates,
+        Database, db_create_project, db_forget_project, db_get_project_by_name,
+        db_get_template_by_name, db_get_templates,
         entities::{ProjectConfiguration, Template},
-        Database,
     },
     input::Input,
     presentation::Output,

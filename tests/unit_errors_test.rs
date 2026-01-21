@@ -12,8 +12,8 @@
 //! - P2: Edge cases, generic fallbacks, unknown codes
 
 use am::common::errors::{
-    codes, error_suggestion, error_type_name, project_already_exists, project_not_registered,
-    validation_error, CliError,
+    CliError, codes, error_suggestion, error_type_name, project_already_exists,
+    project_not_registered, validation_error,
 };
 
 // =============================================================================
@@ -50,7 +50,11 @@ fn test_p0_cli_error_implements_std_error() {
 #[test]
 fn test_p0_cli_error_converts_to_anyhow() {
     // GIVEN: A CliError
-    let cli_err = CliError::new(codes::ERR_PROJECT_NOT_REGISTERED, "Test error", "Test reason");
+    let cli_err = CliError::new(
+        codes::ERR_PROJECT_NOT_REGISTERED,
+        "Test error",
+        "Test reason",
+    );
 
     // WHEN: Converting to anyhow::Error
     let anyhow_err: anyhow::Error = cli_err.into();
@@ -130,8 +134,12 @@ fn test_p0_error_codes_sdk_range() {
 fn test_p1_cli_error_with_context() {
     // GIVEN: A CliError
     // WHEN: Adding context via builder
-    let err = CliError::new(codes::ERR_ASSET_NOT_FOUND, "Asset not found", "No such asset exists")
-        .with_context("/path/to/asset.json");
+    let err = CliError::new(
+        codes::ERR_ASSET_NOT_FOUND,
+        "Asset not found",
+        "No such asset exists",
+    )
+    .with_context("/path/to/asset.json");
 
     // THEN: Context should be set
     assert_eq!(err.context, Some("/path/to/asset.json".to_string()));
@@ -141,8 +149,12 @@ fn test_p1_cli_error_with_context() {
 fn test_p1_cli_error_with_custom_suggestion() {
     // GIVEN: A CliError
     // WHEN: Overriding the default suggestion
-    let err = CliError::new(codes::ERR_PROJECT_NOT_INITIALIZED, "Not initialized", "No .amproject")
-        .with_suggestion("Run 'am project init myproject' first");
+    let err = CliError::new(
+        codes::ERR_PROJECT_NOT_INITIALIZED,
+        "Not initialized",
+        "No .amproject",
+    )
+    .with_suggestion("Run 'am project init myproject' first");
 
     // THEN: Custom suggestion should override default
     assert_eq!(err.suggestion, "Run 'am project init myproject' first");
@@ -169,8 +181,11 @@ fn test_p1_cli_error_builder_chain() {
 #[test]
 fn test_p1_cli_error_display_without_context() {
     // GIVEN: A CliError without context
-    let err =
-        CliError::new(codes::ERR_ASSET_NOT_FOUND, "Sound 'explosion' not found", "Does not exist");
+    let err = CliError::new(
+        codes::ERR_ASSET_NOT_FOUND,
+        "Sound 'explosion' not found",
+        "Does not exist",
+    );
 
     // WHEN: Formatting as Display
     let display = format!("{}", err);
@@ -182,14 +197,21 @@ fn test_p1_cli_error_display_without_context() {
 #[test]
 fn test_p1_cli_error_display_with_context() {
     // GIVEN: A CliError with context
-    let err = CliError::new(codes::ERR_ASSET_NOT_FOUND, "Sound not found", "Does not exist")
-        .with_context("sources/sounds/explosion.json");
+    let err = CliError::new(
+        codes::ERR_ASSET_NOT_FOUND,
+        "Sound not found",
+        "Does not exist",
+    )
+    .with_context("sources/sounds/explosion.json");
 
     // WHEN: Formatting as Display
     let display = format!("{}", err);
 
     // THEN: Should include what, why and context in parentheses
-    assert_eq!(display, "Sound not found: Does not exist (sources/sounds/explosion.json)");
+    assert_eq!(
+        display,
+        "Sound not found: Does not exist (sources/sounds/explosion.json)"
+    );
 }
 
 #[test]
@@ -211,9 +233,18 @@ fn test_p1_error_type_name_validation_specific() {
     // GIVEN: Specific validation error codes
     // WHEN: Mapping to type names
     // THEN: Should return specific type names
-    assert_eq!(error_type_name(codes::ERR_VALIDATION_SCHEMA), "schema_validation_error");
-    assert_eq!(error_type_name(codes::ERR_VALIDATION_FIELD), "field_validation_error");
-    assert_eq!(error_type_name(codes::ERR_VALIDATION_FORMAT), "format_validation_error");
+    assert_eq!(
+        error_type_name(codes::ERR_VALIDATION_SCHEMA),
+        "schema_validation_error"
+    );
+    assert_eq!(
+        error_type_name(codes::ERR_VALIDATION_FIELD),
+        "field_validation_error"
+    );
+    assert_eq!(
+        error_type_name(codes::ERR_VALIDATION_FORMAT),
+        "format_validation_error"
+    );
 }
 
 #[test]
@@ -221,8 +252,14 @@ fn test_p1_error_type_name_asset_specific() {
     // GIVEN: Specific asset error codes
     // WHEN: Mapping to type names
     // THEN: Should return specific type names
-    assert_eq!(error_type_name(codes::ERR_ASSET_NOT_FOUND), "asset_not_found");
-    assert_eq!(error_type_name(codes::ERR_ASSET_ALREADY_EXISTS), "asset_already_exists");
+    assert_eq!(
+        error_type_name(codes::ERR_ASSET_NOT_FOUND),
+        "asset_not_found"
+    );
+    assert_eq!(
+        error_type_name(codes::ERR_ASSET_ALREADY_EXISTS),
+        "asset_already_exists"
+    );
     assert_eq!(error_type_name(codes::ERR_ASSET_IN_USE), "asset_in_use");
 }
 
@@ -231,9 +268,18 @@ fn test_p1_error_type_name_project_specific() {
     // GIVEN: Specific project error codes
     // WHEN: Mapping to type names
     // THEN: Should return specific type names
-    assert_eq!(error_type_name(codes::ERR_PROJECT_NOT_INITIALIZED), "project_not_initialized");
-    assert_eq!(error_type_name(codes::ERR_PROJECT_NOT_REGISTERED), "project_not_registered");
-    assert_eq!(error_type_name(codes::ERR_PROJECT_ALREADY_EXISTS), "project_already_exists");
+    assert_eq!(
+        error_type_name(codes::ERR_PROJECT_NOT_INITIALIZED),
+        "project_not_initialized"
+    );
+    assert_eq!(
+        error_type_name(codes::ERR_PROJECT_NOT_REGISTERED),
+        "project_not_registered"
+    );
+    assert_eq!(
+        error_type_name(codes::ERR_PROJECT_ALREADY_EXISTS),
+        "project_already_exists"
+    );
 }
 
 #[test]
@@ -242,7 +288,10 @@ fn test_p1_error_type_name_sdk_specific() {
     // WHEN: Mapping to type names
     // THEN: Should return specific type names
     assert_eq!(error_type_name(codes::ERR_SDK_NOT_FOUND), "sdk_not_found");
-    assert_eq!(error_type_name(codes::ERR_SDK_SCHEMA_LOAD_FAILED), "schema_load_failed");
+    assert_eq!(
+        error_type_name(codes::ERR_SDK_SCHEMA_LOAD_FAILED),
+        "schema_load_failed"
+    );
 }
 
 // =============================================================================
@@ -375,7 +424,10 @@ fn test_p2_json_output_error_structure() {
     let anyhow_err: anyhow::Error = cli_err.into();
 
     // WHEN: building an error response
-    let response = am::presentation::JsonOutput::build_error_response(&anyhow_err, codes::ERR_PROJECT_NOT_REGISTERED);
+    let response = am::presentation::JsonOutput::build_error_response(
+        &anyhow_err,
+        codes::ERR_PROJECT_NOT_REGISTERED,
+    );
 
     // THEN: the response should have the correct structure
     assert!(!response.ok);
@@ -383,7 +435,10 @@ fn test_p2_json_output_error_structure() {
     assert_eq!(error_details.code, codes::ERR_PROJECT_NOT_REGISTERED);
     assert_eq!(error_details.type_, "project_not_registered");
     assert_eq!(error_details.message, "Project not registered");
-    assert_eq!(error_details.why, "The project is not tracked in the database");
+    assert_eq!(
+        error_details.why,
+        "The project is not tracked in the database"
+    );
     assert_eq!(error_details.suggestion, "Run 'am project register'");
     assert_eq!(error_details.context, Some("test/project".to_string()));
 }

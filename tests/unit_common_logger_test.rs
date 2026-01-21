@@ -154,12 +154,18 @@ fn test_p1_init_logger_sets_verbose_mode() {
     // WHEN: Setting verbose to true
     Logger::set_verbose(true);
     // THEN: Verbose mode should be enabled
-    assert!(Logger::is_verbose(), "Verbose mode should be true after setting to true");
+    assert!(
+        Logger::is_verbose(),
+        "Verbose mode should be true after setting to true"
+    );
 
     // WHEN: Setting verbose to false
     Logger::set_verbose(false);
     // THEN: Verbose mode should be disabled
-    assert!(!Logger::is_verbose(), "Verbose mode should be false after setting to false");
+    assert!(
+        !Logger::is_verbose(),
+        "Verbose mode should be false after setting to false"
+    );
 }
 
 // =============================================================================
