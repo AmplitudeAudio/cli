@@ -6,8 +6,7 @@
 use crate::presentation::Output;
 use crate::success;
 use anyhow::Error;
-use colored::Colorize;
-use log::{error, info};
+use log::{error, info, warn};
 
 /// Interactive terminal output with colored formatting.
 ///
@@ -30,8 +29,12 @@ impl Output for InteractiveOutput {
             success!("{}", s);
             return;
         }
-        // For complex data, show success indicator
-        success!("Operation completed successfully");
+        
+        // For complex data, pretty-print the JSON
+        match serde_json::to_string_pretty(&data) {
+            Ok(json) => success!("{}", json),
+            Err(_) => success!("Operation completed successfully"),
+        }
     }
 
     fn error(&self, err: &Error, code: i32, _request_id: Option<i64>) {
@@ -39,9 +42,9 @@ impl Output for InteractiveOutput {
         // Include error code for structured error reporting
         error!("[{}] {}", code, err);
 
-        // Display error chain if present
+        // Display the error chain if present
         for cause in err.chain().skip(1) {
-            println!("  {} {}", "caused by:".red(), cause);
+            warn!("  caused by: {}", cause);
         }
     }
 
