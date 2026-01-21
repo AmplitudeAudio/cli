@@ -9,7 +9,7 @@ use crate::{
     commands::{project::handler as handle_project_command, sudo::handler as handle_sudo_command},
     common::logger::{init_logger, setup_crash_logging, write_crash_log_on_error},
     database::{Database, setup_crash_db_cleanup},
-    presentation::{Output, create_output},
+    presentation::{Output, OutputMode, create_output},
 };
 use clap::Parser;
 use log::{debug, error, warn};
@@ -62,8 +62,8 @@ async fn main() -> anyhow::Result<()> {
         std::process::exit(0);
     });
 
-    // Create output handler (interactive for now, JSON mode in Story 1.2)
-    let output = create_output(false);
+    // Create output handler
+    let output = create_output(OutputMode::Interactive);
 
     let result = run_command(&cli, database.clone(), output.as_ref()).await;
 

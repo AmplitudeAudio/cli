@@ -7,7 +7,7 @@
 //! - P1: Output capture and verification, error handling
 //! - P2: Edge cases, multiple calls tracking
 
-use am::presentation::{InteractiveOutput, Output};
+use am::presentation::{InteractiveOutput, Output, OutputMode};
 use anyhow::anyhow;
 use serde::Serialize;
 use serde_json::json;
@@ -334,9 +334,9 @@ fn test_p2_output_multiple_progress_calls_tracked() {
 
 #[test]
 fn test_p1_create_output_returns_interactive_by_default() {
-    // GIVEN: json_mode is false
+    // GIVEN: OutputMode::Interactive
     // WHEN: Calling create_output
-    let output = am::presentation::create_output(false);
+    let output = am::presentation::create_output(OutputMode::Interactive);
 
     // THEN: Should return a valid Output implementation
     // Verify by calling methods (no panic = success)
@@ -345,12 +345,12 @@ fn test_p1_create_output_returns_interactive_by_default() {
 }
 
 #[test]
-fn test_p1_create_output_with_json_mode_still_returns_interactive() {
-    // GIVEN: json_mode is true (JsonOutput not yet implemented)
+fn test_p1_create_output_with_json_mode_returns_json_output() {
+    // GIVEN: OutputMode::Json
     // WHEN: Calling create_output
-    let output = am::presentation::create_output(true);
+    let output = am::presentation::create_output(OutputMode::Json);
 
-    // THEN: Should still return InteractiveOutput (Story 1.2 will add JsonOutput)
+    // THEN: Should return JsonOutput
     // Verify by calling methods (no panic = success)
     output.success(json!("test"), None);
     output.progress("testing...");
@@ -360,7 +360,7 @@ fn test_p1_create_output_with_json_mode_still_returns_interactive() {
 fn test_p1_create_output_returns_boxed_output() {
     // GIVEN: Any mode
     // WHEN: Calling create_output
-    let output: Box<dyn Output> = am::presentation::create_output(false);
+    let output: Box<dyn Output> = am::presentation::create_output(OutputMode::Interactive);
 
     // THEN: Should return Box<dyn Output> that can be used
     output.success(json!({"status": "ok"}), None);
@@ -369,7 +369,7 @@ fn test_p1_create_output_returns_boxed_output() {
 #[test]
 fn test_p2_create_output_result_is_send_sync() {
     // GIVEN: create_output result
-    let output = am::presentation::create_output(false);
+    let output = am::presentation::create_output(OutputMode::Interactive);
 
     // WHEN/THEN: Can be passed to a function requiring Send + Sync
     fn assert_send_sync<T: Send + Sync + ?Sized>(_: &T) {}

@@ -12,6 +12,21 @@ pub use json::JsonOutput;
 
 use anyhow::Error;
 
+/// Output mode for CLI presentation.
+///
+/// Determines which output implementation is used for formatting command results.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum OutputMode {
+    /// Interactive terminal output with colors and formatting.
+    /// Default mode for human users.
+    #[default]
+    Interactive,
+    /// JSON output for machine-parseable responses.
+    /// Used by integration tools like Amplitude Studio.
+    Json,
+    // Future: StudioIpc for JSON-RPC 2.0 communication
+}
+
 /// Trait for abstracting CLI output presentation.
 ///
 /// This trait allows command handlers to produce output without knowing
@@ -53,14 +68,13 @@ pub trait Output: Send + Sync {
 /// Create an Output implementation based on the requested mode.
 ///
 /// # Arguments
-/// * `json_mode` - If true, returns JsonOutput for machine-parseable output
+/// * `mode` - The output mode determining which implementation to use
 ///
 /// # Returns
 /// A boxed Output implementation
-pub fn create_output(json_mode: bool) -> Box<dyn Output> {
-    if json_mode {
-        Box::new(JsonOutput::new())
-    } else {
-        Box::new(InteractiveOutput::new())
+pub fn create_output(mode: OutputMode) -> Box<dyn Output> {
+    match mode {
+        OutputMode::Interactive => Box::new(InteractiveOutput::new()),
+        OutputMode::Json => Box::new(JsonOutput::new()),
     }
 }

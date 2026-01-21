@@ -7,7 +7,7 @@
 //! - P1: Error field validation (code, type, message, suggestion)
 //! - P2: Factory function tests, complex data serialization
 
-use am::presentation::{JsonOutput, Output, create_output};
+use am::presentation::{JsonOutput, Output, OutputMode, create_output};
 use anyhow::anyhow;
 use serde_json::{Value, json};
 
@@ -184,10 +184,10 @@ fn test_p1_error_type_mapping_unknown_errors() {
 // ============================================================================
 
 #[test]
-fn test_p1_create_output_returns_json_when_true() {
-    // GIVEN: json_mode is true
+fn test_p1_create_output_returns_json_when_json_mode() {
+    // GIVEN: OutputMode::Json
     // WHEN: Calling create_output
-    let output = create_output(true);
+    let output = create_output(OutputMode::Json);
 
     // THEN: Should return JsonOutput (verify by calling methods)
     // JsonOutput suppresses progress, so this is a valid test
@@ -196,10 +196,10 @@ fn test_p1_create_output_returns_json_when_true() {
 }
 
 #[test]
-fn test_p1_create_output_returns_interactive_when_false() {
-    // GIVEN: json_mode is false
+fn test_p1_create_output_returns_interactive_when_interactive_mode() {
+    // GIVEN: OutputMode::Interactive
     // WHEN: Calling create_output
-    let output = create_output(false);
+    let output = create_output(OutputMode::Interactive);
 
     // THEN: Should return InteractiveOutput (verify by calling methods)
     output.success(json!("test"), None);
