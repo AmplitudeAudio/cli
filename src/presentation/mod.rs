@@ -11,7 +11,7 @@ pub use interactive::InteractiveOutput;
 #[allow(unused_imports)] // Exported for library consumers and tests
 pub use json::{JsonErrorDetails, JsonOutput, JsonResponse};
 
-use anyhow::{Error, Result};
+use anyhow::Error;
 
 /// Output mode for CLI presentation.
 ///
@@ -65,22 +65,6 @@ pub trait Output: Send + Sync {
     /// # Arguments
     /// * `message` - Progress message to display
     fn progress(&self, message: &str);
-
-    /// Prompt the user for text input.
-    ///
-    /// # Arguments
-    /// * `prompt` - The prompt message to display
-    ///
-    /// # Returns
-    /// The user's input as a String, or an error if prompting is not supported
-    /// (e.g., in JSON output mode for non-interactive tools).
-    ///
-    /// # Errors
-    /// Returns an error if:
-    /// - The output mode doesn't support interactive prompts (e.g., JsonOutput)
-    /// - The underlying prompt mechanism fails (e.g., stdin closed)
-    #[allow(dead_code)] // Used in Story 1.3 (Global Flag Wiring) and later
-    fn prompt(&self, prompt: &str) -> Result<String>;
 }
 
 /// Create an Output implementation based on the requested mode.
@@ -90,6 +74,9 @@ pub trait Output: Send + Sync {
 ///
 /// # Returns
 /// A boxed Output implementation
+///
+/// Note: Non-interactive behavior is handled by the `Input` abstraction.
+/// `Output` is presentation-only.
 pub fn create_output(mode: OutputMode) -> Box<dyn Output> {
     match mode {
         OutputMode::Interactive => Box::new(InteractiveOutput::new()),

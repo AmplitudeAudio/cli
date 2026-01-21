@@ -7,7 +7,7 @@
 //! to stdout to ensure the output is valid parseable JSON.
 
 use crate::presentation::Output;
-use anyhow::{Error, Result, bail};
+use anyhow::{Error, Result};
 use serde::Serialize;
 use std::io::{self, Write};
 
@@ -123,14 +123,6 @@ impl Output for JsonOutput {
     fn progress(&self, _message: &str) {
         // JSON mode suppresses progress messages for clean, parseable output.
         // Progress is intended for interactive users, not machine consumers.
-    }
-
-    fn prompt(&self, _prompt: &str) -> Result<String> {
-        // JSON mode does not support interactive prompts.
-        // Tools using JSON output must provide all required inputs via command-line arguments.
-        bail!(
-            "Interactive prompts are not available in JSON output mode. Use command-line arguments for non-interactive operation."
-        )
     }
 }
 

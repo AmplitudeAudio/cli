@@ -14,12 +14,12 @@ use crate::{
         db_get_template_by_name, db_get_templates,
         entities::{ProjectConfiguration, Template},
     },
+    input::Input,
     presentation::Output,
 };
 use clap::{Subcommand, value_parser};
-use inquire::Confirm;
 use inquire::{
-    CustomUserError, Select, Text, required,
+    CustomUserError, required,
     validator::{StringValidator, Validation},
 };
 use serde_json::json;
@@ -72,6 +72,7 @@ pub enum ProjectCommands {
 pub async fn handler(
     command: &ProjectCommands,
     database: Option<Arc<Database>>,
+    input: &dyn Input,
     output: &dyn Output,
 ) -> anyhow::Result<()> {
     match command {
@@ -104,19 +105,20 @@ pub async fn handler(
             }
 
             if project_name.is_none() {
-                let ret = Text::new("Project Name")
-                    .with_formatter(&transform_name)
-                    .with_validator(&validate_name)
-                    .with_placeholder("my_project")
-                    .prompt()?;
+                let ret = input.prompt_text(
+                    "Project Name",
+                    Some("my_project"),
+                    Some(&transform_name),
+                    Some(&validate_name),
+                )?;
 
                 project_name = Some(ret);
             }
 
             if project_template.is_none() {
-                let ret = Select::new("Project Template", templates).prompt()?;
-
-                project_template = Some(ret.name);
+                let selected_idx =
+                    crate::input::select_index(input, "Project Template", &templates)?;
+                project_template = Some(templates[selected_idx].name.clone());
             }
 
             handle_init_project_command(
@@ -124,6 +126,7 @@ pub async fn handler(
                 project_template.as_deref().unwrap_or(""),
                 no_register,
                 database,
+                input,
                 output,
             )
             .await
@@ -135,12 +138,14 @@ pub async fn handler(
                 None => &cwd,
             };
 
-            handle_register_project_command(project_path, database, output).await
+            handle_register_project_command(project_path, database, input, output).await
         }
         ProjectCommands::Unregister {
             name,
             delete_files: delete,
-        } => handle_unregister_project_command(name.as_str(), delete, database, output).await,
+        } => {
+            handle_unregister_project_command(name.as_str(), delete, database, input, output).await
+        }
     }
 }
 
@@ -149,6 +154,7 @@ async fn handle_init_project_command(
     template: &str,
     no_register: &bool,
     database: Option<Arc<Database>>,
+    input: &dyn Input,
     output: &dyn Output,
 ) -> anyhow::Result<()> {
     let project_name = transform_name(name);
@@ -162,9 +168,10 @@ async fn handle_init_project_command(
                 p.path.cyan()
             );
 
-            if Confirm::new("Do you want to forget that project and create this new one?")
-                .prompt()?
-            {
+            if input.confirm(
+                "Do you want to forget that project and create this new one?",
+                None,
+            )? {
                 info!("Unregistering previous project...");
                 db_forget_project(p.id.unwrap(), database.clone())?;
             } else {
@@ -175,10 +182,13 @@ async fn handle_init_project_command(
         }
     }
 
-    info!(
-        "Initializing project {} using template {}...",
-        project_name.cyan(),
-        template.cyan()
+    output.progress(
+        format!(
+            "Initializing project {} using template {}...",
+            project_name.cyan(),
+            template.cyan()
+        )
+        .as_str(),
     );
 
     let cwd = env::current_dir()?;
@@ -190,11 +200,10 @@ async fn handle_init_project_command(
             project_path.to_str().unwrap_or_default().cyan()
         );
 
-        if Confirm::new(
+        if input.confirm(
             "Do you want to overwrite the directory? All existing content will be deleted!",
-        )
-        .prompt()?
-        {
+            None,
+        )? {
             fs::remove_dir_all(project_path)?;
         } else {
             return Err(anyhow::Error::msg(
@@ -291,6 +300,7 @@ async fn handle_init_project_command(
 async fn handle_register_project_command(
     path: &PathBuf,
     database: Option<Arc<Database>>,
+    input: &dyn Input,
     output: &dyn Output,
 ) -> anyhow::Result<()> {
     output.progress(&format!("Registering project '{}'...", path.display()));
@@ -313,7 +323,10 @@ async fn handle_register_project_command(
             p.path.cyan()
         );
 
-        if Confirm::new("Do you want to forget that project and register this one?").prompt()? {
+        if input.confirm(
+            "Do you want to forget that project and register this one?",
+            None,
+        )? {
             info!("Unregistering previous project...");
             db_forget_project(p.id.unwrap(), database.clone())?;
         } else {
@@ -340,6 +353,7 @@ async fn handle_unregister_project_command(
     name: &str,
     delete: &bool,
     database: Option<Arc<Database>>,
+    _input: &dyn Input,
     output: &dyn Output,
 ) -> anyhow::Result<()> {
     if let Some(Some(p)) = db_get_project_by_name(name, database.clone()).ok() {

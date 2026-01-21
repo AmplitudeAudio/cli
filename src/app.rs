@@ -29,6 +29,14 @@ pub struct App {
     #[arg(short, long, global = true)]
     pub verbose: bool,
 
+    /// Output in JSON format for machine parsing
+    #[arg(long, global = true)]
+    pub json: bool,
+
+    /// Disable interactive prompts (fail if input required)
+    #[arg(long, global = true)]
+    pub non_interactive: bool,
+
     #[command(subcommand)]
     pub command: Commands,
 }

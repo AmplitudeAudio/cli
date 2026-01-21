@@ -4,6 +4,7 @@
 
 pub mod common;
 pub mod database;
+pub mod input;
 pub mod presentation;
 
 // Re-export sudo commands for testing (project commands depend on binary-only app module)

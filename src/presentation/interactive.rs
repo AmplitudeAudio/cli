@@ -5,8 +5,7 @@
 
 use crate::presentation::Output;
 use crate::success;
-use anyhow::{Error, Result};
-use inquire::Text;
+use anyhow::Error;
 use log::{error, info, warn};
 
 /// Interactive terminal output with colored formatting.
@@ -52,10 +51,5 @@ impl Output for InteractiveOutput {
     fn progress(&self, message: &str) {
         // Use info! macro for consistent formatting and crash logging
         info!("{}", message);
-    }
-
-    fn prompt(&self, prompt: &str) -> Result<String> {
-        // Use inquire crate for interactive text input
-        Ok(Text::new(prompt).prompt()?)
     }
 }

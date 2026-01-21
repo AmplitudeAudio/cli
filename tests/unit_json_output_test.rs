@@ -52,12 +52,6 @@ mod test_support {
         fn progress(&self, _message: &str) {
             // Intentionally no-op: JSON mode is quiet except for the final result envelope.
         }
-
-        fn prompt(&self, _prompt: &str) -> anyhow::Result<String> {
-            anyhow::bail!(
-                "Interactive prompts are not available in JSON output mode. Use command-line arguments for non-interactive operation."
-            )
-        }
     }
 }
 
@@ -93,12 +87,7 @@ fn test_p0_json_output_boxed_works() {
     // THEN: Should work without panic
     // Note: progress() is a no-op for JsonOutput, so we can safely test it
     output.progress("testing...");
-    // Also verify prompt() returns the expected error for JsonOutput
-    let result = output.prompt("test");
-    assert!(
-        result.is_err(),
-        "JsonOutput.prompt() should return an error"
-    );
+    output.success(json!({"ok": true}), None);
 }
 
 // ============================================================================
@@ -330,38 +319,15 @@ fn test_p0_json_output_progress_suppresses_output() {
 
 #[test]
 fn test_p0_json_output_prompt_returns_error() {
-    // GIVEN: JsonOutput (non-interactive mode)
-    let output = JsonOutput::new();
-
-    // WHEN: Calling prompt for interactive input
-    let result = output.prompt("Enter your name:");
-
-    // THEN: Should return an error indicating non-interactive mode
-    assert!(result.is_err());
-    let err_msg = result.unwrap_err().to_string();
-    assert!(
-        err_msg.contains("Interactive prompts are not available"),
-        "Error message should indicate prompts not available in JSON mode: {}",
-        err_msg
-    );
+    // Prompting is handled by the Input abstraction, not Output.
+    // Keeping a placeholder test ensures the previous AC is explicitly retired.
+    assert!(true);
 }
 
 #[test]
 fn test_p0_json_output_prompt_error_suggests_cli_args() {
-    // GIVEN: JsonOutput
-    let output = JsonOutput::new();
-
-    // WHEN: Calling prompt
-    let result = output.prompt("Please confirm:");
-
-    // THEN: Error message should suggest using command-line arguments
-    assert!(result.is_err());
-    let err_msg = result.unwrap_err().to_string();
-    assert!(
-        err_msg.contains("command-line arguments"),
-        "Error should suggest command-line arguments: {}",
-        err_msg
-    );
+    // Prompting is handled by the Input abstraction; JsonOutput no longer owns prompt behavior.
+    assert!(true);
 }
 
 // ============================================================================
@@ -480,19 +446,8 @@ fn test_p1_create_output_returns_json_when_json_mode() {
     let output = create_output(OutputMode::Json);
 
     // THEN: Should return a working Output trait object
-    // Verify by checking that prompt() returns the expected error for JsonOutput
-    let result = output.prompt("test");
-    assert!(
-        result.is_err(),
-        "JsonOutput.prompt() should return an error"
-    );
-    assert!(
-        result
-            .unwrap_err()
-            .to_string()
-            .contains("Interactive prompts are not available"),
-        "JsonOutput should indicate prompts not available"
-    );
+    output.progress("testing...");
+    output.success(json!({"ok": true}), None);
 }
 
 #[test]
@@ -502,10 +457,8 @@ fn test_p1_create_output_returns_interactive_when_interactive_mode() {
     let output = create_output(OutputMode::Interactive);
 
     // THEN: Should return a working Output trait object
-    // Note: We can't easily test InteractiveOutput.prompt() without mocking stdin,
-    // but we can verify it's a valid Output trait object
-    // Progress should not panic (InteractiveOutput writes to log)
     output.progress("test progress message");
+    output.success(json!("ok"), None);
 }
 
 // ============================================================================

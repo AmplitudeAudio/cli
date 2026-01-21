@@ -1,11 +1,11 @@
 use anyhow::Result;
 use clap::Subcommand;
-use inquire::Confirm;
 use log::warn;
 use std::sync::Arc;
 
 use crate::{
     database::{Database, get_database_path},
+    input::Input,
     presentation::Output,
 };
 use serde_json::json;
@@ -32,11 +32,12 @@ pub enum DatabaseCommands {
 pub async fn handler(
     command: &SudoCommands,
     database: Option<Arc<Database>>,
+    input: &dyn Input,
     output: &dyn Output,
 ) -> Result<()> {
     match command {
         SudoCommands::Database { command } => {
-            handle_database_command(command, database, output).await
+            handle_database_command(command, database, input, output).await
         }
     }
 }
@@ -44,11 +45,12 @@ pub async fn handler(
 async fn handle_database_command(
     command: &DatabaseCommands,
     database: Option<Arc<Database>>,
+    input: &dyn Input,
     output: &dyn Output,
 ) -> Result<()> {
     match command {
         DatabaseCommands::Reset { skip_confirmation } => {
-            reset_database(*skip_confirmation, database, output).await
+            reset_database(*skip_confirmation, database, input, output).await
         }
     }
 }
@@ -56,6 +58,7 @@ async fn handle_database_command(
 async fn reset_database(
     skip_confirmation: bool,
     database: Option<Arc<Database>>,
+    input: &dyn Input,
     output: &dyn Output,
 ) -> Result<()> {
     output.progress("This operation will:");
@@ -68,8 +71,10 @@ async fn reset_database(
 
     // Check if we should ask for confirmation
     if !skip_confirmation {
-        let confirmed =
-            Confirm::new("Are you absolutely sure you want to reset the database?").prompt()?;
+        let confirmed = input.confirm(
+            "Are you absolutely sure you want to reset the database?",
+            None,
+        )?;
 
         if !confirmed {
             output.success(json!("Database reset cancelled."), None);

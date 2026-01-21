@@ -9,6 +9,7 @@
 
 use am::commands::sudo::{DatabaseCommands, SudoCommands};
 use am::database::Database;
+use am::input::{Input, NonInteractiveInput};
 use am::presentation::{InteractiveOutput, Output};
 use serde_json::json;
 use std::cell::RefCell;
@@ -61,11 +62,13 @@ impl Output for MockOutput {
     fn progress(&self, message: &str) {
         self.progress_calls.borrow_mut().push(message.to_string());
     }
+}
 
-    fn prompt(&self, _prompt: &str) -> anyhow::Result<String> {
-        // MockOutput returns a mock response for testing
-        Ok("mock_input".to_string())
-    }
+/// Mock Input implementation for testing non-interactive enforcement.
+///
+/// We use NonInteractiveInput to ensure tests don't accidentally block on stdin.
+fn test_input() -> NonInteractiveInput {
+    NonInteractiveInput::new()
 }
 
 // Safety: MockOutput is only used in single-threaded tests
@@ -183,7 +186,8 @@ async fn test_p0_handler_routes_database_commands() {
     // WHEN: Calling the handler
     // Note: This will fail because it tries to use the real home directory
     // but it validates the routing works
-    let result = am::commands::sudo::handler(&cmd, Some(db_arc), &output).await;
+    let input = test_input();
+    let result = am::commands::sudo::handler(&cmd, Some(db_arc), &input, &output).await;
 
     // THEN: Handler should execute (may fail due to file system access)
     // The important thing is it routes correctly to reset_database
@@ -209,7 +213,8 @@ async fn test_p1_handler_shows_warning_messages() {
     let output = MockOutput::new();
 
     // WHEN: Calling the handler
-    let _ = am::commands::sudo::handler(&cmd, Some(db_arc), &output).await;
+    let input = test_input();
+    let _ = am::commands::sudo::handler(&cmd, Some(db_arc), &input, &output).await;
 
     // THEN: Should show warning messages about the operation
     let messages = output.progress_messages();

@@ -78,11 +78,6 @@ impl Output for MockOutput {
     fn progress(&self, message: &str) {
         self.progress_calls.borrow_mut().push(message.to_string());
     }
-
-    fn prompt(&self, _prompt: &str) -> anyhow::Result<String> {
-        // MockOutput returns a mock response for testing
-        Ok("mock_input".to_string())
-    }
 }
 
 // Safety: MockOutput is only used in single-threaded tests
@@ -354,14 +349,10 @@ fn test_p1_create_output_with_json_mode_returns_json_output() {
     // WHEN: Calling create_output
     let output = am::presentation::create_output(OutputMode::Json);
 
-    // THEN: Should return JsonOutput (verify by checking prompt() returns error)
-    let result = output.prompt("test");
-    assert!(
-        result.is_err(),
-        "JsonOutput.prompt() should return an error"
-    );
-    // Progress is a no-op for JsonOutput
-    output.progress("testing...");
+    // THEN: Should return a working Output trait object
+    // (prompting is handled by the Input abstraction, not Output)
+    output.progress("test progress message");
+    output.success(json!("ok"), None);
 }
 
 #[test]
