@@ -5,8 +5,10 @@
 //! the output format.
 
 mod interactive;
+mod json;
 
 pub use interactive::InteractiveOutput;
+pub use json::JsonOutput;
 
 use anyhow::Error;
 
@@ -51,12 +53,14 @@ pub trait Output: Send + Sync {
 /// Create an Output implementation based on the requested mode.
 ///
 /// # Arguments
-/// * `json_mode` - If true, returns JsonOutput (not yet implemented, returns Interactive)
+/// * `json_mode` - If true, returns JsonOutput for machine-parseable output
 ///
 /// # Returns
 /// A boxed Output implementation
-pub fn create_output(_json_mode: bool) -> Box<dyn Output> {
-    // For Story 1.1, always return InteractiveOutput
-    // JsonOutput will be added in Story 1.2
-    Box::new(InteractiveOutput::new())
+pub fn create_output(json_mode: bool) -> Box<dyn Output> {
+    if json_mode {
+        Box::new(JsonOutput::new())
+    } else {
+        Box::new(InteractiveOutput::new())
+    }
 }
