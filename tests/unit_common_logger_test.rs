@@ -148,27 +148,18 @@ fn test_p2_debug_format_uses_black_asterisk() {
 // =============================================================================
 
 #[test]
-fn test_p1_init_logger_sets_verbose_mode_true() {
-    // GIVEN: Verbose mode should be set
-    // WHEN: Initializing with verbose = true
-    // Note: Can only safely call once per test suite, so we test the underlying function
+fn test_p1_init_logger_sets_verbose_mode() {
+    // GIVEN: Logger is in some initial state
+
+    // WHEN: Setting verbose to true
     Logger::set_verbose(true);
-
     // THEN: Verbose mode should be enabled
-    assert!(Logger::is_verbose(), "Verbose mode should be true");
+    assert!(Logger::is_verbose(), "Verbose mode should be true after setting to true");
 
-    // Cleanup
-    Logger::set_verbose(false);
-}
-
-#[test]
-fn test_p1_init_logger_sets_verbose_mode_false() {
-    // GIVEN: Verbose mode should not be set
     // WHEN: Setting verbose to false
     Logger::set_verbose(false);
-
     // THEN: Verbose mode should be disabled
-    assert!(!Logger::is_verbose(), "Verbose mode should be false");
+    assert!(!Logger::is_verbose(), "Verbose mode should be false after setting to false");
 }
 
 // =============================================================================

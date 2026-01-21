@@ -5,7 +5,7 @@
 //! the output format.
 
 mod interactive;
-mod json;
+pub mod json;
 
 pub use interactive::InteractiveOutput;
 #[allow(unused_imports)] // Exported for library consumers and tests

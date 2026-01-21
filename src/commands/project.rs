@@ -9,10 +9,12 @@ use std::sync::Arc;
 
 use crate::{
     app::Resource,
+    common::errors::{codes, project_already_exists, project_not_initialized, CliError},
     database::{
-        Database, db_create_project, db_forget_project, db_get_project_by_name,
-        db_get_template_by_name, db_get_templates,
+        db_create_project, db_forget_project, db_get_project_by_name, db_get_template_by_name,
+        db_get_templates,
         entities::{ProjectConfiguration, Template},
+        Database,
     },
     input::Input,
     presentation::Output,
@@ -95,13 +97,18 @@ pub async fn handler(
             let mut project_name = name.clone();
             let mut project_template = template.clone();
 
-            if !project_template.is_none()
-                && templates
+            if project_template.is_some()
+                && !templates
                     .iter()
-                    .find(|t| t.name == *project_template.as_ref().unwrap())
-                    .is_none()
+                    .any(|t| t.name == *project_template.as_ref().unwrap())
             {
-                Err(anyhow::Error::msg("Invalid project template"))?;
+                return Err(CliError::new(
+                    codes::ERR_VALIDATION_FIELD,
+                    "Invalid project template",
+                    "The specified template does not exist",
+                )
+                .with_suggestion("Use 'am template list' to see available templates")
+                .into());
             }
 
             if project_name.is_none() {
@@ -175,9 +182,9 @@ async fn handle_init_project_command(
                 info!("Unregistering previous project...");
                 db_forget_project(p.id.unwrap(), database.clone())?;
             } else {
-                return Err(anyhow::Error::msg(
-                    "Cannot create project, a project with the same name is already registered. You can use the --no-register flag to just create a project without registering it.",
-                ));
+                return Err(project_already_exists(&project_name)
+                    .with_suggestion("Use the --no-register flag to create without registering, or choose a different name")
+                    .into());
             }
         }
     }
@@ -192,7 +199,7 @@ async fn handle_init_project_command(
     );
 
     let cwd = env::current_dir()?;
-    let project_path = &cwd.join(project_name.clone());
+    let project_path = &cwd.join(&project_name);
 
     if project_path.exists() && project_path.read_dir()?.next().is_some() {
         warn!(
@@ -206,9 +213,13 @@ async fn handle_init_project_command(
         )? {
             fs::remove_dir_all(project_path)?;
         } else {
-            return Err(anyhow::Error::msg(
-                "Cannot create project, The project directory already exist.",
-            ));
+            return Err(CliError::new(
+                codes::ERR_PROJECT_ALREADY_EXISTS,
+                "Cannot create project",
+                "The project directory already exists and is not empty",
+            )
+            .with_context(project_path.display().to_string())
+            .into());
         }
     }
 
@@ -218,16 +229,31 @@ async fn handle_init_project_command(
         if let Some(t) = db_get_template_by_name(template, database.clone())? {
             let template_path = PathBuf::from(t.path);
             if !template_path.exists() {
-                eprintln!(
-                    "Template directory '{}' does not exist",
-                    template_path.display()
-                );
-                return Err(anyhow::Error::msg("Invalid template path"));
+                return Err(CliError::new(
+                    codes::ERR_VALIDATION_FIELD,
+                    "Template directory does not exist",
+                    "The registered template path is invalid or has been moved",
+                )
+                .with_context(template_path.display().to_string())
+                .into());
             }
 
-            fs::copy(template_path, &project_path)?;
+            fs::copy(&template_path, &project_path).map_err(|e| {
+                CliError::new(
+                    codes::ERR_TEMPLATE_COPY_FAILED,
+                    format!("Failed to copy template from {}", template_path.display()),
+                    format!("Underlying OS error: {}", e),
+                )
+            })?;
         } else {
-            return Err(anyhow::Error::msg("The selected template was not found"));
+            return Err(CliError::new(
+                codes::ERR_VALIDATION_FIELD,
+                "Template not found",
+                "The selected template is not registered",
+            )
+            .with_context(template)
+            .with_suggestion("Use 'am template list' to see available templates")
+            .into());
         }
     } else {
         let sources_dir = project_path.join("sources");
@@ -307,9 +333,7 @@ async fn handle_register_project_command(
     let amproject = path.join(".amproject");
 
     if !amproject.exists() {
-        Err(anyhow::Error::msg(
-            "Invalid project path. No '.amproject' file detected in the specified path",
-        ))?;
+        return Err(project_not_initialized(path.to_str().unwrap_or_default()).into());
     }
 
     let amproject_content = fs::read_to_string(&amproject)?;
@@ -330,9 +354,9 @@ async fn handle_register_project_command(
             info!("Unregistering previous project...");
             db_forget_project(p.id.unwrap(), database.clone())?;
         } else {
-            return Err(anyhow::Error::msg(
-                "Cannot register project, a project with the same name is already registered.",
-            ));
+            return Err(project_already_exists(&project_name)
+                .with_suggestion("Unregister the existing project first, or use a different name")
+                .into());
         }
     }
 

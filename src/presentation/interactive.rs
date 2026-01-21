@@ -3,9 +3,11 @@
 //! This module provides colored terminal output matching the existing
 //! CLI patterns using the `success!` macro and `log` macros.
 
+use crate::common::errors::CliError;
 use crate::presentation::Output;
 use crate::success;
 use anyhow::Error;
+use colored::Colorize;
 use log::{error, info, warn};
 
 /// Interactive terminal output with colored formatting.
@@ -37,14 +39,32 @@ impl Output for InteractiveOutput {
         }
     }
 
-    fn error(&self, err: &Error, code: i32, _request_id: Option<i64>) {
-        // Use error! macro for consistent formatting and crash logging
-        // Include error code for structured error reporting
-        error!("[{}] {}", code, err);
+    fn error(&self, err: &Error, _code: i32, _request_id: Option<i64>) {
+        // Try to downcast to CliError for structured display with What/Why/Fix
+        if let Some(cli_err) = err.downcast_ref::<CliError>() {
+            // Display "What failed" in red
+            error!("{}: {}", "Error".red().bold(), cli_err.what);
 
-        // Display the error chain if present
-        for cause in err.chain().skip(1) {
-            warn!("  caused by: {}", cause);
+            // Display context if provided
+            if let Some(ctx) = &cli_err.context {
+                error!("  {}: {}", "Context".dimmed(), ctx);
+            }
+
+            error!("");
+
+            // Display "Why" with the reason
+            error!("{}: {}", "Why".yellow(), cli_err.why);
+
+            // Display "Fix" with the suggestion in cyan
+            error!("{}: {}", "Fix".cyan(), cli_err.suggestion);
+        } else {
+            // Fallback for non-CliError: display error with chain
+            error!("{}", err);
+
+            // Display the error chain if present
+            for cause in err.chain().skip(1) {
+                warn!("  caused by: {}", cause);
+            }
         }
     }
 

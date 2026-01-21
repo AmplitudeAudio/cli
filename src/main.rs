@@ -8,10 +8,11 @@ mod presentation;
 use crate::{
     app::{App, Commands},
     commands::{project::handler as handle_project_command, sudo::handler as handle_sudo_command},
+    common::errors::CliError,
     common::logger::{init_logger, setup_crash_logging, write_crash_log_on_error},
     database::{Database, setup_crash_db_cleanup},
-    input::{Input, InputMode, create_input},
-    presentation::{Output, OutputMode, create_output},
+    input::{create_input, Input, InputMode},
+    presentation::{create_output, Output, OutputMode},
 };
 use clap::Parser;
 use log::{debug, error, warn};
@@ -94,17 +95,27 @@ async fn main() -> anyhow::Result<()> {
     match result {
         Ok(()) => std::process::exit(0),
         Err(ref e) => {
-            // Determine exit code: 1 for user errors (default), 2 for system errors
-            // Story 1.5 will refine this with proper error code mapping
-            let exit_code = 1;
+            // Extract error code from CliError if present, otherwise use -1
+            let error_code = e.downcast_ref::<CliError>().map(|ce| ce.code).unwrap_or(-1);
 
-            if cli.json {
-                // In JSON mode, output error as JSON to stdout
-                // Use a generic error code for now (-1), Story 1.4 will add proper codes
-                output.error(e, -1, None);
+            // Determine exit code based on the error category
+            // Story 1.5 will refine this with proper exit code standardization
+            let exit_code = if let Some(cli_err) = e.downcast_ref::<CliError>() {
+                match cli_err.code {
+                    // SDK errors are system/environment issues
+                    -28999..=-28000 => 2,
+                    // All others are user errors
+                    _ => 1,
+                }
             } else {
-                // In interactive mode, log the error
-                error!("{}", e);
+                1 // Default to user error
+            };
+
+            // Output error through the appropriate handler (JSON or Interactive)
+            output.error(e, error_code, None);
+
+            if input_mode == InputMode::Interactive {
+                // In interactive mode, also write a crash log
                 if let Some(log_path) = write_crash_log_on_error() {
                     eprintln!("Error log written to: {}", log_path.display());
                 }
