@@ -4,7 +4,7 @@ mod migrations;
 
 pub use connection::Database;
 
-use crate::database::entities::{Project, ProjectConfiguration, Template};
+use crate::database::entities::{Project, Template};
 use anyhow::Result;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -116,13 +116,14 @@ pub fn db_get_project_by_name(
     let query = database
         .as_ref()
         .unwrap()
-        .prepare("SELECT * FROM projects WHERE name = $1")?;
+        .prepare("SELECT id, name, path, date(created_at) as registered_at FROM projects WHERE name = $1")?;
 
     let results = query.query_map([name], |row| {
         Ok(Project {
             id: row.get(0)?,
             name: row.get(1)?,
             path: row.get(2)?,
+            registered_at: row.get(3)?,
         })
     })?;
 
@@ -130,6 +131,23 @@ pub fn db_get_project_by_name(
         .first()
         .ok_or_else(|| anyhow::anyhow!("Could not find project with name {}", name))
         .map(|template| Some(template.clone()))
+}
+
+/// Get all registered projects from the database, sorted alphabetically by name.
+pub fn db_get_all_projects(database: Option<Arc<Database>>) -> Result<Vec<entities::Project>> {
+    let query = database
+        .as_ref()
+        .unwrap()
+        .prepare("SELECT id, name, path, date(created_at) as registered_at FROM projects ORDER BY name ASC")?;
+
+    query.query_map([], |row| {
+        Ok(Project {
+            id: row.get(0)?,
+            name: row.get(1)?,
+            path: row.get(2)?,
+            registered_at: row.get(3)?,
+        })
+    })
 }
 
 pub fn db_forget_project(id: i32, database: Option<Arc<Database>>) -> Result<bool> {

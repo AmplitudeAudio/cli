@@ -149,4 +149,10 @@ impl Output for JsonOutput {
         // JSON mode suppresses progress messages for clean, parseable output.
         // Progress is intended for interactive users, not machine consumers.
     }
+
+    fn table(&self, _title: Option<&str>, data: serde_json::Value) {
+        // In JSON mode, output the data in the success envelope format
+        let response = Self::build_success_response(data);
+        let _ = Self::write_response(&mut io::stdout(), &response);
+    }
 }

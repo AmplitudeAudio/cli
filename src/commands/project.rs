@@ -11,8 +11,8 @@ use crate::{
     app::Resource,
     common::errors::{CliError, codes, project_already_exists, project_not_initialized},
     database::{
-        Database, db_create_project, db_forget_project, db_get_project_by_name,
-        db_get_template_by_name, db_get_templates,
+        Database, db_create_project, db_forget_project, db_get_all_projects,
+        db_get_project_by_name, db_get_template_by_name, db_get_templates,
         entities::{ProjectConfiguration, Template},
     },
     input::Input,
@@ -68,6 +68,9 @@ pub enum ProjectCommands {
         #[arg(long, value_parser = value_parser!(bool))]
         delete_files: bool,
     },
+
+    /// List all registered projects
+    List {},
 }
 
 pub async fn handler(
@@ -152,6 +155,7 @@ pub async fn handler(
         } => {
             handle_unregister_project_command(name.as_str(), delete, database, input, output).await
         }
+        ProjectCommands::List {} => handle_list_projects_command(database, output).await,
     }
 }
 
@@ -165,26 +169,25 @@ async fn handle_init_project_command(
 ) -> anyhow::Result<()> {
     let project_name = transform_name(name);
 
-    if !no_register {
-        if let Some(Some(p)) = db_get_project_by_name(project_name.as_str(), database.clone()).ok()
-        {
-            warn!(
-                "A project with the name {} is already registered at path {}",
-                project_name.cyan(),
-                p.path.cyan()
-            );
+    if !no_register
+        && let Ok(Some(p)) = db_get_project_by_name(project_name.as_str(), database.clone())
+    {
+        warn!(
+            "A project with the name {} is already registered at path {}",
+            project_name.cyan(),
+            p.path.cyan()
+        );
 
-            if input.confirm(
-                "Do you want to forget that project and create this new one?",
-                None,
-            )? {
-                info!("Unregistering previous project...");
-                db_forget_project(p.id.unwrap(), database.clone())?;
-            } else {
-                return Err(project_already_exists(&project_name)
-                    .with_suggestion("Use the --no-register flag to create without registering, or choose a different name")
-                    .into());
-            }
+        if input.confirm(
+            "Do you want to forget that project and create this new one?",
+            None,
+        )? {
+            info!("Unregistering previous project...");
+            db_forget_project(p.id.unwrap(), database.clone())?;
+        } else {
+            return Err(project_already_exists(&project_name)
+                .with_suggestion("Use the --no-register flag to create without registering, or choose a different name")
+                .into());
         }
     }
 
@@ -222,7 +225,7 @@ async fn handle_init_project_command(
         }
     }
 
-    fs::create_dir_all(&project_path)?;
+    fs::create_dir_all(project_path)?;
 
     if template != DEFAULT_TEMPLATE {
         if let Some(t) = db_get_template_by_name(template, database.clone())? {
@@ -237,7 +240,7 @@ async fn handle_init_project_command(
                 .into());
             }
 
-            fs::copy(&template_path, &project_path).map_err(|e| {
+            fs::copy(&template_path, project_path).map_err(|e| {
                 CliError::new(
                     codes::ERR_TEMPLATE_COPY_FAILED,
                     format!("Failed to copy template from {}", template_path.display()),
@@ -323,7 +326,7 @@ async fn handle_init_project_command(
 }
 
 async fn handle_register_project_command(
-    path: &PathBuf,
+    path: &std::path::Path,
     database: Option<Arc<Database>>,
     input: &dyn Input,
     output: &dyn Output,
@@ -339,7 +342,7 @@ async fn handle_register_project_command(
     let project_config: ProjectConfiguration = serde_json::from_str(&amproject_content)?;
     let project_name = project_config.name.clone();
 
-    if let Some(Some(p)) = db_get_project_by_name(project_name.as_str(), database.clone()).ok() {
+    if let Ok(Some(p)) = db_get_project_by_name(project_name.as_str(), database.clone()) {
         warn!(
             "A project with the name {} is already registered at path {}",
             project_name.cyan(),
@@ -379,7 +382,7 @@ async fn handle_unregister_project_command(
     _input: &dyn Input,
     output: &dyn Output,
 ) -> anyhow::Result<()> {
-    if let Some(Some(p)) = db_get_project_by_name(name, database.clone()).ok() {
+    if let Ok(Some(p)) = db_get_project_by_name(name, database.clone()) {
         output.progress("Unregistering project...");
         db_forget_project(p.id.unwrap(), database.clone())?;
 
@@ -393,6 +396,49 @@ async fn handle_unregister_project_command(
         json!(format!("Project {} unregistered successfully", name)),
         None,
     );
+
+    Ok(())
+}
+
+async fn handle_list_projects_command(
+    database: Option<Arc<Database>>,
+    output: &dyn Output,
+) -> anyhow::Result<()> {
+    let projects = db_get_all_projects(database)?;
+
+    if projects.is_empty() {
+        output.table(Some("Registered Projects"), json!([]));
+
+        output.progress("No projects registered.");
+        output.progress("");
+        output.progress("To get started:");
+        output.progress(&format!(
+            "  {} Create a new project: {} {}",
+            "•".cyan(),
+            "am project init".green(),
+            "<name>".white()
+        ));
+        output.progress(&format!(
+            "  {} Register an existing project: {} {}",
+            "•".cyan(),
+            "am project register".green(),
+            "<path>".white()
+        ));
+    } else {
+        // Build JSON array with a display-friendly structure (no id field for display)
+        let display_data: Vec<serde_json::Value> = projects
+            .iter()
+            .map(|p| {
+                json!({
+                    "name": p.name,
+                    "path": p.path,
+                    "registered_at": p.registered_at.clone().unwrap_or_else(|| "-".to_string())
+                })
+            })
+            .collect();
+
+        output.table(Some("Registered Projects"), json!(display_data));
+    }
 
     Ok(())
 }
@@ -413,12 +459,12 @@ fn validate_name(name: &str) -> Result<Validation, CustomUserError> {
 }
 
 fn transform_name(name: &str) -> String {
-    name.to_lowercase().replace(' ', "_").replace('-', "_")
+    name.to_lowercase().replace([' ', '-'], "_")
 }
 
 fn register_project(
     config: &ProjectConfiguration,
-    path: &PathBuf,
+    path: &std::path::Path,
     database: Option<Arc<Database>>,
 ) -> Result<bool> {
     info!("Registering project {}...", config.name.cyan());

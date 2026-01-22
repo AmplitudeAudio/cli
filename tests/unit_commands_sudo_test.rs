@@ -62,6 +62,10 @@ impl Output for MockOutput {
     fn progress(&self, message: &str) {
         self.progress_calls.borrow_mut().push(message.to_string());
     }
+
+    fn table(&self, _title: Option<&str>, _data: serde_json::Value) {
+        // Mock implementation - does nothing for testing
+    }
 }
 
 /// Mock Input implementation for testing non-interactive enforcement.

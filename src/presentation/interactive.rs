@@ -72,4 +72,96 @@ impl Output for InteractiveOutput {
         // Use info! macro for consistent formatting and crash logging
         info!("{}", message);
     }
+
+    fn table(&self, title: Option<&str>, data: serde_json::Value) {
+        // Display title if provided
+        if let Some(t) = title {
+            info!("{}", t.cyan().bold());
+        }
+
+        // Extract rows from JSON array
+        let rows = match data.as_array() {
+            Some(arr) => arr,
+            None => return,
+        };
+
+        if rows.is_empty() {
+            return;
+        }
+
+        // Extract headers from first row's keys
+        let first_row = match rows.first().and_then(|r| r.as_object()) {
+            Some(obj) => obj,
+            None => return,
+        };
+
+        let headers: Vec<&str> = first_row.keys().map(|k| k.as_str()).collect();
+
+        // Convert rows to string values
+        let row_data: Vec<Vec<String>> = rows
+            .iter()
+            .filter_map(|r| r.as_object())
+            .map(|obj| {
+                headers
+                    .iter()
+                    .map(|h| {
+                        obj.get(*h)
+                            .map(|v| match v {
+                                serde_json::Value::String(s) => s.clone(),
+                                serde_json::Value::Null => "-".to_string(),
+                                other => other.to_string(),
+                            })
+                            .unwrap_or_else(|| "-".to_string())
+                    })
+                    .collect()
+            })
+            .collect();
+
+        // Calculate column widths based on headers and data
+        let mut widths: Vec<usize> = headers.iter().map(|h| h.len()).collect();
+        for row in &row_data {
+            for (i, cell) in row.iter().enumerate() {
+                if i < widths.len() {
+                    widths[i] = widths[i].max(cell.len());
+                }
+            }
+        }
+
+        let total_width: usize = widths.iter().sum::<usize>() + (widths.len() - 1) * 2 + 2;
+        let separator = "─".repeat(total_width);
+
+        // Print header
+        info!("{}", separator);
+        let header_line: String = headers
+            .iter()
+            .enumerate()
+            .map(|(i, h)| {
+                format!("{:<width$}", h.bold(), width = widths[i])
+            })
+            .collect::<Vec<_>>()
+            .join("  ");
+        info!(" {}", header_line);
+        info!("{}", separator);
+
+        // Print rows
+        for row in &row_data {
+            let row_line: String = row
+                .iter()
+                .enumerate()
+                .map(|(i, cell)| {
+                    let width = widths.get(i).copied().unwrap_or(cell.len());
+                    if i == 0 {
+                        // The first column (name) is green
+                        format!("{:<width$}", cell.green(), width = width)
+                    } else {
+                        format!("{:<width$}", cell, width = width)
+                    }
+                })
+                .collect::<Vec<_>>()
+                .join("  ");
+            info!(" {}", row_line);
+        }
+
+        info!("{}", separator);
+    }
 }

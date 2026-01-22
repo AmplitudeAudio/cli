@@ -1,8 +1,8 @@
 //! Unit tests for database CRUD operations.
 
 use am::database::{
-    Database, db_create_project, db_forget_project, db_get_project_by_name,
-    db_get_template_by_name, db_get_templates, entities::Project,
+    Database, db_create_project, db_forget_project, db_get_all_projects,
+    db_get_project_by_name, db_get_template_by_name, db_get_templates, entities::Project,
 };
 use std::sync::Arc;
 use tempfile::tempdir;
@@ -28,6 +28,7 @@ async fn test_p0_db_create_project_inserts_new_project() {
         id: None,
         name: "test_project".to_string(),
         path: "/path/to/project".to_string(),
+        registered_at: None,
     };
 
     let result = db_create_project(&project, Some(db.clone()));
@@ -44,6 +45,7 @@ async fn test_p0_db_create_project_fails_on_duplicate_name() {
         id: None,
         name: "duplicate_project".to_string(),
         path: "/path/one".to_string(),
+        registered_at: None,
     };
     db_create_project(&project1, Some(db.clone())).expect("First insert should succeed");
 
@@ -51,6 +53,7 @@ async fn test_p0_db_create_project_fails_on_duplicate_name() {
         id: None,
         name: "duplicate_project".to_string(),
         path: "/path/two".to_string(),
+        registered_at: None,
     };
 
     let result = db_create_project(&project2, Some(db.clone()));
@@ -66,6 +69,7 @@ async fn test_p1_db_create_project_allows_same_path_different_name() {
         id: None,
         name: "project_a".to_string(),
         path: "/shared/path".to_string(),
+        registered_at: None,
     };
     db_create_project(&project1, Some(db.clone())).expect("First insert should succeed");
 
@@ -73,6 +77,7 @@ async fn test_p1_db_create_project_allows_same_path_different_name() {
         id: None,
         name: "project_b".to_string(),
         path: "/shared/path".to_string(),
+        registered_at: None,
     };
 
     let result = db_create_project(&project2, Some(db.clone()));
@@ -95,6 +100,7 @@ async fn test_p0_db_get_project_by_name_returns_existing_project() {
         id: None,
         name: "findable_project".to_string(),
         path: "/path/to/findable".to_string(),
+        registered_at: None,
     };
     db_create_project(&project, Some(db.clone())).expect("Insert should succeed");
 
@@ -127,6 +133,7 @@ async fn test_p1_db_get_project_by_name_is_case_sensitive() {
         id: None,
         name: "CaseSensitiveProject".to_string(),
         path: "/path/case".to_string(),
+        registered_at: None,
     };
     db_create_project(&project, Some(db.clone())).expect("Insert should succeed");
 
@@ -147,6 +154,7 @@ async fn test_p0_db_forget_project_removes_project() {
         id: None,
         name: "to_be_forgotten".to_string(),
         path: "/path/to/forget".to_string(),
+        registered_at: None,
     };
     db_create_project(&project, Some(db.clone())).expect("Insert should succeed");
 
@@ -243,4 +251,123 @@ async fn test_p1_db_get_template_by_name_returns_error_for_nonexistent() {
     let result = db_get_template_by_name("nonexistent", Some(db.clone()));
 
     assert!(result.is_err(), "Non-existent template should return error");
+}
+
+// =============================================================================
+// db_get_all_projects Tests
+// =============================================================================
+
+#[tokio::test]
+async fn test_p0_db_get_all_projects_returns_empty_for_fresh_db() {
+    let (db, _temp_dir) = setup_test_database().await;
+
+    let result = db_get_all_projects(Some(db.clone()));
+
+    assert!(result.is_ok(), "Query should succeed");
+    let projects = result.unwrap();
+    assert!(
+        projects.is_empty(),
+        "Fresh database should have no projects"
+    );
+}
+
+#[tokio::test]
+async fn test_p0_db_get_all_projects_returns_all_projects() {
+    let (db, _temp_dir) = setup_test_database().await;
+
+    let project1 = Project {
+        id: None,
+        name: "project_one".to_string(),
+        path: "/path/one".to_string(),
+        registered_at: None,
+    };
+    let project2 = Project {
+        id: None,
+        name: "project_two".to_string(),
+        path: "/path/two".to_string(),
+        registered_at: None,
+    };
+    db_create_project(&project1, Some(db.clone())).expect("First insert should succeed");
+    db_create_project(&project2, Some(db.clone())).expect("Second insert should succeed");
+
+    let result = db_get_all_projects(Some(db.clone()));
+
+    assert!(result.is_ok(), "Query should succeed");
+    let projects = result.unwrap();
+    assert_eq!(projects.len(), 2, "Should have 2 projects");
+}
+
+#[tokio::test]
+async fn test_p1_db_get_all_projects_returns_sorted_by_name() {
+    let (db, _temp_dir) = setup_test_database().await;
+
+    // Insert projects in non-alphabetical order
+    let project_z = Project {
+        id: None,
+        name: "zebra_project".to_string(),
+        path: "/path/zebra".to_string(),
+        registered_at: None,
+    };
+    let project_a = Project {
+        id: None,
+        name: "alpha_project".to_string(),
+        path: "/path/alpha".to_string(),
+        registered_at: None,
+    };
+    let project_m = Project {
+        id: None,
+        name: "middle_project".to_string(),
+        path: "/path/middle".to_string(),
+        registered_at: None,
+    };
+    db_create_project(&project_z, Some(db.clone())).expect("Insert should succeed");
+    db_create_project(&project_a, Some(db.clone())).expect("Insert should succeed");
+    db_create_project(&project_m, Some(db.clone())).expect("Insert should succeed");
+
+    let result = db_get_all_projects(Some(db.clone()));
+
+    assert!(result.is_ok(), "Query should succeed");
+    let projects = result.unwrap();
+    assert_eq!(projects.len(), 3, "Should have 3 projects");
+    assert_eq!(
+        projects[0].name, "alpha_project",
+        "First project should be alpha"
+    );
+    assert_eq!(
+        projects[1].name, "middle_project",
+        "Second project should be middle"
+    );
+    assert_eq!(
+        projects[2].name, "zebra_project",
+        "Third project should be zebra"
+    );
+}
+
+#[tokio::test]
+async fn test_p1_db_get_all_projects_includes_registered_at() {
+    let (db, _temp_dir) = setup_test_database().await;
+
+    let project = Project {
+        id: None,
+        name: "dated_project".to_string(),
+        path: "/path/dated".to_string(),
+        registered_at: None,
+    };
+    db_create_project(&project, Some(db.clone())).expect("Insert should succeed");
+
+    let result = db_get_all_projects(Some(db.clone()));
+
+    assert!(result.is_ok(), "Query should succeed");
+    let projects = result.unwrap();
+    assert_eq!(projects.len(), 1, "Should have 1 project");
+    assert!(
+        projects[0].registered_at.is_some(),
+        "Project should have a registered_at date"
+    );
+    // The date should be in ISO 8601 format (YYYY-MM-DD)
+    let date = projects[0].registered_at.as_ref().unwrap();
+    assert!(
+        date.len() == 10 && date.contains('-'),
+        "Date should be in YYYY-MM-DD format"
+    );
 }

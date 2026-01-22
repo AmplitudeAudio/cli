@@ -65,6 +65,16 @@ pub trait Output: Send + Sync {
     /// # Arguments
     /// * `message` - Progress message to display
     fn progress(&self, message: &str);
+
+    /// Display tabular data with an optional title.
+    ///
+    /// In interactive mode, renders a formatted table with headers and rows.
+    /// In JSON mode, outputs a JSON envelope with the data as array of objects.
+    ///
+    /// # Arguments
+    /// * `title` - Optional title to display above the table (interactive mode only)
+    /// * `data` - The data to display as a JSON array of objects
+    fn table(&self, title: Option<&str>, data: serde_json::Value);
 }
 
 /// Create an Output implementation based on the requested mode.

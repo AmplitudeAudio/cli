@@ -94,6 +94,7 @@ fn test_p2_project_clone_creates_independent_copy() {
         id: Some(42),
         name: "original".to_string(),
         path: "/original/path".to_string(),
+        registered_at: Some("2026-01-20".to_string()),
     };
 
     let cloned = project.clone();
@@ -101,6 +102,7 @@ fn test_p2_project_clone_creates_independent_copy() {
     assert_eq!(cloned.id, project.id);
     assert_eq!(cloned.name, project.name);
     assert_eq!(cloned.path, project.path);
+    assert_eq!(cloned.registered_at, project.registered_at);
 }
 
 #[test]
@@ -109,6 +111,7 @@ fn test_p2_project_serializes_to_json() {
         id: Some(1),
         name: "test".to_string(),
         path: "/test/path".to_string(),
+        registered_at: Some("2026-01-20".to_string()),
     };
 
     let json = serde_json::to_string(&project);
@@ -117,6 +120,7 @@ fn test_p2_project_serializes_to_json() {
     let json_str = json.unwrap();
     assert!(json_str.contains("\"id\":1"));
     assert!(json_str.contains("\"name\":\"test\""));
+    assert!(json_str.contains("\"registered_at\":\"2026-01-20\""));
 }
 
 // =============================================================================

@@ -1,7 +1,7 @@
 //! Feature tests for project lifecycle operations.
 
 use am::database::{
-    Database, db_create_project, db_forget_project, db_get_project_by_name,
+    Database, db_create_project, db_forget_project, db_get_all_projects, db_get_project_by_name,
     entities::{Project, ProjectConfiguration},
 };
 use std::fs;
@@ -123,6 +123,7 @@ async fn test_p1_project_registration_prevents_duplicate_names() {
             .to_str()
             .unwrap()
             .to_string(),
+        registered_at: None,
     };
     db_create_project(&project1, Some(db.clone())).expect("First registration should succeed");
 
@@ -135,6 +136,7 @@ async fn test_p1_project_registration_prevents_duplicate_names() {
             .to_str()
             .unwrap()
             .to_string(),
+        registered_at: None,
     };
     let result = db_create_project(&project2, Some(db.clone()));
 
@@ -153,6 +155,7 @@ async fn test_p0_project_unregistration_removes_from_database() {
         id: None,
         name: "to_unregister".to_string(),
         path: "/path/to/project".to_string(),
+        registered_at: None,
     };
     db_create_project(&project, Some(db.clone())).expect("Registration should succeed");
 
@@ -179,6 +182,7 @@ async fn test_p1_project_unregistration_does_not_delete_files_by_default() {
         id: None,
         name: "project_with_files".to_string(),
         path: project_path.to_str().unwrap().to_string(),
+        registered_at: None,
     };
     db_create_project(&project, Some(db.clone())).expect("Registration should succeed");
 
@@ -259,6 +263,7 @@ async fn test_p1_re_register_after_unregister() {
             .to_str()
             .unwrap()
             .to_string(),
+        registered_at: None,
     };
 
     db_create_project(&project, Some(db.clone())).expect("First registration should succeed");
@@ -271,4 +276,80 @@ async fn test_p1_re_register_after_unregister() {
     let result = db_create_project(&project, Some(db.clone()));
 
     assert!(result.is_ok(), "Re-registration should succeed");
+}
+
+// =============================================================================
+// Project List Command Tests
+// =============================================================================
+
+#[tokio::test]
+async fn test_p0_project_list_shows_registered_projects() {
+    let (db, temp_dir) = setup_test_database().await;
+
+    // Register two projects
+    let project1 = Project {
+        id: None,
+        name: "alpha_project".to_string(),
+        path: temp_dir
+            .path()
+            .join("alpha")
+            .to_str()
+            .unwrap()
+            .to_string(),
+        registered_at: None,
+    };
+    let project2 = Project {
+        id: None,
+        name: "beta_project".to_string(),
+        path: temp_dir
+            .path()
+            .join("beta")
+            .to_str()
+            .unwrap()
+            .to_string(),
+        registered_at: None,
+    };
+    db_create_project(&project1, Some(db.clone())).expect("First registration should succeed");
+    db_create_project(&project2, Some(db.clone())).expect("Second registration should succeed");
+
+    // Get all projects
+    let projects = db_get_all_projects(Some(db.clone())).expect("Query should succeed");
+
+    assert_eq!(projects.len(), 2, "Should have 2 projects");
+    // Projects should be sorted alphabetically
+    assert_eq!(projects[0].name, "alpha_project");
+    assert_eq!(projects[1].name, "beta_project");
+    // Both should have registered_at dates
+    assert!(projects[0].registered_at.is_some());
+    assert!(projects[1].registered_at.is_some());
+}
+
+#[tokio::test]
+async fn test_p1_project_list_empty_database_returns_empty_vec() {
+    let (db, _temp_dir) = setup_test_database().await;
+
+    let projects = db_get_all_projects(Some(db.clone())).expect("Query should succeed");
+
+    assert!(projects.is_empty(), "Empty database should return empty list");
+}
+
+#[tokio::test]
+async fn test_p1_project_list_includes_path_and_date() {
+    let (db, temp_dir) = setup_test_database().await;
+    let project_path = temp_dir.path().join("test_project");
+
+    let project = Project {
+        id: None,
+        name: "test_project".to_string(),
+        path: project_path.to_str().unwrap().to_string(),
+        registered_at: None,
+    };
+    db_create_project(&project, Some(db.clone())).expect("Registration should succeed");
+
+    let projects = db_get_all_projects(Some(db.clone())).expect("Query should succeed");
+
+    assert_eq!(projects.len(), 1);
+    assert_eq!(projects[0].name, "test_project");
+    assert_eq!(projects[0].path, project_path.to_str().unwrap());
+    assert!(projects[0].registered_at.is_some());
 }

@@ -15,9 +15,12 @@ pub struct ProjectConfiguration {
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub struct Project {
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub id: Option<i32>,
     pub name: String,
     pub path: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub registered_at: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -34,6 +37,7 @@ impl ProjectConfiguration {
             id: None,
             name: self.name.clone(),
             path: path.to_string(),
+            registered_at: None,
         }
     }
 }
