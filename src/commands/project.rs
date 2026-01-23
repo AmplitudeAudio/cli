@@ -1,6 +1,7 @@
 use anyhow::Result;
 use colored::*;
 use log::{info, warn};
+use std::collections::HashMap;
 use std::env;
 use std::fs;
 use std::io::Write;
@@ -9,10 +10,19 @@ use std::sync::Arc;
 
 use crate::{
     app::Resource,
-    common::errors::{CliError, codes, project_already_exists, project_not_initialized},
+    common::{
+        errors::{CliError, codes, project_already_exists, project_not_initialized},
+        utils::{
+            count_assets_by_type, read_amproject_file,
+            ASSET_DIR_ATTENUATORS, ASSET_DIR_COLLECTIONS, ASSET_DIR_EFFECTS,
+            ASSET_DIR_EVENTS, ASSET_DIR_PIPELINES, ASSET_DIR_RTPC,
+            ASSET_DIR_SOUNDBANKS, ASSET_DIR_SOUNDS, ASSET_DIR_SWITCH_CONTAINERS,
+            ASSET_DIR_SWITCHES,
+        },
+    },
     database::{
         Database, db_create_project, db_forget_project, db_get_all_projects,
-        db_get_project_by_name, db_get_template_by_name, db_get_templates,
+        db_get_project_by_name, db_get_project_by_path, db_get_template_by_name, db_get_templates,
         entities::{ProjectConfiguration, Template},
     },
     input::Input,
@@ -25,17 +35,10 @@ use inquire::{
 };
 use serde_json::json;
 
-const PROJECT_DIR_ATTENUATORS: &str = "attenuators";
-const PROJECT_DIR_COLLECTIONS: &str = "collections";
-const PROJECT_DIR_EFFECTS: &str = "effects";
-const PROJECT_DIR_EVENTS: &str = "events";
-const PROJECT_DIR_PIPELINES: &str = "pipelines";
-const PROJECT_DIR_RTPC: &str = "rtpc";
-const PROJECT_DIR_SOUND_BANKS: &str = "soundbanks";
-const PROJECT_DIR_SOUNDS: &str = "sounds";
-const PROJECT_DIR_SWITCH_CONTAINERS: &str = "switch_containers";
-const PROJECT_DIR_SWITCHES: &str = "switches";
 const DEFAULT_TEMPLATE: &str = "default";
+
+/// Width of the separator line in project info display.
+const PROJECT_INFO_SEPARATOR_WIDTH: usize = 40;
 
 #[derive(Subcommand, Debug)]
 pub enum ProjectCommands {
@@ -71,6 +74,12 @@ pub enum ProjectCommands {
 
     /// List all registered projects
     List {},
+
+    /// Show details of a project
+    Info {
+        /// The name of the project (uses current directory if not provided)
+        name: Option<String>,
+    },
 }
 
 pub async fn handler(
@@ -156,6 +165,9 @@ pub async fn handler(
             handle_unregister_project_command(name.as_str(), delete, database, input, output).await
         }
         ProjectCommands::List {} => handle_list_projects_command(database, output).await,
+        ProjectCommands::Info { name } => {
+            handle_info_project_command(name.clone(), database, input, output).await
+        }
     }
 }
 
@@ -260,17 +272,16 @@ async fn handle_init_project_command(
     } else {
         let sources_dir = project_path.join("sources");
 
-        // Create project 'sources' directories
-        fs::create_dir_all(sources_dir.join(PROJECT_DIR_ATTENUATORS))?;
-        fs::create_dir_all(sources_dir.join(PROJECT_DIR_COLLECTIONS))?;
-        fs::create_dir_all(sources_dir.join(PROJECT_DIR_EFFECTS))?;
-        fs::create_dir_all(sources_dir.join(PROJECT_DIR_EVENTS))?;
-        fs::create_dir_all(sources_dir.join(PROJECT_DIR_PIPELINES))?;
-        fs::create_dir_all(sources_dir.join(PROJECT_DIR_RTPC))?;
-        fs::create_dir_all(sources_dir.join(PROJECT_DIR_SOUND_BANKS))?;
-        fs::create_dir_all(sources_dir.join(PROJECT_DIR_SOUNDS))?;
-        fs::create_dir_all(sources_dir.join(PROJECT_DIR_SWITCH_CONTAINERS))?;
-        fs::create_dir_all(sources_dir.join(PROJECT_DIR_SWITCHES))?;
+        fs::create_dir_all(sources_dir.join(ASSET_DIR_ATTENUATORS))?;
+        fs::create_dir_all(sources_dir.join(ASSET_DIR_COLLECTIONS))?;
+        fs::create_dir_all(sources_dir.join(ASSET_DIR_EFFECTS))?;
+        fs::create_dir_all(sources_dir.join(ASSET_DIR_EVENTS))?;
+        fs::create_dir_all(sources_dir.join(ASSET_DIR_PIPELINES))?;
+        fs::create_dir_all(sources_dir.join(ASSET_DIR_RTPC))?;
+        fs::create_dir_all(sources_dir.join(ASSET_DIR_SOUNDBANKS))?;
+        fs::create_dir_all(sources_dir.join(ASSET_DIR_SOUNDS))?;
+        fs::create_dir_all(sources_dir.join(ASSET_DIR_SWITCH_CONTAINERS))?;
+        fs::create_dir_all(sources_dir.join(ASSET_DIR_SWITCHES))?;
 
         if let Some(file) = Resource::get("default.config.json") {
             fs::write(sources_dir.join("pc.config.json"), file.data)?;
@@ -283,22 +294,16 @@ async fn handle_init_project_command(
         if let Some(file) = Resource::get("default.pipeline.json") {
             fs::write(
                 sources_dir
-                    .join(PROJECT_DIR_PIPELINES)
+                    .join(ASSET_DIR_PIPELINES)
                     .join("pc.pipeline.json"),
                 file.data,
             )?;
         }
 
-        // Create the project's 'build' directory
         fs::create_dir_all(project_path.join("build"))?;
-
-        // Create the project's 'data' directory
         fs::create_dir_all(project_path.join("data"))?;
-
-        // Create the project's 'plugins' directory
         fs::create_dir_all(project_path.join("plugins"))?;
 
-        // Create the project's file
         let mut amproject = fs::File::create(project_path.join(".amproject"))?;
 
         let project = &ProjectConfiguration {
@@ -425,7 +430,6 @@ async fn handle_list_projects_command(
             "<path>".white()
         ));
     } else {
-        // Build JSON array with a display-friendly structure (no id field for display)
         let display_data: Vec<serde_json::Value> = projects
             .iter()
             .map(|p| {
@@ -441,6 +445,253 @@ async fn handle_list_projects_command(
     }
 
     Ok(())
+}
+
+async fn handle_info_project_command(
+    name: Option<String>,
+    database: Option<Arc<Database>>,
+    input: &dyn Input,
+    output: &dyn Output,
+) -> anyhow::Result<()> {
+    if let Some(project_name) = name {
+        return handle_info_by_name(&project_name, database, output).await;
+    }
+
+    let cwd = env::current_dir()?;
+    handle_info_current_dir(&cwd, database, input, output).await
+}
+
+async fn handle_info_by_name(
+    name: &str,
+    database: Option<Arc<Database>>,
+    output: &dyn Output,
+) -> anyhow::Result<()> {
+    let lookup_result = db_get_project_by_name(name, database.clone())?;
+
+    match lookup_result {
+        Some(project) => {
+            let project_path = PathBuf::from(&project.path);
+            let asset_counts = count_assets_by_type(&project_path).unwrap_or_default();
+
+            display_project_info(&project.name, &project_path, true, project.registered_at.as_deref(), &asset_counts, output);
+
+            Ok(())
+        }
+        None => Err(CliError::new(
+                codes::ERR_PROJECT_NOT_REGISTERED,
+                format!("Project '{}' not found", name),
+                "The project is not registered in the database",
+            )
+            .with_suggestion("Use 'am project list' to see registered projects")
+            .into()),
+    }
+}
+
+async fn handle_info_current_dir(
+    cwd: &std::path::Path,
+    database: Option<Arc<Database>>,
+    input: &dyn Input,
+    output: &dyn Output,
+) -> anyhow::Result<()> {
+    let amproject_path = cwd.join(".amproject");
+    if !amproject_path.exists() {
+        return Err(CliError::new(
+            codes::ERR_PROJECT_NOT_INITIALIZED,
+            "No project found in current directory",
+            "The current directory does not contain a .amproject file",
+        )
+        .with_suggestion("Create a new project with 'am project init <name>' or provide a project name")
+        .into());
+    }
+
+    let config = read_amproject_file(cwd)?;
+    let asset_counts = count_assets_by_type(cwd).unwrap_or_default();
+    let cwd_str = cwd.to_str().unwrap_or_default();
+    let registered_project = db_get_project_by_path(cwd_str, database.clone())?;
+
+    match registered_project {
+        Some(project) => {
+            display_project_info(&config.name, cwd, true, project.registered_at.as_deref(), &asset_counts, output);
+        }
+        None => {
+            match output.mode() {
+                crate::presentation::OutputMode::Json => {
+                    display_project_info(&config.name, cwd, false, None, &asset_counts, output);
+                }
+                crate::presentation::OutputMode::Interactive => {
+                    display_project_info_interactive(&config.name, cwd, false, None, &asset_counts, output);
+
+                    output.progress("");
+                    output.progress("This project is not registered in the database.");
+
+                    match input.confirm("Would you like to register it now?", Some(false)) {
+                        Ok(true) => {
+                            let project = config.to_project(cwd_str);
+                            db_create_project(&project, database)?;
+                            output.success(json!("Project registered successfully!"), None);
+                        }
+                        Ok(false) | Err(_) => {
+                            output.progress(&format!(
+                                "  Run {} to register this project",
+                                "am project register".green()
+                            ));
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(())
+}
+
+fn display_project_info(
+    name: &str,
+    path: &std::path::Path,
+    registered: bool,
+    registered_at: Option<&str>,
+    asset_counts: &HashMap<String, usize>,
+    output: &dyn Output,
+) {
+    match output.mode() {
+        crate::presentation::OutputMode::Json => {
+            let json_data = build_project_info_json(name, path, registered, registered_at, asset_counts);
+            output.success(json_data, None);
+        }
+        crate::presentation::OutputMode::Interactive => {
+            display_project_info_interactive(name, path, registered, registered_at, asset_counts, output);
+        }
+    }
+}
+
+fn build_project_info_json(
+    name: &str,
+    path: &std::path::Path,
+    registered: bool,
+    registered_at: Option<&str>,
+    asset_counts: &HashMap<String, usize>,
+) -> serde_json::Value {
+    let path_str = path.to_str().unwrap_or_default();
+
+    let mut json_value = json!({
+        "name": name,
+        "path": path_str,
+        "registered": registered,
+        "paths": {
+            "sources": format!("{}/sources", path_str),
+            "data": format!("{}/data", path_str),
+            "build": format!("{}/build", path_str),
+        },
+        "assets": {
+            "sounds": asset_counts.get("sounds").unwrap_or(&0),
+            "collections": asset_counts.get("collections").unwrap_or(&0),
+            "events": asset_counts.get("events").unwrap_or(&0),
+            "effects": asset_counts.get("effects").unwrap_or(&0),
+            "switches": asset_counts.get("switches").unwrap_or(&0),
+            "switch_containers": asset_counts.get("switch_containers").unwrap_or(&0),
+            "soundbanks": asset_counts.get("soundbanks").unwrap_or(&0),
+            "attenuators": asset_counts.get("attenuators").unwrap_or(&0),
+            "rtpc": asset_counts.get("rtpc").unwrap_or(&0),
+            "pipelines": asset_counts.get("pipelines").unwrap_or(&0),
+        }
+    });
+
+    if registered {
+        if let Some(date) = registered_at {
+            json_value["registered_at"] = json!(date);
+        }
+    } else {
+        json_value["notice"] = json!("This project is not registered in the database. Run 'am project register' to register it.");
+    }
+
+    json_value
+}
+
+fn display_project_info_interactive(
+    name: &str,
+    path: &std::path::Path,
+    registered: bool,
+    registered_at: Option<&str>,
+    asset_counts: &HashMap<String, usize>,
+    output: &dyn Output,
+) {
+    let path_str = path.to_str().unwrap_or_default();
+
+    output.progress(&format!("Project: {}", name.cyan().bold()));
+    output.progress(&"─".repeat(PROJECT_INFO_SEPARATOR_WIDTH));
+    output.progress("");
+    output.progress("Details:");
+    output.progress(&format!("  Root Path:      {}", path_str));
+    if registered {
+        output.progress(&format!(
+            "  Registered:     {} ({})",
+            "Yes".green(),
+            registered_at.unwrap_or("-")
+        ));
+    } else {
+        output.progress(&format!("  Registered:     {}", "No".yellow()));
+    }
+    output.progress("");
+    output.progress("Paths:");
+    output.progress(&format!("  Sources:        {}/sources", path_str));
+    output.progress(&format!("  Data:           {}/data", path_str));
+    output.progress(&format!("  Build:          {}/build", path_str));
+
+    let has_assets = asset_counts.values().any(|&v| v > 0);
+    if has_assets {
+        output.progress("");
+        output.progress("Assets:");
+        if let Some(&count) = asset_counts.get("sounds") {
+            if count > 0 {
+                output.progress(&format!("  Sounds:         {}", count));
+            }
+        }
+        if let Some(&count) = asset_counts.get("collections") {
+            if count > 0 {
+                output.progress(&format!("  Collections:    {}", count));
+            }
+        }
+        if let Some(&count) = asset_counts.get("events") {
+            if count > 0 {
+                output.progress(&format!("  Events:         {}", count));
+            }
+        }
+        if let Some(&count) = asset_counts.get("effects") {
+            if count > 0 {
+                output.progress(&format!("  Effects:        {}", count));
+            }
+        }
+        if let Some(&count) = asset_counts.get("switches") {
+            if count > 0 {
+                output.progress(&format!("  Switches:       {}", count));
+            }
+        }
+        if let Some(&count) = asset_counts.get("switch_containers") {
+            if count > 0 {
+                output.progress(&format!("  Switch Cont.:   {}", count));
+            }
+        }
+        if let Some(&count) = asset_counts.get("soundbanks") {
+            if count > 0 {
+                output.progress(&format!("  Soundbanks:     {}", count));
+            }
+        }
+        if let Some(&count) = asset_counts.get("attenuators") {
+            if count > 0 {
+                output.progress(&format!("  Attenuators:    {}", count));
+            }
+        }
+        if let Some(&count) = asset_counts.get("rtpc") {
+            if count > 0 {
+                output.progress(&format!("  RTPC:           {}", count));
+            }
+        }
+        if let Some(&count) = asset_counts.get("pipelines") {
+            if count > 0 {
+                output.progress(&format!("  Pipelines:      {}", count));
+            }
+        }
+    }
 }
 
 fn validate_name(name: &str) -> Result<Validation, CustomUserError> {

@@ -6,7 +6,7 @@
 //! Unlike InteractiveOutput which uses log macros, JsonOutput writes directly
 //! to stdout to ensure the output is valid parseable JSON.
 
-use crate::common::errors::{CliError, error_suggestion, error_type_name};
+use crate::common::errors::{error_suggestion, error_type_name, CliError};
 use crate::presentation::Output;
 use anyhow::{Error, Result};
 use serde::Serialize;
@@ -154,5 +154,9 @@ impl Output for JsonOutput {
         // In JSON mode, output the data in the success envelope format
         let response = Self::build_success_response(data);
         let _ = Self::write_response(&mut io::stdout(), &response);
+    }
+
+    fn mode(&self) -> super::OutputMode {
+        super::OutputMode::Json
     }
 }

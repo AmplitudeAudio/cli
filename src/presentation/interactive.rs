@@ -135,9 +135,7 @@ impl Output for InteractiveOutput {
         let header_line: String = headers
             .iter()
             .enumerate()
-            .map(|(i, h)| {
-                format!("{:<width$}", h.bold(), width = widths[i])
-            })
+            .map(|(i, h)| format!("{:<width$}", h.bold(), width = widths[i]))
             .collect::<Vec<_>>()
             .join("  ");
         info!(" {}", header_line);
@@ -163,5 +161,9 @@ impl Output for InteractiveOutput {
         }
 
         info!("{}", separator);
+    }
+
+    fn mode(&self) -> super::OutputMode {
+        super::OutputMode::Interactive
     }
 }

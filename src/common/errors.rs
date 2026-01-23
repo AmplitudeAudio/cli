@@ -251,7 +251,7 @@ pub fn error_suggestion(code: i32) -> String {
 }
 
 // =============================================================================
-// Convenience constructors for common errors (Task 6)
+// Convenience constructors for common errors
 // =============================================================================
 
 /// Create an error for a project that exists but is not registered.
@@ -319,7 +319,7 @@ pub fn sdk_not_found() -> CliError {
 }
 
 // =============================================================================
-// Macro for quick error construction (Task 6.4)
+// Macro for quick error construction
 // =============================================================================
 
 /// Macro for quick CliError construction.

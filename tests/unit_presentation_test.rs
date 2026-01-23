@@ -82,6 +82,10 @@ impl Output for MockOutput {
     fn table(&self, _title: Option<&str>, _data: serde_json::Value) {
         // Mock implementation - does nothing for testing
     }
+
+    fn mode(&self) -> am::presentation::OutputMode {
+        am::presentation::OutputMode::Interactive
+    }
 }
 
 // Safety: MockOutput is only used in single-threaded tests

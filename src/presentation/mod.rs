@@ -24,7 +24,6 @@ pub enum OutputMode {
     Interactive,
     /// JSON output for machine-parseable responses.
     /// Used by integration tools like Amplitude Studio.
-    #[allow(dead_code)] // Used in Story 1.3 (Global Flag Wiring)
     Json,
     // Future: StudioIpc for JSON-RPC 2.0 communication
 }
@@ -54,10 +53,6 @@ pub trait Output: Send + Sync {
     /// * `code` - Error code (following error code ranges in project-context.md)
     /// * `request_id` - Optional JSON-RPC request ID (ignored by interactive output)
     ///
-    /// Note: This method will be used for structured error handling in future stories.
-    /// Currently, command handlers use anyhow::Result propagation with the ? operator,
-    /// and errors are handled at the top level in main.rs.
-    #[allow(dead_code)]
     fn error(&self, err: &Error, code: i32, request_id: Option<i64>);
 
     /// Display a progress message.
@@ -75,6 +70,13 @@ pub trait Output: Send + Sync {
     /// * `title` - Optional title to display above the table (interactive mode only)
     /// * `data` - The data to display as a JSON array of objects
     fn table(&self, title: Option<&str>, data: serde_json::Value);
+
+    /// Get the current output mode.
+    ///
+    /// Commands can use this to conditionally format output based on the mode,
+    /// avoiding duplicate output in interactive mode where progress messages
+    /// already display the information.
+    fn mode(&self) -> OutputMode;
 }
 
 /// Create an Output implementation based on the requested mode.
@@ -85,8 +87,6 @@ pub trait Output: Send + Sync {
 /// # Returns
 /// A boxed Output implementation
 ///
-/// Note: Non-interactive behavior is handled by the `Input` abstraction.
-/// `Output` is presentation-only.
 pub fn create_output(mode: OutputMode) -> Box<dyn Output> {
     match mode {
         OutputMode::Interactive => Box::new(InteractiveOutput::new()),

@@ -7,9 +7,9 @@
 //! - P1: Error field validation (code, type, message, suggestion)
 //! - P2: Factory function tests, complex data serialization
 
-use am::presentation::{JsonOutput, Output, OutputMode, create_output};
+use am::presentation::{create_output, JsonOutput, Output, OutputMode};
 use anyhow::anyhow;
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use std::io::Cursor;
 use std::sync::Mutex;
 
@@ -55,6 +55,10 @@ mod test_support {
 
         fn table(&self, _title: Option<&str>, _data: serde_json::Value) {
             // Intentionally no-op for test implementation
+        }
+
+        fn mode(&self) -> am::presentation::OutputMode {
+            am::presentation::OutputMode::Json
         }
     }
 }
@@ -269,7 +273,7 @@ fn test_p0_json_output_error_includes_all_fields() {
     // WHEN: Checking the error details
     let error = response.error.expect("Should have error details");
 
-    // THEN: All required fields should be present (AC #2)
+    // THEN: All required fields should be present
     assert_eq!(error.code, -30001, "Should have code field");
     assert!(!error.type_.is_empty(), "Should have type field");
     assert_eq!(
@@ -296,7 +300,7 @@ fn test_p0_json_output_error_with_chained_errors() {
 }
 
 // ============================================================================
-// P0: Progress Suppression Tests (AC #3)
+// P0: Progress Suppression Tests
 // ============================================================================
 
 #[test]
@@ -318,7 +322,7 @@ fn test_p0_json_output_progress_suppresses_output() {
 }
 
 // ============================================================================
-// P0: Prompt Returns Error Tests (AC #4)
+// P0: Prompt Returns Error Tests
 // ============================================================================
 
 #[test]
@@ -340,17 +344,17 @@ fn test_p0_json_output_prompt_error_suggests_cli_args() {
 
 #[test]
 fn test_p1_error_type_mapping_asset_not_found() {
-    // GIVEN: Specific asset error code -30001 (as shown in AC #2)
+    // GIVEN: Specific asset error code -30001
     let err = anyhow!("Sound 'footstep' not found");
 
     // WHEN: Error response is built with asset_not_found code
     let response = JsonOutput::build_error_response(&err, -30001);
 
-    // THEN: Should map to "asset_not_found" type (matching AC #2 example)
+    // THEN: Should map to "asset_not_found" type
     let error = response.error.expect("Should have error details");
     assert_eq!(
         error.type_, "asset_not_found",
-        "Should map -30001 to asset_not_found per AC #2"
+        "Should map -30001 to asset_not_found"
     );
     assert_eq!(error.code, -30001);
 }
@@ -614,12 +618,10 @@ fn test_p2_json_output_error_with_special_characters() {
     let output = String::from_utf8(buffer.into_inner()).expect("Valid UTF-8");
     let parsed: Value = serde_json::from_str(output.trim()).expect("Valid JSON");
     assert_eq!(parsed["ok"], false);
-    assert!(
-        parsed["error"]["message"]
-            .as_str()
-            .unwrap()
-            .contains("quotes")
-    );
+    assert!(parsed["error"]["message"]
+        .as_str()
+        .unwrap()
+        .contains("quotes"));
 }
 
 #[test]

@@ -117,12 +117,13 @@ async fn test_p0_db_get_project_by_name_returns_existing_project() {
 }
 
 #[tokio::test]
-async fn test_p0_db_get_project_by_name_returns_error_for_nonexistent() {
+async fn test_p0_db_get_project_by_name_returns_none_for_nonexistent() {
     let (db, _temp_dir) = setup_test_database().await;
 
     let result = db_get_project_by_name("nonexistent_project", Some(db.clone()));
 
-    assert!(result.is_err(), "Non-existent project should return error");
+    assert!(result.is_ok(), "Query should succeed");
+    assert!(result.unwrap().is_none(), "Non-existent project should return None");
 }
 
 #[tokio::test]
@@ -139,7 +140,8 @@ async fn test_p1_db_get_project_by_name_is_case_sensitive() {
 
     let result = db_get_project_by_name("casesensitiveproject", Some(db.clone()));
 
-    assert!(result.is_err(), "Case-different name should not match");
+    assert!(result.is_ok(), "Query should succeed");
+    assert!(result.unwrap().is_none(), "Case-different name should not match");
 }
 
 // =============================================================================
@@ -166,8 +168,9 @@ async fn test_p0_db_forget_project_removes_project() {
 
     assert!(result.is_ok(), "Forget should succeed");
 
-    let check = db_get_project_by_name("to_be_forgotten", Some(db.clone()));
-    assert!(check.is_err(), "Project should no longer exist");
+    let check = db_get_project_by_name("to_be_forgotten", Some(db.clone()))
+        .expect("Query should succeed");
+    assert!(check.is_none(), "Project should no longer exist");
 }
 
 #[tokio::test]
@@ -369,5 +372,87 @@ async fn test_p1_db_get_all_projects_includes_registered_at() {
     assert!(
         date.len() == 10 && date.contains('-'),
         "Date should be in YYYY-MM-DD format"
+    );
+}
+
+// =============================================================================
+// db_get_project_by_path Tests
+// =============================================================================
+
+use am::database::db_get_project_by_path;
+
+#[tokio::test]
+async fn test_p0_db_get_project_by_path_returns_existing_project() {
+    let (db, _temp_dir) = setup_test_database().await;
+
+    let project = Project {
+        id: None,
+        name: "path_lookup_project".to_string(),
+        path: "/home/user/my_project".to_string(),
+        registered_at: None,
+    };
+    db_create_project(&project, Some(db.clone())).expect("Insert should succeed");
+
+    let result = db_get_project_by_path("/home/user/my_project", Some(db.clone()));
+
+    assert!(result.is_ok(), "Query should succeed");
+    let found = result.unwrap();
+    assert!(found.is_some(), "Project should be found");
+
+    let found_project = found.unwrap();
+    assert_eq!(found_project.name, "path_lookup_project");
+    assert_eq!(found_project.path, "/home/user/my_project");
+    assert!(found_project.id.is_some(), "Project should have an ID");
+}
+
+#[tokio::test]
+async fn test_p0_db_get_project_by_path_returns_none_for_nonexistent() {
+    let (db, _temp_dir) = setup_test_database().await;
+
+    let result = db_get_project_by_path("/nonexistent/path", Some(db.clone()));
+
+    assert!(result.is_ok(), "Query should succeed");
+    let found = result.unwrap();
+    assert!(found.is_none(), "Non-existent path should return None");
+}
+
+#[tokio::test]
+async fn test_p1_db_get_project_by_path_is_case_sensitive() {
+    let (db, _temp_dir) = setup_test_database().await;
+
+    let project = Project {
+        id: None,
+        name: "case_path_project".to_string(),
+        path: "/Home/User/Project".to_string(),
+        registered_at: None,
+    };
+    db_create_project(&project, Some(db.clone())).expect("Insert should succeed");
+
+    let result = db_get_project_by_path("/home/user/project", Some(db.clone()));
+
+    assert!(result.is_ok(), "Query should succeed");
+    let found = result.unwrap();
+    assert!(found.is_none(), "Case-different path should not match");
+}
+
+#[tokio::test]
+async fn test_p1_db_get_project_by_path_includes_registered_at() {
+    let (db, _temp_dir) = setup_test_database().await;
+
+    let project = Project {
+        id: None,
+        name: "dated_path_project".to_string(),
+        path: "/path/with/date".to_string(),
+        registered_at: None,
+    };
+    db_create_project(&project, Some(db.clone())).expect("Insert should succeed");
+
+    let result = db_get_project_by_path("/path/with/date", Some(db.clone()));
+
+    assert!(result.is_ok(), "Query should succeed");
+    let found = result.unwrap().expect("Project should exist");
+    assert!(
+        found.registered_at.is_some(),
+        "Project should have registered_at date"
     );
 }

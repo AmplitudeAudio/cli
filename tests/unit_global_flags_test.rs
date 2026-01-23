@@ -40,7 +40,7 @@ enum TestProjectCommands {
 }
 
 // =============================================================================
-// P0 Tests (Critical) - Task 5.1, 5.4
+// P0 Tests (Critical)
 // =============================================================================
 
 #[test]
@@ -77,7 +77,7 @@ fn test_json_flag_is_global_applies_to_subcommands() {
 }
 
 // =============================================================================
-// P1 Tests (Important) - Task 5.2, 5.3
+// P1 Tests (Important)
 // =============================================================================
 
 #[test]
@@ -108,7 +108,7 @@ fn test_verbose_flag_still_works_with_json() {
 }
 
 // =============================================================================
-// P2 Tests (Nice to have) - Task 5.5
+// P2 Tests (Nice to have)
 // =============================================================================
 
 #[test]
@@ -183,7 +183,7 @@ fn test_no_json_flag_selects_interactive_output_mode() {
 
 #[cfg(test)]
 mod non_interactive_tests {
-    use am::input::{Input, InputMode, create_input};
+    use am::input::{create_input, Input, InputMode};
 
     #[test]
     fn test_create_input_interactive_by_default() {
@@ -237,9 +237,7 @@ mod non_interactive_tests {
 }
 
 // =============================================================================
-// Tests using TestApp mirror of actual App struct (Task 5.5)
-// Note: The actual App struct is in the binary crate, not exported from lib.
-// These tests verify clap parsing behavior using a TestApp that mirrors App's structure.
+// Tests using TestApp mirror of actual App struct
 // =============================================================================
 
 // Tests for command groups are covered above in test_flags_work_with_nested_subcommands
@@ -251,7 +249,7 @@ mod non_interactive_tests {
 
 #[cfg(test)]
 mod output_factory_tests {
-    use am::presentation::{Output, OutputMode, create_output};
+    use am::presentation::{create_output, Output, OutputMode};
 
     #[test]
     fn test_create_output_interactive_mode() {
