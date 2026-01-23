@@ -183,7 +183,7 @@ fn test_p2_template_source_deserializes_from_lowercase() {
 }
 
 // =============================================================================
-// Template List Handler Tests - JSON Output (AC #2)
+// Template List Handler Tests - JSON Output
 // =============================================================================
 
 #[tokio::test]
@@ -253,7 +253,7 @@ async fn test_p0_template_list_handler_json_source_is_snake_case() {
 }
 
 // =============================================================================
-// Template List Handler Tests - Interactive Output (AC #1)
+// Template List Handler Tests - Interactive Output
 // =============================================================================
 
 #[tokio::test]
@@ -314,7 +314,7 @@ async fn test_p1_template_list_handler_interactive_shows_tip_when_no_custom() {
 }
 
 // =============================================================================
-// Template List Handler Tests - No Custom Templates (AC #3)
+// Template List Handler Tests - No Custom Templates
 // =============================================================================
 
 #[tokio::test]
@@ -341,7 +341,7 @@ async fn test_p0_template_list_handler_no_custom_templates_no_error() {
 }
 
 // =============================================================================
-// Template List Handler Tests - Embedded First Ordering (AC #1)
+// Template List Handler Tests - Embedded First Ordering
 // =============================================================================
 
 #[tokio::test]
@@ -705,4 +705,643 @@ async fn test_p1_template_list_handler_all_fields_present_in_output() {
             "Template should have 'description' field"
         );
     }
+}
+
+// =============================================================================
+// Template Info Handler Tests - Embedded Template
+// =============================================================================
+
+#[tokio::test]
+async fn test_p0_template_info_embedded_template_json_output() {
+    // GIVEN: A fresh database and JSON output mode
+    let (db_arc, _temp_dir) = setup_test_database().await;
+    let output = CaptureOutput::new(OutputMode::Json);
+    let input = NonInteractiveInput::new();
+    let command = TemplateCommands::Info {
+        name: "default".to_string(),
+    };
+
+    // WHEN: We call the handler
+    let result = handler(&command, Some(db_arc), &input, &output).await;
+
+    // THEN: Handler should succeed
+    assert!(
+        result.is_ok(),
+        "Handler should succeed for embedded template"
+    );
+
+    // AND: Output should contain template details
+    let success_data = output.last_success().expect("Should have success output");
+
+    // AND: Should have correct fields
+    assert_eq!(success_data["name"], "default");
+    assert_eq!(success_data["engine"], "generic");
+    assert_eq!(success_data["source"], "embedded");
+    assert_eq!(success_data["path"], "bundled");
+    assert!(
+        success_data["description"]
+            .as_str()
+            .unwrap()
+            .contains("Default")
+    );
+
+    // AND: Should have files array
+    assert!(success_data["files"].is_array(), "Should have files array");
+    let files = success_data["files"].as_array().unwrap();
+    assert!(!files.is_empty(), "Files array should not be empty");
+}
+
+#[tokio::test]
+async fn test_p0_template_info_embedded_files_list() {
+    // GIVEN: JSON output mode for default template
+    let (db_arc, _temp_dir) = setup_test_database().await;
+    let output = CaptureOutput::new(OutputMode::Json);
+    let input = NonInteractiveInput::new();
+    let command = TemplateCommands::Info {
+        name: "default".to_string(),
+    };
+
+    // WHEN: We call the handler
+    let result = handler(&command, Some(db_arc), &input, &output).await;
+    assert!(result.is_ok());
+
+    // THEN: Files should include expected default template files
+    let success_data = output.last_success().unwrap();
+    let files: Vec<&str> = success_data["files"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|v| v.as_str().unwrap())
+        .collect();
+
+    assert!(
+        files.contains(&"default.buses.json"),
+        "Should contain default.buses.json"
+    );
+    assert!(
+        files.contains(&"default.config.json"),
+        "Should contain default.config.json"
+    );
+    assert!(
+        files.contains(&"default.pipeline.json"),
+        "Should contain default.pipeline.json"
+    );
+    assert!(
+        files.contains(&"default.source.json"),
+        "Should contain default.source.json"
+    );
+}
+
+#[tokio::test]
+async fn test_p1_template_info_json_includes_config_options() {
+    // GIVEN: JSON output mode for default template
+    let (db_arc, _temp_dir) = setup_test_database().await;
+    let output = CaptureOutput::new(OutputMode::Json);
+    let input = NonInteractiveInput::new();
+    let command = TemplateCommands::Info {
+        name: "default".to_string(),
+    };
+
+    // WHEN: We call the handler
+    let result = handler(&command, Some(db_arc), &input, &output).await;
+    assert!(result.is_ok());
+
+    // THEN: JSON should include config_options field
+    let success_data = output.last_success().unwrap();
+    assert!(
+        success_data.get("config_options").is_some(),
+        "Should include config_options field"
+    );
+
+    // AND: config_options should be an array
+    assert!(
+        success_data["config_options"].is_array(),
+        "config_options should be an array"
+    );
+}
+
+// =============================================================================
+// Template Info Handler Tests - Not Found Error
+// =============================================================================
+
+#[tokio::test]
+async fn test_p0_template_info_not_found_returns_error() {
+    // GIVEN: A fresh database and a non-existent template name
+    let (db_arc, _temp_dir) = setup_test_database().await;
+    let output = CaptureOutput::new(OutputMode::Json);
+    let input = NonInteractiveInput::new();
+    let command = TemplateCommands::Info {
+        name: "nonexistent".to_string(),
+    };
+
+    // WHEN: We call the handler
+    let result = handler(&command, Some(db_arc), &input, &output).await;
+
+    // THEN: Handler should return an error
+    assert!(
+        result.is_err(),
+        "Handler should fail for non-existent template"
+    );
+
+    // AND: Error should be a CliError with the correct code
+    let err = result.unwrap_err();
+    let cli_err = err
+        .downcast_ref::<am::common::errors::CliError>()
+        .expect("Error should be a CliError");
+
+    assert_eq!(
+        cli_err.code, -29005,
+        "Error code should be -29005 (template_not_found)"
+    );
+    assert!(
+        cli_err.what.contains("nonexistent"),
+        "Error 'what' should mention template name"
+    );
+    assert!(
+        cli_err.suggestion.contains("am template list"),
+        "Suggestion should mention 'am template list'"
+    );
+}
+
+#[tokio::test]
+async fn test_p1_template_info_not_found_error_structure() {
+    // GIVEN: A non-existent template
+    let (db_arc, _temp_dir) = setup_test_database().await;
+    let output = CaptureOutput::new(OutputMode::Json);
+    let input = NonInteractiveInput::new();
+    let command = TemplateCommands::Info {
+        name: "does-not-exist".to_string(),
+    };
+
+    // WHEN: We call the handler
+    let result = handler(&command, Some(db_arc), &input, &output).await;
+    assert!(result.is_err());
+
+    // THEN: Error should have What/Why/Fix structure
+    let err = result.unwrap_err();
+    let cli_err = err.downcast_ref::<am::common::errors::CliError>().unwrap();
+
+    // What: Template 'name' not found
+    assert!(
+        cli_err.what.contains("does-not-exist"),
+        "What should contain template name"
+    );
+
+    // Why: No embedded or registered template matches
+    assert!(!cli_err.why.is_empty(), "Why should explain the reason");
+
+    // Fix: Suggestion to use am template list
+    assert!(
+        cli_err.suggestion.contains("template list"),
+        "Fix should suggest using template list"
+    );
+}
+
+// =============================================================================
+// Template Info Handler Tests - Interactive Output
+// =============================================================================
+
+#[tokio::test]
+async fn test_p1_template_info_interactive_output() {
+    // GIVEN: Interactive output mode for default template
+    let (db_arc, _temp_dir) = setup_test_database().await;
+    let output = CaptureOutput::new(OutputMode::Interactive);
+    let input = NonInteractiveInput::new();
+    let command = TemplateCommands::Info {
+        name: "default".to_string(),
+    };
+
+    // WHEN: We call the handler
+    let result = handler(&command, Some(db_arc), &input, &output).await;
+
+    // THEN: Handler should succeed
+    assert!(result.is_ok(), "Handler should succeed");
+
+    // AND: Progress messages should contain template information
+    let messages = output.progress_messages();
+    assert!(
+        !messages.is_empty(),
+        "Should have progress messages for interactive display"
+    );
+
+    // Check that key information is displayed
+    let all_messages = messages.join("\n");
+    assert!(
+        all_messages.contains("default") || output.last_success().is_some(),
+        "Should display template name"
+    );
+}
+
+// =============================================================================
+// Template Info Handler Tests - Database Not Available
+// =============================================================================
+
+#[tokio::test]
+async fn test_p0_template_info_embedded_works_without_database() {
+    // GIVEN: No database (None) but asking for embedded template
+    let output = CaptureOutput::new(OutputMode::Json);
+    let input = NonInteractiveInput::new();
+    let command = TemplateCommands::Info {
+        name: "default".to_string(),
+    };
+
+    // WHEN: We call the handler without database
+    let result = handler(&command, None, &input, &output).await;
+
+    // THEN: Handler should still succeed for embedded templates
+    // (embedded templates don't require database)
+    assert!(
+        result.is_ok(),
+        "Embedded template info should work without database"
+    );
+
+    // AND: Should return the embedded template info
+    let success_data = output.last_success().unwrap();
+    assert_eq!(success_data["name"], "default");
+    assert_eq!(success_data["source"], "embedded");
+}
+
+// =============================================================================
+// Custom Template Info Handler Tests - File/Directory Enumeration
+// =============================================================================
+
+#[tokio::test]
+async fn test_p0_template_info_custom_includes_directories() {
+    // GIVEN: A custom template directory with files and subdirectories
+    let temp_dir = tempdir().expect("Failed to create temp dir");
+    let template_path = temp_dir.path().join("my-template");
+    std::fs::create_dir_all(&template_path).unwrap();
+
+    // Create files at root level
+    std::fs::write(template_path.join("config.json"), "{}").unwrap();
+    std::fs::write(template_path.join("buses.json"), "{}").unwrap();
+
+    // Create a subdirectory with files
+    let sounds_dir = template_path.join("sounds");
+    std::fs::create_dir_all(&sounds_dir).unwrap();
+    std::fs::write(sounds_dir.join(".gitkeep"), "").unwrap();
+
+    // Set up database with the custom template
+    let (db_arc, _db_temp_dir) = setup_test_database().await;
+    {
+        let conn = db_arc.get_connection();
+        let conn = conn.lock().unwrap();
+        conn.execute(
+            "INSERT INTO templates (name, path, engine, description) VALUES (?1, ?2, ?3, ?4)",
+            rusqlite::params![
+                "my-template",
+                template_path.to_str().unwrap(),
+                "generic",
+                "Test template"
+            ],
+        )
+        .unwrap();
+    }
+
+    let output = CaptureOutput::new(OutputMode::Json);
+    let input = NonInteractiveInput::new();
+    let command = TemplateCommands::Info {
+        name: "my-template".to_string(),
+    };
+
+    // WHEN: We call the handler
+    let result = handler(&command, Some(db_arc), &input, &output).await;
+
+    // THEN: Handler should succeed
+    assert!(result.is_ok(), "Handler should succeed for custom template");
+
+    // AND: Output should include both files and directories
+    let success_data = output.last_success().expect("Should have success output");
+    let files: Vec<&str> = success_data["files"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|v| v.as_str().unwrap())
+        .collect();
+
+    // Should have root files
+    assert!(files.contains(&"config.json"), "Should contain config.json");
+    assert!(files.contains(&"buses.json"), "Should contain buses.json");
+
+    // Should have directory entry (with trailing slash per AC#1)
+    assert!(
+        files.contains(&"sounds/"),
+        "Should contain sounds/ directory"
+    );
+
+    // Should have nested file
+    assert!(
+        files.contains(&"sounds/.gitkeep"),
+        "Should contain sounds/.gitkeep"
+    );
+}
+
+#[tokio::test]
+async fn test_p0_template_info_custom_two_levels_deep() {
+    // GIVEN: A custom template with 3 levels of nesting (root, level1, level2)
+    let temp_dir = tempdir().expect("Failed to create temp dir");
+    let template_path = temp_dir.path().join("deep-template");
+    std::fs::create_dir_all(&template_path).unwrap();
+
+    // Root level file
+    std::fs::write(template_path.join("root.json"), "{}").unwrap();
+
+    // Level 1 directory with file
+    let level1 = template_path.join("level1");
+    std::fs::create_dir_all(&level1).unwrap();
+    std::fs::write(level1.join("level1.json"), "{}").unwrap();
+
+    // Level 2 directory with file
+    let level2 = level1.join("level2");
+    std::fs::create_dir_all(&level2).unwrap();
+    std::fs::write(level2.join("level2.json"), "{}").unwrap();
+
+    // Level 3 directory (should NOT be traversed - beyond 2 levels)
+    let level3 = level2.join("level3");
+    std::fs::create_dir_all(&level3).unwrap();
+    std::fs::write(level3.join("level3.json"), "{}").unwrap();
+
+    // Set up database with the custom template
+    let (db_arc, _db_temp_dir) = setup_test_database().await;
+    {
+        let conn = db_arc.get_connection();
+        let conn = conn.lock().unwrap();
+        conn.execute(
+            "INSERT INTO templates (name, path, engine, description) VALUES (?1, ?2, ?3, ?4)",
+            rusqlite::params![
+                "deep-template",
+                template_path.to_str().unwrap(),
+                "generic",
+                "Deep template"
+            ],
+        )
+        .unwrap();
+    }
+
+    let output = CaptureOutput::new(OutputMode::Json);
+    let input = NonInteractiveInput::new();
+    let command = TemplateCommands::Info {
+        name: "deep-template".to_string(),
+    };
+
+    // WHEN: We call the handler
+    let result = handler(&command, Some(db_arc), &input, &output).await;
+
+    // THEN: Handler should succeed
+    assert!(result.is_ok(), "Handler should succeed");
+
+    let success_data = output.last_success().expect("Should have success output");
+    let files: Vec<&str> = success_data["files"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|v| v.as_str().unwrap())
+        .collect();
+
+    // Root level file should be present
+    assert!(files.contains(&"root.json"), "Should contain root.json");
+
+    // Level 1 directory and file should be present
+    assert!(files.contains(&"level1/"), "Should contain level1/");
+    assert!(
+        files.contains(&"level1/level1.json"),
+        "Should contain level1/level1.json"
+    );
+
+    // Level 2 directory and file should be present (2 levels deep from root)
+    assert!(
+        files.contains(&"level1/level2/"),
+        "Should contain level1/level2/"
+    );
+    assert!(
+        files.contains(&"level1/level2/level2.json"),
+        "Should contain level1/level2/level2.json"
+    );
+
+    // Level 3 should NOT be traversed (beyond 2 levels)
+    assert!(
+        !files.contains(&"level1/level2/level3/"),
+        "Should NOT contain level3/ (beyond 2 levels)"
+    );
+    assert!(
+        !files.contains(&"level1/level2/level3/level3.json"),
+        "Should NOT contain level3.json (beyond 2 levels)"
+    );
+}
+
+#[tokio::test]
+async fn test_p1_template_info_custom_files_sorted() {
+    // GIVEN: A custom template with unsorted files
+    let temp_dir = tempdir().expect("Failed to create temp dir");
+    let template_path = temp_dir.path().join("unsorted-template");
+    std::fs::create_dir_all(&template_path).unwrap();
+
+    // Create files in non-alphabetical order
+    std::fs::write(template_path.join("zebra.json"), "{}").unwrap();
+    std::fs::write(template_path.join("alpha.json"), "{}").unwrap();
+    std::fs::write(template_path.join("middle.json"), "{}").unwrap();
+
+    // Set up database with the custom template
+    let (db_arc, _db_temp_dir) = setup_test_database().await;
+    {
+        let conn = db_arc.get_connection();
+        let conn = conn.lock().unwrap();
+        conn.execute(
+            "INSERT INTO templates (name, path, engine, description) VALUES (?1, ?2, ?3, ?4)",
+            rusqlite::params![
+                "unsorted-template",
+                template_path.to_str().unwrap(),
+                "generic",
+                "Unsorted template"
+            ],
+        )
+        .unwrap();
+    }
+
+    let output = CaptureOutput::new(OutputMode::Json);
+    let input = NonInteractiveInput::new();
+    let command = TemplateCommands::Info {
+        name: "unsorted-template".to_string(),
+    };
+
+    // WHEN: We call the handler
+    let result = handler(&command, Some(db_arc), &input, &output).await;
+
+    // THEN: Handler should succeed
+    assert!(result.is_ok(), "Handler should succeed");
+
+    let success_data = output.last_success().expect("Should have success output");
+    let files: Vec<&str> = success_data["files"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|v| v.as_str().unwrap())
+        .collect();
+
+    // Files should be sorted alphabetically
+    let mut sorted_files = files.clone();
+    sorted_files.sort();
+    assert_eq!(
+        files, sorted_files,
+        "Custom template files should be sorted"
+    );
+}
+
+// =============================================================================
+// Real CLI JSON Stdout Envelope Tests
+// =============================================================================
+
+#[test]
+fn test_p0_template_info_cli_json_stdout_envelope_success() {
+    use std::process::Command;
+
+    // GIVEN: The actual CLI binary
+    // WHEN: Running `am --json template info default`
+    let output = Command::new(env!("CARGO_BIN_EXE_am"))
+        .args(["--json", "template", "info", "default"])
+        .output()
+        .expect("Failed to execute command");
+
+    // THEN: Exit code should be 0 (success)
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "Expected exit code 0 for template info, got {:?}. stderr: {}",
+        output.status.code(),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    // AND: stdout should contain valid JSON with envelope format
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let json: serde_json::Value = serde_json::from_str(&stdout)
+        .expect(&format!("Expected valid JSON in stdout, got: {}", stdout));
+
+    // AND: JSON should have ok=true envelope
+    assert_eq!(
+        json["ok"], true,
+        "Expected ok=true in JSON envelope. Got: {}",
+        stdout
+    );
+
+    // AND: JSON should have value field (not error)
+    assert!(
+        json.get("value").is_some(),
+        "Expected 'value' field in success envelope. Got: {}",
+        stdout
+    );
+    assert!(
+        json.get("error").is_none() || json["error"].is_null(),
+        "Expected no 'error' field in success envelope. Got: {}",
+        stdout
+    );
+
+    // AND: value should contain template info fields
+    let value = &json["value"];
+    assert_eq!(value["name"], "default", "Expected name=default");
+    assert_eq!(value["engine"], "generic", "Expected engine=generic");
+    assert_eq!(value["source"], "embedded", "Expected source=embedded");
+    assert!(value["files"].is_array(), "Expected files to be an array");
+    assert!(
+        value["config_options"].is_array(),
+        "Expected config_options to be an array"
+    );
+}
+
+#[test]
+fn test_p0_template_info_cli_json_stdout_envelope_error() {
+    use std::process::Command;
+
+    // GIVEN: The actual CLI binary
+    // WHEN: Running `am --json template info nonexistent`
+    let output = Command::new(env!("CARGO_BIN_EXE_am"))
+        .args(["--json", "template", "info", "nonexistent"])
+        .output()
+        .expect("Failed to execute command");
+
+    // THEN: Exit code should be 1 (user error)
+    assert_eq!(
+        output.status.code(),
+        Some(1),
+        "Expected exit code 1 for template not found, got {:?}",
+        output.status.code()
+    );
+
+    // AND: stdout should contain valid JSON with error envelope
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let json: serde_json::Value = serde_json::from_str(&stdout)
+        .expect(&format!("Expected valid JSON in stdout, got: {}", stdout));
+
+    // AND: JSON should have ok=false envelope
+    assert_eq!(
+        json["ok"], false,
+        "Expected ok=false in error envelope. Got: {}",
+        stdout
+    );
+
+    // AND: JSON should have error field (not value)
+    assert!(
+        json.get("error").is_some() && !json["error"].is_null(),
+        "Expected 'error' field in error envelope. Got: {}",
+        stdout
+    );
+
+    // AND: error should contain structured fields
+    let error = &json["error"];
+    assert_eq!(
+        error["code"], -29005,
+        "Expected error code -29005 for template_not_found"
+    );
+    assert_eq!(
+        error["type"], "template_not_found",
+        "Expected type=template_not_found"
+    );
+    assert!(
+        error["message"].as_str().unwrap().contains("nonexistent"),
+        "Expected message to mention template name"
+    );
+    assert!(
+        error["suggestion"]
+            .as_str()
+            .unwrap()
+            .contains("template list"),
+        "Expected suggestion to mention 'template list'"
+    );
+}
+
+#[test]
+fn test_p1_template_list_cli_json_stdout_envelope() {
+    use std::process::Command;
+
+    // GIVEN: The actual CLI binary
+    // WHEN: Running `am --json template list`
+    let output = Command::new(env!("CARGO_BIN_EXE_am"))
+        .args(["--json", "template", "list"])
+        .output()
+        .expect("Failed to execute command");
+
+    // THEN: Exit code should be 0 (success)
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "Expected exit code 0 for template list"
+    );
+
+    // AND: stdout should contain valid JSON with envelope format
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let json: serde_json::Value = serde_json::from_str(&stdout)
+        .expect(&format!("Expected valid JSON in stdout, got: {}", stdout));
+
+    // AND: JSON should have ok=true envelope
+    assert_eq!(json["ok"], true, "Expected ok=true in JSON envelope");
+
+    // AND: value should be an array of templates
+    let value = &json["value"];
+    assert!(value.is_array(), "Expected value to be an array");
+    let templates = value.as_array().unwrap();
+    assert!(!templates.is_empty(), "Expected at least one template");
+
+    // AND: First template should be the embedded "default" template
+    let first = &templates[0];
+    assert_eq!(first["name"], "default");
+    assert_eq!(first["source"], "embedded");
 }

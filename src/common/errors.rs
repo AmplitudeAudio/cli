@@ -58,6 +58,9 @@ pub mod codes {
     /// Failed to copy template files during project initialization
     pub const ERR_TEMPLATE_COPY_FAILED: i32 = -29004;
 
+    /// Template not found (neither embedded nor registered)
+    pub const ERR_TEMPLATE_NOT_FOUND: i32 = -29005;
+
     // =========================================================================
     // SDK errors (-28xxx)
     // =========================================================================
@@ -181,6 +184,7 @@ pub fn error_type_name(code: i32) -> String {
         codes::ERR_PROJECT_NOT_REGISTERED => "project_not_registered".to_string(),
         codes::ERR_PROJECT_ALREADY_EXISTS => "project_already_exists".to_string(),
         codes::ERR_TEMPLATE_COPY_FAILED => "template_copy_failed".to_string(),
+        codes::ERR_TEMPLATE_NOT_FOUND => "template_not_found".to_string(),
         -29999..=-29000 => "project_error".to_string(),
 
         // SDK errors (-28xxx)
@@ -210,6 +214,9 @@ pub fn error_suggestion(code: i32) -> String {
         }
         codes::ERR_TEMPLATE_COPY_FAILED => {
             "Check file permissions and ensure the template path is correct".to_string()
+        }
+        codes::ERR_TEMPLATE_NOT_FOUND => {
+            "Use 'am template list' to see available templates".to_string()
         }
 
         // Specific SDK errors

@@ -314,6 +314,7 @@ fn test_p0_embedded_template_to_template_conversion() {
         name: "test-template",
         engine: "test-engine",
         description: "Test description",
+        config_options: &[],
     };
 
     // WHEN: We convert to Template struct
@@ -356,6 +357,7 @@ fn test_p2_embedded_template_is_clone_and_eq() {
         name: "clone-test",
         engine: "generic",
         description: "Clone test",
+        config_options: &[],
     };
 
     // WHEN: We clone it
@@ -372,6 +374,7 @@ fn test_p2_embedded_template_debug() {
         name: "debug-test",
         engine: "generic",
         description: "Debug test template",
+        config_options: &[],
     };
 
     // WHEN: We format with debug
@@ -380,4 +383,134 @@ fn test_p2_embedded_template_debug() {
     // THEN: It should contain the struct name and field values
     assert!(debug.contains("EmbeddedTemplate"));
     assert!(debug.contains("debug-test"));
+}
+
+// =============================================================================
+// Template Info Command - Embedded Template File Enumeration Tests
+// =============================================================================
+
+#[test]
+fn test_p0_get_embedded_template_files_default() {
+    use am::commands::template::get_embedded_template_files;
+
+    // GIVEN: The "default" embedded template name
+    let template_name = "default";
+
+    // WHEN: We enumerate its files
+    let files = get_embedded_template_files(template_name);
+
+    // THEN: Should return a non-empty list
+    assert!(!files.is_empty(), "Default template should have files");
+
+    // AND: All files should start with "default."
+    for file in &files {
+        assert!(
+            file.starts_with("default."),
+            "File '{}' should start with 'default.'",
+            file
+        );
+    }
+}
+
+#[test]
+fn test_p1_get_embedded_template_files_returns_all_default_files() {
+    use am::commands::template::get_embedded_template_files;
+
+    // GIVEN: The "default" embedded template
+    let files = get_embedded_template_files("default");
+
+    // THEN: Should contain the expected default template files
+    assert!(
+        files.contains(&"default.buses.json".to_string()),
+        "Should contain default.buses.json"
+    );
+    assert!(
+        files.contains(&"default.config.json".to_string()),
+        "Should contain default.config.json"
+    );
+    assert!(
+        files.contains(&"default.pipeline.json".to_string()),
+        "Should contain default.pipeline.json"
+    );
+    assert!(
+        files.contains(&"default.source.json".to_string()),
+        "Should contain default.source.json"
+    );
+}
+
+#[test]
+fn test_p2_get_embedded_template_files_nonexistent_returns_empty() {
+    use am::commands::template::get_embedded_template_files;
+
+    // GIVEN: A non-existent template name
+    let template_name = "nonexistent-template";
+
+    // WHEN: We enumerate its files
+    let files = get_embedded_template_files(template_name);
+
+    // THEN: Should return an empty list
+    assert!(
+        files.is_empty(),
+        "Non-existent template should have no files"
+    );
+}
+
+// =============================================================================
+// Template Config Options Tests
+// =============================================================================
+
+#[test]
+fn test_p1_embedded_templates_have_config_options_field() {
+    use am::commands::template::EMBEDDED_TEMPLATES;
+
+    // GIVEN: All embedded templates
+    for template in EMBEDDED_TEMPLATES {
+        // THEN: Each should have a config_options field (may be empty)
+        // Just accessing the field verifies it exists
+        let _ = template.config_options;
+    }
+}
+
+#[test]
+fn test_p2_embedded_template_with_config_options() {
+    use am::commands::template::{EmbeddedTemplate, TemplateConfigOption};
+
+    // GIVEN: A template with configuration options
+    let config_opts = &[TemplateConfigOption {
+        name: "sample_rate",
+        description: "Audio sample rate in Hz",
+        default_value: "44100",
+    }];
+
+    let template = EmbeddedTemplate {
+        name: "test-with-config",
+        engine: "generic",
+        description: "Template with config options",
+        config_options: config_opts,
+    };
+
+    // THEN: Config options should be accessible
+    assert_eq!(template.config_options.len(), 1);
+    assert_eq!(template.config_options[0].name, "sample_rate");
+    assert_eq!(template.config_options[0].default_value, "44100");
+}
+
+// =============================================================================
+// Custom Template File Enumeration Tests
+// =============================================================================
+
+#[test]
+fn test_p0_get_embedded_template_files_is_sorted() {
+    use am::commands::template::get_embedded_template_files;
+
+    // GIVEN: The "default" embedded template
+    let files = get_embedded_template_files("default");
+
+    // THEN: Files should be sorted alphabetically
+    let mut sorted_files = files.clone();
+    sorted_files.sort();
+    assert_eq!(
+        files, sorted_files,
+        "Embedded template files should be sorted for deterministic output"
+    );
 }

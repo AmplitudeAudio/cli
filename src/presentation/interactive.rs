@@ -55,8 +55,8 @@ impl Output for InteractiveOutput {
             // Display "Why" with the reason
             error!("{}: {}", "Why".yellow(), cli_err.why);
 
-            // Display "Fix" with the suggestion in cyan
-            error!("{}: {}", "Fix".cyan(), cli_err.suggestion);
+            // Display "Suggestion" with the fix in cyan
+            error!("{}: {}", "Suggestion".cyan(), cli_err.suggestion);
         } else {
             // Fallback for non-CliError: display error with chain
             error!("{}", err);
