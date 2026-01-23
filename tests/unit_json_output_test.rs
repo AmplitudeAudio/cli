@@ -7,9 +7,9 @@
 //! - P1: Error field validation (code, type, message, suggestion)
 //! - P2: Factory function tests, complex data serialization
 
-use am::presentation::{create_output, JsonOutput, Output, OutputMode};
+use am::presentation::{JsonOutput, Output, OutputMode, create_output};
 use anyhow::anyhow;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::io::Cursor;
 use std::sync::Mutex;
 
@@ -618,10 +618,12 @@ fn test_p2_json_output_error_with_special_characters() {
     let output = String::from_utf8(buffer.into_inner()).expect("Valid UTF-8");
     let parsed: Value = serde_json::from_str(output.trim()).expect("Valid JSON");
     assert_eq!(parsed["ok"], false);
-    assert!(parsed["error"]["message"]
-        .as_str()
-        .unwrap()
-        .contains("quotes"));
+    assert!(
+        parsed["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("quotes")
+    );
 }
 
 #[test]

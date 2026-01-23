@@ -90,22 +90,22 @@ impl MigrationManager {
                         path TEXT NOT NULL,
                         created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
                         updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                        metadata TEXT -- JSON data for additional project info
+                        metadata TEXT -- JSON data for additional template info
                     );
 
-                    CREATE INDEX IF NOT EXISTS idx_projects_name ON projects(name);
-                    CREATE INDEX IF NOT EXISTS idx_projects_created_at ON projects(created_at);
+                    CREATE INDEX IF NOT EXISTS idx_templates_name ON templates(name);
+                    CREATE INDEX IF NOT EXISTS idx_templates_created_at ON templates(created_at);
 
                     -- Trigger to update updated_at on row update
-                    CREATE TRIGGER IF NOT EXISTS update_projects_updated_at
-                    AFTER UPDATE ON projects
+                    CREATE TRIGGER IF NOT EXISTS update_templates_updated_at
+                    AFTER UPDATE ON templates
                     BEGIN
-                        UPDATE projects SET updated_at = CURRENT_TIMESTAMP
+                        UPDATE templates SET updated_at = CURRENT_TIMESTAMP
                         WHERE id = NEW.id;
                     END;
                 "#
                 .to_string(),
-                down_sql: Some("DROP TABLE IF EXISTS projects;".to_string()),
+                down_sql: Some("DROP TABLE IF EXISTS templates;".to_string()),
             },
         );
 
@@ -143,6 +143,20 @@ impl MigrationManager {
                         ('telemetry_enabled', 'false', 'boolean', 'Enable anonymous usage telemetry');
                 "#.to_string(),
                 down_sql: Some("DROP TABLE IF EXISTS configuration;".to_string()),
+            },
+        );
+
+        migrations.insert(
+            5,
+            Migration {
+                version: 5,
+                description: "Add engine and description columns to templates table".to_string(),
+                up_sql: r#"
+                    ALTER TABLE templates ADD COLUMN engine TEXT DEFAULT 'generic';
+                    ALTER TABLE templates ADD COLUMN description TEXT;
+                "#
+                .to_string(),
+                down_sql: None, // SQLite doesn't support DROP COLUMN in older versions
             },
         );
 

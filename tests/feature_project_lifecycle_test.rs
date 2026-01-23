@@ -165,8 +165,8 @@ async fn test_p0_project_unregistration_removes_from_database() {
 
     db_forget_project(found.id.unwrap(), Some(db.clone())).expect("Unregister should succeed");
 
-    let check = db_get_project_by_name("to_unregister", Some(db.clone()))
-        .expect("Query should succeed");
+    let check =
+        db_get_project_by_name("to_unregister", Some(db.clone())).expect("Query should succeed");
     assert!(check.is_none(), "Project should not exist after unregister");
 }
 
@@ -245,8 +245,8 @@ async fn test_p0_full_project_lifecycle() {
     // Step 3 - Unregister project
     db_forget_project(found.id.unwrap(), Some(db.clone())).expect("Unregister should succeed");
 
-    let check = db_get_project_by_name(project_name, Some(db.clone()))
-        .expect("Query should succeed");
+    let check =
+        db_get_project_by_name(project_name, Some(db.clone())).expect("Query should succeed");
     assert!(check.is_none(), "Project should not exist after unregister");
 
     assert!(project_path.exists(), "Project files should remain");
@@ -292,23 +292,13 @@ async fn test_p0_project_list_shows_registered_projects() {
     let project1 = Project {
         id: None,
         name: "alpha_project".to_string(),
-        path: temp_dir
-            .path()
-            .join("alpha")
-            .to_str()
-            .unwrap()
-            .to_string(),
+        path: temp_dir.path().join("alpha").to_str().unwrap().to_string(),
         registered_at: None,
     };
     let project2 = Project {
         id: None,
         name: "beta_project".to_string(),
-        path: temp_dir
-            .path()
-            .join("beta")
-            .to_str()
-            .unwrap()
-            .to_string(),
+        path: temp_dir.path().join("beta").to_str().unwrap().to_string(),
         registered_at: None,
     };
     db_create_project(&project1, Some(db.clone())).expect("First registration should succeed");
@@ -332,7 +322,10 @@ async fn test_p1_project_list_empty_database_returns_empty_vec() {
 
     let projects = db_get_all_projects(Some(db.clone())).expect("Query should succeed");
 
-    assert!(projects.is_empty(), "Empty database should return empty list");
+    assert!(
+        projects.is_empty(),
+        "Empty database should return empty list"
+    );
 }
 
 #[tokio::test]
@@ -360,8 +353,8 @@ async fn test_p1_project_list_includes_path_and_date() {
 // Project Info Command Tests
 // =============================================================================
 
+use am::common::utils::{count_assets_by_type, read_amproject_file};
 use am::database::db_get_project_by_path;
-use am::common::utils::{read_amproject_file, count_assets_by_type};
 
 #[tokio::test]
 async fn test_p0_project_info_registered_project_has_date() {
@@ -394,7 +387,10 @@ async fn test_p0_project_info_registered_project_has_date() {
         .expect("Project should exist");
 
     assert_eq!(found.name, "info_test");
-    assert!(found.registered_at.is_some(), "Should have registered_at date");
+    assert!(
+        found.registered_at.is_some(),
+        "Should have registered_at date"
+    );
 }
 
 #[tokio::test]
@@ -422,7 +418,10 @@ async fn test_p0_project_info_unregistered_project_not_found_by_path() {
     let found = db_get_project_by_path(project_path.to_str().unwrap(), Some(db.clone()))
         .expect("Query should succeed");
 
-    assert!(found.is_none(), "Unregistered project should not be found by path");
+    assert!(
+        found.is_none(),
+        "Unregistered project should not be found by path"
+    );
 }
 
 #[tokio::test]
@@ -479,7 +478,7 @@ async fn test_p0_project_info_counts_assets_correctly() {
 #[tokio::test]
 async fn test_p1_project_info_named_lookup_finds_registered() {
     let (db, temp_dir) = setup_test_database().await;
-    
+
     let project = Project {
         id: None,
         name: "named_lookup_test".to_string(),
@@ -499,8 +498,8 @@ async fn test_p1_project_info_named_lookup_finds_registered() {
 async fn test_p1_project_info_named_lookup_not_found() {
     let (db, _temp_dir) = setup_test_database().await;
 
-    let result = db_get_project_by_name("does_not_exist", Some(db.clone()))
-        .expect("Query should succeed");
+    let result =
+        db_get_project_by_name("does_not_exist", Some(db.clone())).expect("Query should succeed");
 
     assert!(result.is_none(), "Non-existent project should return None");
 }

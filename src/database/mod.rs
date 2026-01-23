@@ -10,7 +10,8 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 /// Error message for when database is required but not available.
-const ERR_DATABASE_NOT_AVAILABLE: &str = "Database is not available. This operation requires a database connection.";
+const ERR_DATABASE_NOT_AVAILABLE: &str =
+    "Database is not available. This operation requires a database connection.";
 
 /// Initialize the database system
 pub async fn initialize() -> Result<Database> {
@@ -62,51 +63,50 @@ pub fn setup_crash_db_cleanup(db: Option<Arc<Database>>) {
 
 /// Get all templates from the database
 pub fn db_get_templates(database: Option<Arc<Database>>) -> Result<Vec<entities::Template>> {
-    let db = database
-        .as_ref()
-        .context(ERR_DATABASE_NOT_AVAILABLE)?;
+    let db = database.as_ref().context(ERR_DATABASE_NOT_AVAILABLE)?;
 
-    let query = db.prepare("SELECT * FROM templates")?;
+    let query =
+        db.prepare("SELECT id, name, path, engine, description FROM templates ORDER BY name ASC")?;
 
     query.query_map([], |row| {
         Ok(Template {
             id: row.get(0)?,
             name: row.get(1)?,
             path: row.get(2)?,
+            engine: row.get(3)?,
+            description: row.get(4)?,
+            source: entities::TemplateSource::Custom,
         })
     })
 }
 
-/// Get a template by name from the database. Returns an error if the template is not found.
+/// Get a template by name from the database. Returns `Ok(None)` if the template is not found.
 pub fn db_get_template_by_name(
     name: &str,
     database: Option<Arc<Database>>,
 ) -> Result<Option<entities::Template>> {
-    let db = database
-        .as_ref()
-        .context(ERR_DATABASE_NOT_AVAILABLE)?;
+    let db = database.as_ref().context(ERR_DATABASE_NOT_AVAILABLE)?;
 
-    let query = db.prepare("SELECT * FROM templates WHERE name = $1")?;
+    let query =
+        db.prepare("SELECT id, name, path, engine, description FROM templates WHERE name = $1")?;
 
     let results = query.query_map([name], |row| {
         Ok(Template {
             id: row.get(0)?,
             name: row.get(1)?,
             path: row.get(2)?,
+            engine: row.get(3)?,
+            description: row.get(4)?,
+            source: entities::TemplateSource::Custom,
         })
     })?;
 
-    results
-        .first()
-        .ok_or_else(|| anyhow::anyhow!("Could not find template with name {}", name))
-        .map(|template| Some(template.clone()))
+    Ok(results.first().cloned())
 }
 
 /// Inserts a new project into the database.
 pub fn db_create_project(project: &Project, database: Option<Arc<Database>>) -> Result<bool> {
-    let db = database
-        .as_ref()
-        .context(ERR_DATABASE_NOT_AVAILABLE)?;
+    let db = database.as_ref().context(ERR_DATABASE_NOT_AVAILABLE)?;
 
     let query = db.prepare("INSERT INTO projects (name, path) VALUES ($1, $2)")?;
 
@@ -120,11 +120,11 @@ pub fn db_get_project_by_name(
     name: &str,
     database: Option<Arc<Database>>,
 ) -> Result<Option<entities::Project>> {
-    let db = database
-        .as_ref()
-        .context(ERR_DATABASE_NOT_AVAILABLE)?;
+    let db = database.as_ref().context(ERR_DATABASE_NOT_AVAILABLE)?;
 
-    let query = db.prepare("SELECT id, name, path, date(created_at) as registered_at FROM projects WHERE name = $1")?;
+    let query = db.prepare(
+        "SELECT id, name, path, date(created_at) as registered_at FROM projects WHERE name = $1",
+    )?;
 
     let results = query.query_map([name], |row| {
         Ok(Project {
@@ -140,11 +140,11 @@ pub fn db_get_project_by_name(
 
 /// Get all registered projects from the database, sorted alphabetically by name.
 pub fn db_get_all_projects(database: Option<Arc<Database>>) -> Result<Vec<entities::Project>> {
-    let db = database
-        .as_ref()
-        .context(ERR_DATABASE_NOT_AVAILABLE)?;
+    let db = database.as_ref().context(ERR_DATABASE_NOT_AVAILABLE)?;
 
-    let query = db.prepare("SELECT id, name, path, date(created_at) as registered_at FROM projects ORDER BY name ASC")?;
+    let query = db.prepare(
+        "SELECT id, name, path, date(created_at) as registered_at FROM projects ORDER BY name ASC",
+    )?;
 
     query.query_map([], |row| {
         Ok(Project {
@@ -157,9 +157,7 @@ pub fn db_get_all_projects(database: Option<Arc<Database>>) -> Result<Vec<entiti
 }
 
 pub fn db_forget_project(id: i32, database: Option<Arc<Database>>) -> Result<bool> {
-    let db = database
-        .as_ref()
-        .context(ERR_DATABASE_NOT_AVAILABLE)?;
+    let db = database.as_ref().context(ERR_DATABASE_NOT_AVAILABLE)?;
 
     let query = db.prepare("DELETE FROM projects WHERE id = $1")?;
 
@@ -171,11 +169,11 @@ pub fn db_get_project_by_path(
     path: &str,
     database: Option<Arc<Database>>,
 ) -> Result<Option<entities::Project>> {
-    let db = database
-        .as_ref()
-        .context(ERR_DATABASE_NOT_AVAILABLE)?;
+    let db = database.as_ref().context(ERR_DATABASE_NOT_AVAILABLE)?;
 
-    let query = db.prepare("SELECT id, name, path, date(created_at) as registered_at FROM projects WHERE path = $1")?;
+    let query = db.prepare(
+        "SELECT id, name, path, date(created_at) as registered_at FROM projects WHERE path = $1",
+    )?;
 
     let results = query.query_map([path], |row| {
         Ok(Project {

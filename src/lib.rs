@@ -12,4 +12,5 @@ pub mod presentation;
 pub mod commands {
     pub mod project;
     pub mod sudo;
+    pub mod template;
 }

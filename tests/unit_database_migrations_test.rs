@@ -172,7 +172,7 @@ async fn test_p0_run_migrations_is_idempotent() {
     let count: Vec<i32> = stmt
         .query_map([], |row| row.get(0))
         .expect("Failed to query");
-    assert_eq!(count[0], 4, "Should still have exactly 4 migrations");
+    assert_eq!(count[0], 5, "Should still have exactly 5 migrations");
 }
 
 // =============================================================================

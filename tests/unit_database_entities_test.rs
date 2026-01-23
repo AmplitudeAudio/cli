@@ -1,6 +1,6 @@
 //! Unit tests for database entities module.
 
-use am::database::entities::{Project, ProjectConfiguration, Template};
+use am::database::entities::{Project, ProjectConfiguration, Template, TemplateSource};
 
 // =============================================================================
 // ProjectConfiguration Tests
@@ -133,6 +133,9 @@ fn test_p1_template_display_with_id_shows_path() {
         id: Some(1),
         name: "custom_template".to_string(),
         path: "/templates/custom".to_string(),
+        engine: Some("o3de".to_string()),
+        description: Some("Custom O3DE template".to_string()),
+        source: TemplateSource::Custom,
     };
 
     let display = format!("{}", template);
@@ -146,6 +149,9 @@ fn test_p1_template_display_without_id_shows_name_only() {
         id: None,
         name: "default".to_string(),
         path: "bundled".to_string(),
+        engine: Some("generic".to_string()),
+        description: Some("Default project template".to_string()),
+        source: TemplateSource::Embedded,
     };
 
     let display = format!("{}", template);
@@ -159,6 +165,9 @@ fn test_p2_template_clone_creates_independent_copy() {
         id: Some(5),
         name: "original_template".to_string(),
         path: "/original/template/path".to_string(),
+        engine: Some("generic".to_string()),
+        description: Some("Original template".to_string()),
+        source: TemplateSource::Custom,
     };
 
     let cloned = template.clone();
@@ -166,4 +175,7 @@ fn test_p2_template_clone_creates_independent_copy() {
     assert_eq!(cloned.id, template.id);
     assert_eq!(cloned.name, template.name);
     assert_eq!(cloned.path, template.path);
+    assert_eq!(cloned.engine, template.engine);
+    assert_eq!(cloned.description, template.description);
+    assert_eq!(cloned.source, template.source);
 }

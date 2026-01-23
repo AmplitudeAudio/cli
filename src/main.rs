@@ -7,7 +7,10 @@ mod presentation;
 
 use crate::{
     app::{App, Commands},
-    commands::{project::handler as handle_project_command, sudo::handler as handle_sudo_command},
+    commands::{
+        project::handler as handle_project_command, sudo::handler as handle_sudo_command,
+        template::handler as handle_template_command,
+    },
     common::errors::{CliError, determine_exit_code, exit_codes},
     common::logger::{init_logger, setup_crash_logging, write_crash_log_on_error},
     database::{Database, setup_crash_db_cleanup},
@@ -172,5 +175,8 @@ async fn run_command(
             handle_project_command(command, database, input, output).await
         }
         Commands::Sudo { command } => handle_sudo_command(command, database, input, output).await,
+        Commands::Template { command } => {
+            handle_template_command(command, database, input, output).await
+        }
     }
 }

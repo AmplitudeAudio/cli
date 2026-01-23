@@ -183,7 +183,7 @@ fn test_no_json_flag_selects_interactive_output_mode() {
 
 #[cfg(test)]
 mod non_interactive_tests {
-    use am::input::{create_input, Input, InputMode};
+    use am::input::{Input, InputMode, create_input};
 
     #[test]
     fn test_create_input_interactive_by_default() {
@@ -249,7 +249,7 @@ mod non_interactive_tests {
 
 #[cfg(test)]
 mod output_factory_tests {
-    use am::presentation::{create_output, Output, OutputMode};
+    use am::presentation::{Output, OutputMode, create_output};
 
     #[test]
     fn test_create_output_interactive_mode() {

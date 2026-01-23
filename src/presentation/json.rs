@@ -6,7 +6,7 @@
 //! Unlike InteractiveOutput which uses log macros, JsonOutput writes directly
 //! to stdout to ensure the output is valid parseable JSON.
 
-use crate::common::errors::{error_suggestion, error_type_name, CliError};
+use crate::common::errors::{CliError, error_suggestion, error_type_name};
 use crate::presentation::Output;
 use anyhow::{Error, Result};
 use serde::Serialize;

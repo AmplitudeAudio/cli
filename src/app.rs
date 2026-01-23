@@ -1,7 +1,7 @@
 use clap::{Parser, Subcommand};
 use rust_embed::RustEmbed;
 
-use crate::commands::{project::ProjectCommands, sudo::SudoCommands};
+use crate::commands::{project::ProjectCommands, sudo::SudoCommands, template::TemplateCommands};
 
 #[derive(RustEmbed)]
 #[folder = "resources/"]
@@ -53,5 +53,11 @@ pub enum Commands {
     Sudo {
         #[command(subcommand)]
         command: SudoCommands,
+    },
+
+    /// Manage project templates
+    Template {
+        #[command(subcommand)]
+        command: TemplateCommands,
     },
 }

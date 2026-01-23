@@ -1,8 +1,8 @@
 //! Unit tests for database CRUD operations.
 
 use am::database::{
-    Database, db_create_project, db_forget_project, db_get_all_projects,
-    db_get_project_by_name, db_get_template_by_name, db_get_templates, entities::Project,
+    Database, db_create_project, db_forget_project, db_get_all_projects, db_get_project_by_name,
+    db_get_template_by_name, db_get_templates, entities::Project,
 };
 use std::sync::Arc;
 use tempfile::tempdir;
@@ -123,7 +123,10 @@ async fn test_p0_db_get_project_by_name_returns_none_for_nonexistent() {
     let result = db_get_project_by_name("nonexistent_project", Some(db.clone()));
 
     assert!(result.is_ok(), "Query should succeed");
-    assert!(result.unwrap().is_none(), "Non-existent project should return None");
+    assert!(
+        result.unwrap().is_none(),
+        "Non-existent project should return None"
+    );
 }
 
 #[tokio::test]
@@ -141,7 +144,10 @@ async fn test_p1_db_get_project_by_name_is_case_sensitive() {
     let result = db_get_project_by_name("casesensitiveproject", Some(db.clone()));
 
     assert!(result.is_ok(), "Query should succeed");
-    assert!(result.unwrap().is_none(), "Case-different name should not match");
+    assert!(
+        result.unwrap().is_none(),
+        "Case-different name should not match"
+    );
 }
 
 // =============================================================================
@@ -168,8 +174,8 @@ async fn test_p0_db_forget_project_removes_project() {
 
     assert!(result.is_ok(), "Forget should succeed");
 
-    let check = db_get_project_by_name("to_be_forgotten", Some(db.clone()))
-        .expect("Query should succeed");
+    let check =
+        db_get_project_by_name("to_be_forgotten", Some(db.clone())).expect("Query should succeed");
     assert!(check.is_none(), "Project should no longer exist");
 }
 
@@ -248,12 +254,16 @@ async fn test_p1_db_get_template_by_name_returns_existing_template() {
 }
 
 #[tokio::test]
-async fn test_p1_db_get_template_by_name_returns_error_for_nonexistent() {
+async fn test_p1_db_get_template_by_name_returns_none_for_nonexistent() {
     let (db, _temp_dir) = setup_test_database().await;
 
     let result = db_get_template_by_name("nonexistent", Some(db.clone()));
 
-    assert!(result.is_err(), "Non-existent template should return error");
+    assert!(result.is_ok(), "Query should succeed");
+    assert!(
+        result.unwrap().is_none(),
+        "Non-existent template should return None"
+    );
 }
 
 // =============================================================================

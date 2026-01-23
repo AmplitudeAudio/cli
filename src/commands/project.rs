@@ -13,11 +13,10 @@ use crate::{
     common::{
         errors::{CliError, codes, project_already_exists, project_not_initialized},
         utils::{
-            count_assets_by_type, read_amproject_file,
-            ASSET_DIR_ATTENUATORS, ASSET_DIR_COLLECTIONS, ASSET_DIR_EFFECTS,
-            ASSET_DIR_EVENTS, ASSET_DIR_PIPELINES, ASSET_DIR_RTPC,
-            ASSET_DIR_SOUNDBANKS, ASSET_DIR_SOUNDS, ASSET_DIR_SWITCH_CONTAINERS,
-            ASSET_DIR_SWITCHES,
+            ASSET_DIR_ATTENUATORS, ASSET_DIR_COLLECTIONS, ASSET_DIR_EFFECTS, ASSET_DIR_EVENTS,
+            ASSET_DIR_PIPELINES, ASSET_DIR_RTPC, ASSET_DIR_SOUNDBANKS, ASSET_DIR_SOUNDS,
+            ASSET_DIR_SWITCH_CONTAINERS, ASSET_DIR_SWITCHES, count_assets_by_type,
+            read_amproject_file,
         },
     },
     database::{
@@ -102,6 +101,9 @@ pub async fn handler(
                     id: Some(0),
                     name: DEFAULT_TEMPLATE.into(),
                     path: "bundled".to_string(),
+                    engine: Some("generic".to_string()),
+                    description: Some("Default project template for any engine".to_string()),
+                    source: crate::database::entities::TemplateSource::Embedded,
                 },
             );
 
@@ -473,17 +475,24 @@ async fn handle_info_by_name(
             let project_path = PathBuf::from(&project.path);
             let asset_counts = count_assets_by_type(&project_path).unwrap_or_default();
 
-            display_project_info(&project.name, &project_path, true, project.registered_at.as_deref(), &asset_counts, output);
+            display_project_info(
+                &project.name,
+                &project_path,
+                true,
+                project.registered_at.as_deref(),
+                &asset_counts,
+                output,
+            );
 
             Ok(())
         }
         None => Err(CliError::new(
-                codes::ERR_PROJECT_NOT_REGISTERED,
-                format!("Project '{}' not found", name),
-                "The project is not registered in the database",
-            )
-            .with_suggestion("Use 'am project list' to see registered projects")
-            .into()),
+            codes::ERR_PROJECT_NOT_REGISTERED,
+            format!("Project '{}' not found", name),
+            "The project is not registered in the database",
+        )
+        .with_suggestion("Use 'am project list' to see registered projects")
+        .into()),
     }
 }
 
@@ -500,7 +509,9 @@ async fn handle_info_current_dir(
             "No project found in current directory",
             "The current directory does not contain a .amproject file",
         )
-        .with_suggestion("Create a new project with 'am project init <name>' or provide a project name")
+        .with_suggestion(
+            "Create a new project with 'am project init <name>' or provide a project name",
+        )
         .into());
     }
 
@@ -511,35 +522,47 @@ async fn handle_info_current_dir(
 
     match registered_project {
         Some(project) => {
-            display_project_info(&config.name, cwd, true, project.registered_at.as_deref(), &asset_counts, output);
+            display_project_info(
+                &config.name,
+                cwd,
+                true,
+                project.registered_at.as_deref(),
+                &asset_counts,
+                output,
+            );
         }
-        None => {
-            match output.mode() {
-                crate::presentation::OutputMode::Json => {
-                    display_project_info(&config.name, cwd, false, None, &asset_counts, output);
-                }
-                crate::presentation::OutputMode::Interactive => {
-                    display_project_info_interactive(&config.name, cwd, false, None, &asset_counts, output);
+        None => match output.mode() {
+            crate::presentation::OutputMode::Json => {
+                display_project_info(&config.name, cwd, false, None, &asset_counts, output);
+            }
+            crate::presentation::OutputMode::Interactive => {
+                display_project_info_interactive(
+                    &config.name,
+                    cwd,
+                    false,
+                    None,
+                    &asset_counts,
+                    output,
+                );
 
-                    output.progress("");
-                    output.progress("This project is not registered in the database.");
+                output.progress("");
+                output.progress("This project is not registered in the database.");
 
-                    match input.confirm("Would you like to register it now?", Some(false)) {
-                        Ok(true) => {
-                            let project = config.to_project(cwd_str);
-                            db_create_project(&project, database)?;
-                            output.success(json!("Project registered successfully!"), None);
-                        }
-                        Ok(false) | Err(_) => {
-                            output.progress(&format!(
-                                "  Run {} to register this project",
-                                "am project register".green()
-                            ));
-                        }
+                match input.confirm("Would you like to register it now?", Some(false)) {
+                    Ok(true) => {
+                        let project = config.to_project(cwd_str);
+                        db_create_project(&project, database)?;
+                        output.success(json!("Project registered successfully!"), None);
+                    }
+                    Ok(false) | Err(_) => {
+                        output.progress(&format!(
+                            "  Run {} to register this project",
+                            "am project register".green()
+                        ));
                     }
                 }
             }
-        }
+        },
     }
 
     Ok(())
@@ -555,11 +578,19 @@ fn display_project_info(
 ) {
     match output.mode() {
         crate::presentation::OutputMode::Json => {
-            let json_data = build_project_info_json(name, path, registered, registered_at, asset_counts);
+            let json_data =
+                build_project_info_json(name, path, registered, registered_at, asset_counts);
             output.success(json_data, None);
         }
         crate::presentation::OutputMode::Interactive => {
-            display_project_info_interactive(name, path, registered, registered_at, asset_counts, output);
+            display_project_info_interactive(
+                name,
+                path,
+                registered,
+                registered_at,
+                asset_counts,
+                output,
+            );
         }
     }
 }
@@ -601,7 +632,9 @@ fn build_project_info_json(
             json_value["registered_at"] = json!(date);
         }
     } else {
-        json_value["notice"] = json!("This project is not registered in the database. Run 'am project register' to register it.");
+        json_value["notice"] = json!(
+            "This project is not registered in the database. Run 'am project register' to register it."
+        );
     }
 
     json_value
