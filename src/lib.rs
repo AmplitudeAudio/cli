@@ -3,6 +3,7 @@
 //! This module exposes public APIs for testing and external use.
 
 pub mod app;
+pub mod assets;
 pub mod common;
 pub mod database;
 pub mod input;
