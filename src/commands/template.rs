@@ -8,7 +8,7 @@ use crate::{
     app::Resource,
     common::{
         errors::{CliError, codes},
-        utils::{validate_template_directory, validate_template_name},
+        utils::{truncate_string_at_word, validate_template_directory, validate_template_name},
     },
     database::{
         Database, db_create_template, db_delete_template_by_name, db_get_template_by_name,
@@ -47,18 +47,6 @@ pub const EMBEDDED_TEMPLATES: &[EmbeddedTemplate] = &[EmbeddedTemplate {
     description: "Default project template for any engine",
     config_options: &[],
 }];
-
-/// Truncate a string to a maximum length, adding ellipsis if truncated.
-fn truncate_description(s: &str, max_len: usize) -> String {
-    if s.len() <= max_len {
-        s.to_string()
-    } else {
-        // Find a good break point (space) near the limit
-        let truncated = &s[..max_len.saturating_sub(3)];
-        let break_point = truncated.rfind(' ').unwrap_or(truncated.len());
-        format!("{}...", &s[..break_point])
-    }
-}
 
 impl EmbeddedTemplate {
     /// Convert to a Template struct for display.
@@ -172,7 +160,7 @@ async fn handle_list_templates_command(
             let display_description = match output.mode() {
                 OutputMode::Json => description.to_string(),
                 OutputMode::Interactive => {
-                    truncate_description(description, DESCRIPTION_MAX_LENGTH)
+                    truncate_string_at_word(description, DESCRIPTION_MAX_LENGTH)
                 }
             };
             json!({

@@ -158,6 +158,111 @@ impl TestProjectFixture {
     }
 }
 
+// =============================================================================
+// Capture Output for Testing
+// =============================================================================
+
+use am::presentation::{Output, OutputMode};
+use std::sync::RwLock;
+
+/// Test output implementation that captures output for verification.
+///
+/// Unlike `JsonOutput` or `InteractiveOutput`, this captures what was passed
+/// to each method, allowing tests to verify actual output content.
+///
+/// Uses `RwLock` instead of `RefCell` to satisfy the `Sync` requirement of `Output` trait.
+///
+/// # Example
+/// ```ignore
+/// let output = CaptureOutput::new(OutputMode::Json);
+/// // Call handler that uses output...
+/// assert!(output.last_success().is_some());
+/// let data = output.last_success().unwrap();
+/// assert!(data["count"].as_u64().unwrap() > 0);
+/// ```
+pub struct CaptureOutput {
+    mode: OutputMode,
+    successes: RwLock<Vec<serde_json::Value>>,
+    errors: RwLock<Vec<(String, i32)>>,
+    progress_messages: RwLock<Vec<String>>,
+    tables: RwLock<Vec<(Option<String>, serde_json::Value)>>,
+}
+
+impl CaptureOutput {
+    /// Create a new capture output with the specified mode.
+    pub fn new(mode: OutputMode) -> Self {
+        Self {
+            mode,
+            successes: RwLock::new(Vec::new()),
+            errors: RwLock::new(Vec::new()),
+            progress_messages: RwLock::new(Vec::new()),
+            tables: RwLock::new(Vec::new()),
+        }
+    }
+
+    /// Create a new capture output in JSON mode.
+    pub fn json() -> Self {
+        Self::new(OutputMode::Json)
+    }
+
+    /// Create a new capture output in Interactive mode.
+    pub fn interactive() -> Self {
+        Self::new(OutputMode::Interactive)
+    }
+
+    /// Get the last success data, if any.
+    pub fn last_success(&self) -> Option<serde_json::Value> {
+        self.successes.read().unwrap().last().cloned()
+    }
+
+    /// Get all success calls.
+    pub fn all_successes(&self) -> Vec<serde_json::Value> {
+        self.successes.read().unwrap().clone()
+    }
+
+    /// Get all progress messages.
+    pub fn all_progress(&self) -> Vec<String> {
+        self.progress_messages.read().unwrap().clone()
+    }
+
+    /// Get the last table data, if any.
+    pub fn last_table(&self) -> Option<(Option<String>, serde_json::Value)> {
+        self.tables.read().unwrap().last().cloned()
+    }
+
+    /// Get all table calls.
+    pub fn all_tables(&self) -> Vec<(Option<String>, serde_json::Value)> {
+        self.tables.read().unwrap().clone()
+    }
+
+    /// Get all errors.
+    pub fn all_errors(&self) -> Vec<(String, i32)> {
+        self.errors.read().unwrap().clone()
+    }
+}
+
+impl Output for CaptureOutput {
+    fn success(&self, data: serde_json::Value, _request_id: Option<i64>) {
+        self.successes.write().unwrap().push(data);
+    }
+
+    fn error(&self, err: &anyhow::Error, code: i32, _request_id: Option<i64>) {
+        self.errors.write().unwrap().push((err.to_string(), code));
+    }
+
+    fn progress(&self, message: &str) {
+        self.progress_messages.write().unwrap().push(message.to_string());
+    }
+
+    fn table(&self, title: Option<&str>, data: serde_json::Value) {
+        self.tables.write().unwrap().push((title.map(|s| s.to_string()), data));
+    }
+
+    fn mode(&self) -> OutputMode {
+        self.mode
+    }
+}
+
 /// Factory for creating test data with sensible defaults.
 pub mod factories {
     use am::presentation::InteractiveOutput;

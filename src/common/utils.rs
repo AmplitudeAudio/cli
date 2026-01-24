@@ -14,6 +14,62 @@ use crate::common::errors::{CliError, codes, project_not_initialized};
 use crate::database::entities::ProjectConfiguration;
 
 // =============================================================================
+// String Truncation Utilities
+// =============================================================================
+
+/// Truncate a string to a maximum length, adding ellipsis if truncated.
+///
+/// Uses character-based (not byte-based) slicing to handle UTF-8 strings safely.
+/// This prevents panics when truncating strings containing multi-byte characters.
+///
+/// # Arguments
+/// * `s` - The string to truncate
+/// * `max_len` - Maximum length in characters (including ellipsis if added)
+///
+/// # Returns
+/// The original string if within limit, or truncated string with "..." appended.
+///
+/// # Example
+/// ```ignore
+/// assert_eq!(truncate_string("hello world", 8), "hello...");
+/// assert_eq!(truncate_string("短い", 10), "短い");
+/// ```
+pub fn truncate_string(s: &str, max_len: usize) -> String {
+    let char_count = s.chars().count();
+    if char_count <= max_len {
+        s.to_string()
+    } else {
+        let truncated: String = s.chars().take(max_len.saturating_sub(3)).collect();
+        format!("{}...", truncated)
+    }
+}
+
+/// Truncate a string at a word boundary for cleaner display.
+///
+/// Similar to `truncate_string` but tries to break at a space rather than
+/// mid-word. Falls back to character truncation if no space is found.
+///
+/// # Arguments
+/// * `s` - The string to truncate
+/// * `max_len` - Maximum length in characters (including ellipsis if added)
+///
+/// # Returns
+/// The original string if within limit, or truncated string with "..." appended.
+pub fn truncate_string_at_word(s: &str, max_len: usize) -> String {
+    let char_count = s.chars().count();
+    if char_count <= max_len {
+        s.to_string()
+    } else {
+        // Get the portion before the ellipsis
+        let truncated: String = s.chars().take(max_len.saturating_sub(3)).collect();
+        // Try to find a space to break at
+        let break_point = truncated.rfind(' ').unwrap_or(truncated.len());
+        let final_truncated: String = s.chars().take(break_point).collect();
+        format!("{}...", final_truncated)
+    }
+}
+
+// =============================================================================
 // Name Validation Utilities
 // =============================================================================
 
