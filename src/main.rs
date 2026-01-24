@@ -1,4 +1,5 @@
 mod app;
+mod assets;
 mod commands;
 mod common;
 mod database;
@@ -8,8 +9,8 @@ mod presentation;
 use crate::{
     app::{App, Commands},
     commands::{
-        project::handler as handle_project_command, sudo::handler as handle_sudo_command,
-        template::handler as handle_template_command,
+        asset::handler as handle_asset_command, project::handler as handle_project_command,
+        sudo::handler as handle_sudo_command, template::handler as handle_template_command,
     },
     common::errors::{CliError, determine_exit_code, exit_codes},
     common::logger::{init_logger, setup_crash_logging, write_crash_log_on_error},
@@ -171,6 +172,9 @@ async fn run_command(
     output: &dyn Output,
 ) -> anyhow::Result<()> {
     match &cli.command {
+        Commands::Asset { command } => {
+            handle_asset_command(command, database, input, output).await
+        }
         Commands::Project { command } => {
             handle_project_command(command, database, input, output).await
         }

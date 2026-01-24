@@ -11,6 +11,7 @@ pub mod presentation;
 
 // Re-export commands for testing
 pub mod commands {
+    pub mod asset;
     pub mod project;
     pub mod sudo;
     pub mod template;

@@ -1,7 +1,9 @@
 use clap::{Parser, Subcommand};
 use rust_embed::RustEmbed;
 
-use crate::commands::{project::ProjectCommands, sudo::SudoCommands, template::TemplateCommands};
+use crate::commands::{
+    asset::AssetCommands, project::ProjectCommands, sudo::SudoCommands, template::TemplateCommands,
+};
 
 #[derive(RustEmbed)]
 #[folder = "resources/"]
@@ -43,6 +45,12 @@ pub struct App {
 
 #[derive(Subcommand, Debug)]
 pub enum Commands {
+    /// Manage audio assets (sounds, collections, etc.)
+    Asset {
+        #[command(subcommand)]
+        command: AssetCommands,
+    },
+
     /// Amplitude project-related tasks
     Project {
         #[command(subcommand)]

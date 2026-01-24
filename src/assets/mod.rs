@@ -40,15 +40,26 @@ mod switch;
 mod switch_container;
 
 // Re-export all asset types
+// Note: Some types are currently unused but are part of the public API for future asset type implementations.
+// These will be used when Collection, Effect, Event, etc. CRUD commands are added in later stories.
+#[allow(unused_imports)]
 pub use collection::Collection;
+#[allow(unused_imports)]
 pub use effect::Effect;
+#[allow(unused_imports)]
 pub use event::Event;
+// Sound types - Some are exported for completeness but not yet used by commands
+#[allow(unused_imports)]
 pub use sound::{
     CurveDefinition, CurvePart, CurvePoint, FaderAlgorithm, RtpcCompatibleValue, RtpcReference,
-    Scope, Sound, SoundBuilder, SoundLoopConfig, Spatialization,
+    Scope, SoundBuilder,
 };
+pub use sound::{Sound, SoundLoopConfig, Spatialization};
+#[allow(unused_imports)]
 pub use soundbank::Soundbank;
+#[allow(unused_imports)]
 pub use switch::Switch;
+#[allow(unused_imports)]
 pub use switch_container::SwitchContainer;
 
 use crate::common::utils::{
@@ -95,6 +106,10 @@ use crate::common::utils::{
 ///     }
 /// }
 /// ```
+// Note: Some trait methods (id, name, asset_type, file_extension, validate_schema) are currently
+// unused but are part of the Asset contract. These will be used in Epic 6 for SDK schema
+// integration and generic asset CRUD operations.
+#[allow(dead_code)]
 pub trait Asset: Serialize + DeserializeOwned + Send + Sync {
     /// Returns the unique identifier for this asset.
     ///
