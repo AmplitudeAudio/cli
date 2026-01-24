@@ -43,7 +43,10 @@ mod switch_container;
 pub use collection::Collection;
 pub use effect::Effect;
 pub use event::Event;
-pub use sound::Sound;
+pub use sound::{
+    CurveDefinition, CurvePart, CurvePoint, FaderAlgorithm, RtpcCompatibleValue, RtpcReference,
+    Scope, Sound, SoundBuilder, SoundLoopConfig, Spatialization,
+};
 pub use soundbank::Soundbank;
 pub use switch::Switch;
 pub use switch_container::SwitchContainer;
@@ -165,8 +168,8 @@ impl AssetType {
     /// ```
     /// use am::assets::AssetType;
     ///
-    /// assert_eq!(AssetType::Sound.directory_name(), ASSET_DIR_SOUNDS);
-    /// assert_eq!(AssetType::SwitchContainer.directory_name(), ASSET_DIR_SWITCH_CONTAINERS);
+    /// assert_eq!(AssetType::Sound.directory_name(), "sounds");
+    /// assert_eq!(AssetType::SwitchContainer.directory_name(), "switch_containers");
     /// ```
     pub fn directory_name(&self) -> &'static str {
         match self {
