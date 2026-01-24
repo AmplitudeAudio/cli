@@ -16,7 +16,7 @@ use crate::{
             ASSET_DIR_ATTENUATORS, ASSET_DIR_COLLECTIONS, ASSET_DIR_EFFECTS, ASSET_DIR_EVENTS,
             ASSET_DIR_PIPELINES, ASSET_DIR_RTPC, ASSET_DIR_SOUNDBANKS, ASSET_DIR_SOUNDS,
             ASSET_DIR_SWITCH_CONTAINERS, ASSET_DIR_SWITCHES, count_assets_by_type,
-            read_amproject_file,
+            read_amproject_file, validate_project_name,
         },
     },
     database::{
@@ -28,10 +28,7 @@ use crate::{
     presentation::Output,
 };
 use clap::{Subcommand, value_parser};
-use inquire::{
-    CustomUserError, required,
-    validator::{StringValidator, Validation},
-};
+use inquire::{CustomUserError, validator::Validation};
 use serde_json::json;
 
 const DEFAULT_TEMPLATE: &str = "default";
@@ -728,17 +725,9 @@ fn display_project_info_interactive(
 }
 
 fn validate_name(name: &str) -> Result<Validation, CustomUserError> {
-    if name
-        .trim()
-        .chars()
-        .any(|c| !c.is_alphanumeric() && c != '_' && c != '-' && c != ' ')
-    {
-        Ok(Validation::Invalid(
-            "The project name must only contain alphanumeric characters, underscores, and hyphens."
-                .into(),
-        ))
-    } else {
-        required!("This project name is required").validate(name)
+    match validate_project_name(name) {
+        Ok(()) => Ok(Validation::Valid),
+        Err(msg) => Ok(Validation::Invalid(msg.into())),
     }
 }
 

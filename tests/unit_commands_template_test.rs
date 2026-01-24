@@ -514,3 +514,359 @@ fn test_p0_get_embedded_template_files_is_sorted() {
         "Embedded template files should be sorted for deterministic output"
     );
 }
+
+// =============================================================================
+// Template Directory Validation Tests (Story 1b.5)
+// =============================================================================
+
+#[test]
+fn test_p0_validate_template_directory_valid_template() {
+    use am::common::utils::validate_template_directory;
+    use std::fs;
+    use tempfile::tempdir;
+
+    // GIVEN: A valid template directory with required files
+    let temp_dir = tempdir().expect("Failed to create temp dir");
+    let template_path = temp_dir.path();
+
+    // Create required files
+    fs::write(
+        template_path.join(".amproject"),
+        r#"{"name":"test","version":1}"#,
+    )
+    .unwrap();
+    fs::write(template_path.join("test.buses.json"), "{}").unwrap();
+    fs::write(template_path.join("test.config.json"), "{}").unwrap();
+
+    // WHEN: We validate the directory
+    let result = validate_template_directory(template_path);
+
+    // THEN: Validation should succeed
+    assert!(result.is_ok(), "Valid template should pass validation");
+
+    let validation = result.unwrap();
+    // AND: Files list should contain the required files
+    assert!(validation.files.contains(&".amproject".to_string()));
+    assert!(validation.files.contains(&"test.buses.json".to_string()));
+    assert!(validation.files.contains(&"test.config.json".to_string()));
+}
+
+#[test]
+fn test_p0_validate_template_directory_missing_amproject() {
+    use am::common::utils::validate_template_directory;
+    use std::fs;
+    use tempfile::tempdir;
+
+    // GIVEN: A template directory missing .amproject
+    let temp_dir = tempdir().expect("Failed to create temp dir");
+    let template_path = temp_dir.path();
+
+    // Create only buses and config files
+    fs::write(template_path.join("test.buses.json"), "{}").unwrap();
+    fs::write(template_path.join("test.config.json"), "{}").unwrap();
+
+    // WHEN: We validate the directory
+    let result = validate_template_directory(template_path);
+
+    // THEN: Validation should fail with appropriate error
+    assert!(result.is_err(), "Missing .amproject should fail validation");
+    let err = result.unwrap_err();
+    let cli_err = err.downcast_ref::<am::common::errors::CliError>().unwrap();
+    assert_eq!(cli_err.code, -29007);
+    assert!(cli_err.what.contains(".amproject"));
+}
+
+#[test]
+fn test_p0_validate_template_directory_missing_buses() {
+    use am::common::utils::validate_template_directory;
+    use std::fs;
+    use tempfile::tempdir;
+
+    // GIVEN: A template directory missing *.buses.json
+    let temp_dir = tempdir().expect("Failed to create temp dir");
+    let template_path = temp_dir.path();
+
+    fs::write(
+        template_path.join(".amproject"),
+        r#"{"name":"test","version":1}"#,
+    )
+    .unwrap();
+    fs::write(template_path.join("test.config.json"), "{}").unwrap();
+
+    // WHEN: We validate the directory
+    let result = validate_template_directory(template_path);
+
+    // THEN: Validation should fail
+    assert!(result.is_err(), "Missing buses.json should fail validation");
+    let err = result.unwrap_err();
+    let cli_err = err.downcast_ref::<am::common::errors::CliError>().unwrap();
+    assert!(cli_err.what.contains("buses.json"));
+}
+
+#[test]
+fn test_p0_validate_template_directory_missing_config() {
+    use am::common::utils::validate_template_directory;
+    use std::fs;
+    use tempfile::tempdir;
+
+    // GIVEN: A template directory missing *.config.json
+    let temp_dir = tempdir().expect("Failed to create temp dir");
+    let template_path = temp_dir.path();
+
+    fs::write(
+        template_path.join(".amproject"),
+        r#"{"name":"test","version":1}"#,
+    )
+    .unwrap();
+    fs::write(template_path.join("test.buses.json"), "{}").unwrap();
+
+    // WHEN: We validate the directory
+    let result = validate_template_directory(template_path);
+
+    // THEN: Validation should fail
+    assert!(
+        result.is_err(),
+        "Missing config.json should fail validation"
+    );
+    let err = result.unwrap_err();
+    let cli_err = err.downcast_ref::<am::common::errors::CliError>().unwrap();
+    assert!(cli_err.what.contains("config.json"));
+}
+
+#[test]
+fn test_p0_validate_template_directory_nonexistent_path() {
+    use am::common::utils::validate_template_directory;
+    use std::path::Path;
+
+    // GIVEN: A path that doesn't exist
+    let nonexistent_path = Path::new("/nonexistent/template/path");
+
+    // WHEN: We validate the directory
+    let result = validate_template_directory(nonexistent_path);
+
+    // THEN: Validation should fail with path not found error
+    assert!(result.is_err(), "Nonexistent path should fail validation");
+    let err = result.unwrap_err();
+    let cli_err = err.downcast_ref::<am::common::errors::CliError>().unwrap();
+    assert_eq!(cli_err.code, -29007);
+    assert!(cli_err.what.contains("does not exist"));
+}
+
+#[test]
+fn test_p0_validate_template_directory_file_not_directory() {
+    use am::common::utils::validate_template_directory;
+    use std::fs;
+    use tempfile::tempdir;
+
+    // GIVEN: A file instead of a directory
+    let temp_dir = tempdir().expect("Failed to create temp dir");
+    let file_path = temp_dir.path().join("not-a-dir.txt");
+    fs::write(&file_path, "content").unwrap();
+
+    // WHEN: We validate the path
+    let result = validate_template_directory(&file_path);
+
+    // THEN: Validation should fail
+    assert!(result.is_err(), "File should fail validation");
+    let err = result.unwrap_err();
+    let cli_err = err.downcast_ref::<am::common::errors::CliError>().unwrap();
+    assert!(cli_err.what.contains("not a directory"));
+}
+
+// =============================================================================
+// Template Manifest Parsing Tests (Story 1b.5)
+// =============================================================================
+
+#[test]
+fn test_p0_parse_template_manifest_with_manifest() {
+    use am::common::utils::parse_template_manifest;
+    use std::fs;
+    use tempfile::tempdir;
+
+    // GIVEN: A template directory with template.json manifest
+    let temp_dir = tempdir().expect("Failed to create temp dir");
+    let template_path = temp_dir.path();
+
+    let manifest_content = r#"{
+        "name": "my-template",
+        "engine": "o3de",
+        "description": "A test template"
+    }"#;
+    fs::write(template_path.join("template.json"), manifest_content).unwrap();
+
+    // WHEN: We parse the manifest
+    let result = parse_template_manifest(template_path);
+
+    // THEN: Parsing should succeed
+    assert!(result.is_ok(), "Should parse valid manifest");
+    let manifest = result.unwrap();
+    assert!(manifest.is_some(), "Manifest should be present");
+
+    let manifest = manifest.unwrap();
+    assert_eq!(manifest.name, Some("my-template".to_string()));
+    assert_eq!(manifest.engine, Some("o3de".to_string()));
+    assert_eq!(manifest.description, Some("A test template".to_string()));
+}
+
+#[test]
+fn test_p0_parse_template_manifest_no_manifest() {
+    use am::common::utils::parse_template_manifest;
+    use tempfile::tempdir;
+
+    // GIVEN: A template directory without template.json
+    let temp_dir = tempdir().expect("Failed to create temp dir");
+    let template_path = temp_dir.path();
+
+    // WHEN: We parse the manifest
+    let result = parse_template_manifest(template_path);
+
+    // THEN: Parsing should succeed with None
+    assert!(result.is_ok(), "Should handle missing manifest");
+    assert!(
+        result.unwrap().is_none(),
+        "Missing manifest should return None"
+    );
+}
+
+#[test]
+fn test_p1_parse_template_manifest_partial_fields() {
+    use am::common::utils::parse_template_manifest;
+    use std::fs;
+    use tempfile::tempdir;
+
+    // GIVEN: A manifest with only some fields
+    let temp_dir = tempdir().expect("Failed to create temp dir");
+    let template_path = temp_dir.path();
+
+    let manifest_content = r#"{"name": "partial-template"}"#;
+    fs::write(template_path.join("template.json"), manifest_content).unwrap();
+
+    // WHEN: We parse the manifest
+    let result = parse_template_manifest(template_path);
+
+    // THEN: Parsing should succeed with partial data
+    assert!(result.is_ok());
+    let manifest = result.unwrap().unwrap();
+    assert_eq!(manifest.name, Some("partial-template".to_string()));
+    assert!(manifest.engine.is_none());
+    assert!(manifest.description.is_none());
+}
+
+#[test]
+fn test_p1_parse_template_manifest_invalid_json() {
+    use am::common::utils::parse_template_manifest;
+    use std::fs;
+    use tempfile::tempdir;
+
+    // GIVEN: A manifest with invalid JSON
+    let temp_dir = tempdir().expect("Failed to create temp dir");
+    let template_path = temp_dir.path();
+
+    fs::write(template_path.join("template.json"), "not valid json {").unwrap();
+
+    // WHEN: We parse the manifest
+    let result = parse_template_manifest(template_path);
+
+    // THEN: Parsing should fail
+    assert!(result.is_err(), "Invalid JSON should fail parsing");
+}
+
+#[test]
+fn test_p2_validate_template_directory_with_manifest() {
+    use am::common::utils::validate_template_directory;
+    use std::fs;
+    use tempfile::tempdir;
+
+    // GIVEN: A valid template with manifest
+    let temp_dir = tempdir().expect("Failed to create temp dir");
+    let template_path = temp_dir.path();
+
+    fs::write(
+        template_path.join(".amproject"),
+        r#"{"name":"test","version":1}"#,
+    )
+    .unwrap();
+    fs::write(template_path.join("test.buses.json"), "{}").unwrap();
+    fs::write(template_path.join("test.config.json"), "{}").unwrap();
+    fs::write(
+        template_path.join("template.json"),
+        r#"{"name":"manifest-name","engine":"unreal"}"#,
+    )
+    .unwrap();
+
+    // WHEN: We validate the directory
+    let result = validate_template_directory(template_path);
+
+    // THEN: Validation should succeed and include manifest
+    assert!(result.is_ok());
+    let validation = result.unwrap();
+    assert!(validation.manifest.is_some());
+    let manifest = validation.manifest.unwrap();
+    assert_eq!(manifest.name, Some("manifest-name".to_string()));
+    assert_eq!(manifest.engine, Some("unreal".to_string()));
+}
+
+// =============================================================================
+// Shared Name Validation Tests
+// =============================================================================
+
+#[test]
+fn test_p0_validate_template_name_valid_names() {
+    use am::common::utils::validate_template_name;
+
+    // Valid template names
+    assert!(validate_template_name("my-template").is_ok());
+    assert!(validate_template_name("my_template").is_ok());
+    assert!(validate_template_name("MyTemplate").is_ok());
+    assert!(validate_template_name("template123").is_ok());
+    assert!(validate_template_name("a").is_ok());
+}
+
+#[test]
+fn test_p0_validate_template_name_rejects_spaces() {
+    use am::common::utils::validate_template_name;
+
+    // Spaces aren't allowed in template names
+    let result = validate_template_name("my template");
+    assert!(result.is_err());
+    assert!(result.unwrap_err().contains("alphanumeric"));
+}
+
+#[test]
+fn test_p0_validate_template_name_rejects_special_chars() {
+    use am::common::utils::validate_template_name;
+
+    // Special characters aren't allowed
+    assert!(validate_template_name("my@template").is_err());
+    assert!(validate_template_name("my!template").is_err());
+    assert!(validate_template_name("my<template>").is_err());
+    assert!(validate_template_name("template/path").is_err());
+    assert!(validate_template_name("template.name").is_err());
+}
+
+#[test]
+fn test_p0_validate_template_name_rejects_empty() {
+    use am::common::utils::validate_template_name;
+
+    // Empty names aren't allowed
+    assert!(validate_template_name("").is_err());
+    assert!(validate_template_name("   ").is_err());
+}
+
+#[test]
+fn test_p1_validate_project_name_allows_spaces() {
+    use am::common::utils::validate_project_name;
+
+    // Project names allow spaces (they get normalized later)
+    assert!(validate_project_name("my project").is_ok());
+    assert!(validate_project_name("My Project Name").is_ok());
+}
+
+#[test]
+fn test_p1_validate_project_name_rejects_special_chars() {
+    use am::common::utils::validate_project_name;
+
+    // Special characters still aren't allowed
+    assert!(validate_project_name("my@project").is_err());
+    assert!(validate_project_name("project!").is_err());
+}

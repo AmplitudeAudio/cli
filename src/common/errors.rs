@@ -61,6 +61,15 @@ pub mod codes {
     /// Template not found (neither embedded nor registered)
     pub const ERR_TEMPLATE_NOT_FOUND: i32 = -29005;
 
+    /// Template with the same name already exists
+    pub const ERR_TEMPLATE_NAME_CONFLICT: i32 = -29006;
+
+    /// Template directory is invalid (missing required files)
+    pub const ERR_INVALID_TEMPLATE_STRUCTURE: i32 = -29007;
+
+    /// Template operation isn't allowed (e.g., unregistering embedded templates)
+    pub const ERR_TEMPLATE_OPERATION_NOT_ALLOWED: i32 = -29008;
+
     // =========================================================================
     // SDK errors (-28xxx)
     // =========================================================================
@@ -185,6 +194,9 @@ pub fn error_type_name(code: i32) -> String {
         codes::ERR_PROJECT_ALREADY_EXISTS => "project_already_exists".to_string(),
         codes::ERR_TEMPLATE_COPY_FAILED => "template_copy_failed".to_string(),
         codes::ERR_TEMPLATE_NOT_FOUND => "template_not_found".to_string(),
+        codes::ERR_TEMPLATE_NAME_CONFLICT => "template_name_conflict".to_string(),
+        codes::ERR_INVALID_TEMPLATE_STRUCTURE => "invalid_template_structure".to_string(),
+        codes::ERR_TEMPLATE_OPERATION_NOT_ALLOWED => "template_operation_not_allowed".to_string(),
         -29999..=-29000 => "project_error".to_string(),
 
         // SDK errors (-28xxx)
@@ -217,6 +229,16 @@ pub fn error_suggestion(code: i32) -> String {
         }
         codes::ERR_TEMPLATE_NOT_FOUND => {
             "Use 'am template list' to see available templates".to_string()
+        }
+        codes::ERR_TEMPLATE_NAME_CONFLICT => {
+            "Use a different name or --force to overwrite the existing template".to_string()
+        }
+        codes::ERR_INVALID_TEMPLATE_STRUCTURE => {
+            "Ensure template directory contains .amproject, *.buses.json, and *.config.json"
+                .to_string()
+        }
+        codes::ERR_TEMPLATE_OPERATION_NOT_ALLOWED => {
+            "Embedded templates are bundled with the CLI and cannot be removed".to_string()
         }
 
         // Specific SDK errors

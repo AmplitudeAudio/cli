@@ -8,9 +8,74 @@ use std::fs;
 use std::path::Path;
 
 use anyhow::Context;
+use serde::{Deserialize, Serialize};
 
-use crate::common::errors::project_not_initialized;
+use crate::common::errors::{CliError, codes, project_not_initialized};
 use crate::database::entities::ProjectConfiguration;
+
+// =============================================================================
+// Name Validation Utilities
+// =============================================================================
+
+/// Validate a name for use as a project or template identifier.
+///
+/// Names must:
+/// - Not be empty (after trimming whitespace)
+/// - Only contain alphanumeric characters, hyphens, underscores, and optionally spaces
+///
+/// # Arguments
+/// * `name` - The name to validate
+/// * `allow_spaces` - Whether spaces are allowed (projects allow spaces, templates don't)
+/// * `entity_type` - The type of entity being validated (for error messages)
+///
+/// # Returns
+/// * `Ok(())` if valid
+/// * `Err(String)` with error message if invalid
+pub fn validate_name(name: &str, allow_spaces: bool, entity_type: &str) -> Result<(), String> {
+    let trimmed = name.trim();
+
+    if trimmed.is_empty() {
+        return Err(format!("{} name is required", entity_type));
+    }
+
+    let invalid_char = if allow_spaces {
+        trimmed
+            .chars()
+            .any(|c| !c.is_alphanumeric() && c != '_' && c != '-' && c != ' ')
+    } else {
+        trimmed
+            .chars()
+            .any(|c| !c.is_alphanumeric() && c != '_' && c != '-')
+    };
+
+    if invalid_char {
+        let allowed = if allow_spaces {
+            "alphanumeric characters, underscores, hyphens, and spaces"
+        } else {
+            "alphanumeric characters, underscores, and hyphens"
+        };
+        return Err(format!(
+            "The {} name must only contain {}.",
+            entity_type, allowed
+        ));
+    }
+
+    Ok(())
+}
+
+/// Validate a project name (allows spaces).
+///
+/// This is a convenience wrapper around `validate_name` for projects.
+pub fn validate_project_name(name: &str) -> Result<(), String> {
+    validate_name(name, true, "project")
+}
+
+/// Validate a template name (no spaces allowed).
+///
+/// This is a convenience wrapper around `validate_name` for templates.
+pub fn validate_template_name(name: &str) -> Result<(), String> {
+    validate_name(name, false, "template")
+}
 
 /// Asset type directory names within a project's sources folder.
 pub const ASSET_DIR_ATTENUATORS: &str = "attenuators";
@@ -132,4 +197,182 @@ pub fn count_assets_by_type(project_path: &Path) -> anyhow::Result<HashMap<Strin
     }
 
     Ok(counts)
+}
+
+// =============================================================================
+// Template Validation Utilities
+// =============================================================================
+
+/// Template manifest structure parsed from `template.json`.
+///
+/// The manifest is optional - templates can be registered without one.
+/// When present, it provides metadata for the template.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct TemplateManifest {
+    /// Template name (used if not provided via CLI flag)
+    #[serde(default)]
+    pub name: Option<String>,
+
+    /// Target game engine (e.g., "generic", "o3de", "unreal")
+    #[serde(default)]
+    pub engine: Option<String>,
+
+    /// Human-readable description of the template
+    #[serde(default)]
+    pub description: Option<String>,
+}
+
+/// Result of template directory validation.
+#[derive(Debug)]
+pub struct TemplateValidationResult {
+    /// Parsed manifest if `template.json` exists
+    pub manifest: Option<TemplateManifest>,
+
+    /// List of files found in the template
+    pub files: Vec<String>,
+}
+
+/// Validate that a directory is a valid template structure.
+///
+/// A valid template must contain:
+/// - `.amproject` file (project configuration)
+/// - At least one `*.buses.json` file
+/// - At least one `*.config.json` file
+///
+/// # Arguments
+/// * `path` - Path to the template directory
+///
+/// # Returns
+/// * `Ok(TemplateValidationResult)` - Template is valid with optional manifest
+/// * `Err` - Template is invalid with structured error explaining what's missing
+pub fn validate_template_directory(path: &Path) -> anyhow::Result<TemplateValidationResult> {
+    // Check path exists and is a directory
+    if !path.exists() {
+        return Err(CliError::new(
+            codes::ERR_INVALID_TEMPLATE_STRUCTURE,
+            format!("Template path '{}' does not exist", path.display()),
+            "The specified path does not exist on the filesystem",
+        )
+        .with_suggestion("Verify the path is correct and the directory exists")
+        .into());
+    }
+
+    if !path.is_dir() {
+        return Err(CliError::new(
+            codes::ERR_INVALID_TEMPLATE_STRUCTURE,
+            format!("'{}' is not a directory", path.display()),
+            "Templates must be directories, not files",
+        )
+        .with_suggestion("Provide a path to a template directory")
+        .into());
+    }
+
+    // Collect all files in the template (for reporting)
+    let mut files = Vec::new();
+    let mut has_amproject = false;
+    let mut has_buses_json = false;
+    let mut has_config_json = false;
+
+    // Scan directory for required files
+    for entry in fs::read_dir(path)? {
+        let entry = entry?;
+        let file_name = entry.file_name().to_string_lossy().to_string();
+
+        if entry.file_type()?.is_file() {
+            files.push(file_name.clone());
+
+            // Check for required files
+            if file_name == ".amproject" {
+                has_amproject = true;
+                // Validate that .amproject is valid JSON
+                let amproject_path = path.join(".amproject");
+                let content = fs::read_to_string(&amproject_path).with_context(|| {
+                    format!(
+                        "Failed to read .amproject file at {}",
+                        amproject_path.display()
+                    )
+                })?;
+                // Try to parse as JSON to validate structure
+                let _: serde_json::Value = serde_json::from_str(&content).map_err(|e| {
+                    CliError::new(
+                        codes::ERR_INVALID_TEMPLATE_STRUCTURE,
+                        format!(".amproject file contains invalid JSON: {}", e),
+                        "The .amproject file must be valid JSON",
+                    )
+                    .with_suggestion("Fix the JSON syntax in the .amproject file")
+                })?;
+            } else if file_name.ends_with(".buses.json") {
+                has_buses_json = true;
+            } else if file_name.ends_with(".config.json") {
+                has_config_json = true;
+            }
+        } else if entry.file_type()?.is_dir() {
+            files.push(format!("{}/", file_name));
+        }
+    }
+
+    files.sort();
+
+    // Build list of missing requirements
+    let mut missing = Vec::new();
+    if !has_amproject {
+        missing.push(".amproject");
+    }
+    if !has_buses_json {
+        missing.push("*.buses.json");
+    }
+    if !has_config_json {
+        missing.push("*.config.json");
+    }
+
+    if !missing.is_empty() {
+        return Err(CliError::new(
+            codes::ERR_INVALID_TEMPLATE_STRUCTURE,
+            format!(
+                "Template directory missing required file(s): {}",
+                missing.join(", ")
+            ),
+            "A valid template must contain .amproject, *.buses.json, and *.config.json",
+        )
+        .with_suggestion("Ensure template directory contains all required files")
+        .into());
+    }
+
+    // Parse optional manifest
+    let manifest = parse_template_manifest(path)?;
+
+    Ok(TemplateValidationResult { manifest, files })
+}
+
+/// Parse the optional `template.json` manifest from a template directory.
+///
+/// # Arguments
+/// * `path` - Path to the template directory
+///
+/// # Returns
+/// * `Ok(Some(TemplateManifest))` - Manifest found and parsed successfully
+/// * `Ok(None)` - No manifest file present (this is valid)
+/// * `Err` - Manifest exists but is invalid JSON
+pub fn parse_template_manifest(path: &Path) -> anyhow::Result<Option<TemplateManifest>> {
+    let manifest_path = path.join("template.json");
+
+    if !manifest_path.exists() {
+        return Ok(None);
+    }
+
+    let content = fs::read_to_string(&manifest_path).with_context(|| {
+        format!(
+            "Failed to read template manifest at {}",
+            manifest_path.display()
+        )
+    })?;
+
+    let manifest: TemplateManifest = serde_json::from_str(&content).with_context(|| {
+        format!(
+            "Failed to parse template manifest at {}",
+            manifest_path.display()
+        )
+    })?;
+
+    Ok(Some(manifest))
 }

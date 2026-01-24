@@ -186,3 +186,56 @@ pub fn db_get_project_by_path(
 
     Ok(results.first().cloned())
 }
+
+/// Inserts a new template into the database.
+///
+/// # Arguments
+/// * `template` - The template to insert
+/// * `database` - Database connection
+///
+/// # Returns
+/// * `Ok(true)` - Template was inserted successfully
+/// * `Err` - Database error occurred
+pub fn db_create_template(template: &Template, database: Option<Arc<Database>>) -> Result<bool> {
+    let db = database.as_ref().context(ERR_DATABASE_NOT_AVAILABLE)?;
+
+    let conn = db.get_connection();
+    let conn = conn
+        .lock()
+        .map_err(|e| anyhow::anyhow!("Failed to acquire database lock: {}", e))?;
+
+    conn.execute(
+        "INSERT INTO templates (name, path, engine, description) VALUES (?1, ?2, ?3, ?4)",
+        rusqlite::params![
+            template.name,
+            template.path,
+            template.engine,
+            template.description,
+        ],
+    )?;
+
+    Ok(true)
+}
+
+/// Delete a template by name from the database.
+///
+/// # Arguments
+/// * `name` - Name of the template to delete
+/// * `database` - Database connection
+///
+/// # Returns
+/// * `Ok(true)` - Template was deleted (row existed)
+/// * `Ok(false)` - No template with that name existed
+/// * `Err` - Database error occurred
+pub fn db_delete_template_by_name(name: &str, database: Option<Arc<Database>>) -> Result<bool> {
+    let db = database.as_ref().context(ERR_DATABASE_NOT_AVAILABLE)?;
+
+    let conn = db.get_connection();
+    let conn = conn
+        .lock()
+        .map_err(|e| anyhow::anyhow!("Failed to acquire database lock: {}", e))?;
+
+    let rows_affected = conn.execute("DELETE FROM templates WHERE name = ?1", [name])?;
+
+    Ok(rows_affected > 0)
+}

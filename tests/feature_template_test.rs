@@ -6,8 +6,9 @@
 use am::commands::template::{TemplateCommands, handler};
 use am::database::entities::TemplateSource;
 use am::database::{Database, db_get_templates};
-use am::input::NonInteractiveInput;
+use am::input::{Input, NonInteractiveInput};
 use am::presentation::{Output, OutputMode, create_output};
+use inquire::validator::Validation;
 use serde_json::Value;
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -21,6 +22,27 @@ async fn setup_test_database() -> (Arc<Database>, tempfile::TempDir) {
     let mut db = Database::new(&db_path).expect("Failed to create database");
     db.run_migrations().await.expect("Failed to run migrations");
     (Arc::new(db), temp_dir)
+}
+
+fn test_home_dir() -> &'static str {
+    thread_local! {
+        static TEST_HOME: RefCell<Option<&'static str>> = const { RefCell::new(None) };
+    }
+
+    TEST_HOME.with(|cell| {
+        let mut home = cell.borrow_mut();
+        if let Some(path) = *home {
+            return path;
+        }
+
+        let temp_dir = tempfile::tempdir().expect("Failed to create test home dir");
+        let path = temp_dir.path().to_string_lossy().to_string();
+        std::mem::forget(temp_dir);
+
+        let leaked: &'static str = Box::leak(path.into_boxed_str());
+        *home = Some(leaked);
+        leaked
+    })
 }
 
 /// A capturing Output implementation for testing handler output.
@@ -81,6 +103,46 @@ impl Output for CaptureOutput {
 // Safety: CaptureOutput is only used in single-threaded tests
 unsafe impl Send for CaptureOutput {}
 unsafe impl Sync for CaptureOutput {}
+
+/// Mock input that returns a predetermined value for confirmation.
+///
+/// Used to test the cancellation path where user declines the confirmation prompt.
+struct MockInput {
+    confirm_response: bool,
+}
+
+impl MockInput {
+    /// Create a mock input that will return the specified value for confirm().
+    fn with_confirm_response(response: bool) -> Self {
+        Self {
+            confirm_response: response,
+        }
+    }
+}
+
+impl Input for MockInput {
+    fn prompt_text(
+        &self,
+        prompt: &str,
+        _placeholder: Option<&str>,
+        _formatter: Option<&dyn Fn(&str) -> String>,
+        _validator: Option<&dyn Fn(&str) -> anyhow::Result<Validation, inquire::CustomUserError>>,
+    ) -> anyhow::Result<String> {
+        Err(anyhow::anyhow!("MockInput: prompt_text not implemented for '{}'", prompt))
+    }
+
+    fn select(&self, prompt: &str, _options: &[String]) -> anyhow::Result<String> {
+        Err(anyhow::anyhow!("MockInput: select not implemented for '{}'", prompt))
+    }
+
+    fn confirm(&self, _prompt: &str, _default: Option<bool>) -> anyhow::Result<bool> {
+        Ok(self.confirm_response)
+    }
+}
+
+// Safety: MockInput is only used in single-threaded tests
+unsafe impl Send for MockInput {}
+unsafe impl Sync for MockInput {}
 
 // =============================================================================
 // Template List Database Tests
@@ -1198,6 +1260,7 @@ fn test_p0_template_info_cli_json_stdout_envelope_success() {
     // GIVEN: The actual CLI binary
     // WHEN: Running `am --json template info default`
     let output = Command::new(env!("CARGO_BIN_EXE_am"))
+        .env("HOME", test_home_dir())
         .args(["--json", "template", "info", "default"])
         .output()
         .expect("Failed to execute command");
@@ -1254,6 +1317,7 @@ fn test_p0_template_info_cli_json_stdout_envelope_error() {
     // GIVEN: The actual CLI binary
     // WHEN: Running `am --json template info nonexistent`
     let output = Command::new(env!("CARGO_BIN_EXE_am"))
+        .env("HOME", test_home_dir())
         .args(["--json", "template", "info", "nonexistent"])
         .output()
         .expect("Failed to execute command");
@@ -1315,6 +1379,7 @@ fn test_p1_template_list_cli_json_stdout_envelope() {
     // GIVEN: The actual CLI binary
     // WHEN: Running `am --json template list`
     let output = Command::new(env!("CARGO_BIN_EXE_am"))
+        .env("HOME", test_home_dir())
         .args(["--json", "template", "list"])
         .output()
         .expect("Failed to execute command");
@@ -1344,4 +1409,1345 @@ fn test_p1_template_list_cli_json_stdout_envelope() {
     let first = &templates[0];
     assert_eq!(first["name"], "default");
     assert_eq!(first["source"], "embedded");
+}
+
+// =============================================================================
+// Template Register Handler Tests (Story 1b.5)
+// =============================================================================
+
+#[tokio::test]
+async fn test_p0_template_register_valid_template() {
+    use am::commands::template::{TemplateCommands, handler};
+    use am::input::NonInteractiveInput;
+
+    // GIVEN: A valid template directory
+    let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
+    let template_path = temp_dir.path().join("my-template");
+    std::fs::create_dir_all(&template_path).unwrap();
+
+    // Create required files
+    std::fs::write(
+        template_path.join(".amproject"),
+        r#"{"name":"test","version":1}"#,
+    )
+    .unwrap();
+    std::fs::write(template_path.join("test.buses.json"), "{}").unwrap();
+    std::fs::write(template_path.join("test.config.json"), "{}").unwrap();
+
+    // Set up database
+    let (db_arc, _db_temp_dir) = setup_test_database().await;
+    let output = CaptureOutput::new(OutputMode::Json);
+    let input = NonInteractiveInput::new();
+
+    let command = TemplateCommands::Register {
+        path: template_path.to_str().unwrap().to_string(),
+        name: Some("my-custom-template".to_string()),
+        force: false,
+    };
+
+    // WHEN: We call the handler
+    let result = handler(&command, Some(db_arc.clone()), &input, &output).await;
+
+    // THEN: Handler should succeed
+    assert!(result.is_ok(), "Handler should succeed: {:?}", result.err());
+
+    // AND: Output should confirm registration
+    let success_data = output.last_success().expect("Should have success output");
+    assert_eq!(success_data["name"], "my-custom-template");
+    assert_eq!(success_data["source"], "custom");
+
+    // AND: Template should be in database
+    let template = am::database::db_get_template_by_name("my-custom-template", Some(db_arc))
+        .unwrap()
+        .expect("Template should be in database");
+    assert_eq!(template.name, "my-custom-template");
+}
+
+#[tokio::test]
+async fn test_p0_template_register_invalid_structure() {
+    use am::commands::template::{TemplateCommands, handler};
+    use am::input::NonInteractiveInput;
+
+    // GIVEN: An invalid template directory (missing required files)
+    let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
+    let template_path = temp_dir.path().join("invalid-template");
+    std::fs::create_dir_all(&template_path).unwrap();
+    // Only create partial files - missing .amproject
+    std::fs::write(template_path.join("test.buses.json"), "{}").unwrap();
+
+    let (db_arc, _db_temp_dir) = setup_test_database().await;
+    let output = CaptureOutput::new(OutputMode::Json);
+    let input = NonInteractiveInput::new();
+
+    let command = TemplateCommands::Register {
+        path: template_path.to_str().unwrap().to_string(),
+        name: Some("invalid-template".to_string()),
+        force: false,
+    };
+
+    // WHEN: We call the handler
+    let result = handler(&command, Some(db_arc), &input, &output).await;
+
+    // THEN: Handler should fail with validation error
+    assert!(result.is_err(), "Handler should fail for invalid template");
+    let err = result.unwrap_err();
+    let cli_err = err
+        .downcast_ref::<am::common::errors::CliError>()
+        .expect("Error should be a CliError");
+    assert_eq!(cli_err.code, -29007); // ERR_INVALID_TEMPLATE_STRUCTURE
+}
+
+#[tokio::test]
+async fn test_p0_template_register_nonexistent_path() {
+    use am::commands::template::{TemplateCommands, handler};
+    use am::input::NonInteractiveInput;
+
+    // GIVEN: A path that doesn't exist
+    let (db_arc, _db_temp_dir) = setup_test_database().await;
+    let output = CaptureOutput::new(OutputMode::Json);
+    let input = NonInteractiveInput::new();
+
+    let command = TemplateCommands::Register {
+        path: "/nonexistent/template/path".to_string(),
+        name: Some("ghost-template".to_string()),
+        force: false,
+    };
+
+    // WHEN: We call the handler
+    let result = handler(&command, Some(db_arc), &input, &output).await;
+
+    // THEN: Handler should fail with path not found error
+    assert!(result.is_err(), "Handler should fail for nonexistent path");
+}
+
+#[tokio::test]
+async fn test_p0_template_register_name_conflict_without_force() {
+    use am::commands::template::{TemplateCommands, handler};
+    use am::input::NonInteractiveInput;
+
+    // GIVEN: A valid template directory
+    let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
+    let template_path = temp_dir.path().join("conflict-template");
+    std::fs::create_dir_all(&template_path).unwrap();
+
+    std::fs::write(
+        template_path.join(".amproject"),
+        r#"{"name":"test","version":1}"#,
+    )
+    .unwrap();
+    std::fs::write(template_path.join("test.buses.json"), "{}").unwrap();
+    std::fs::write(template_path.join("test.config.json"), "{}").unwrap();
+
+    // Set up database and pre-register a template with same name
+    let (db_arc, _db_temp_dir) = setup_test_database().await;
+    {
+        let conn = db_arc.get_connection();
+        let conn = conn.lock().unwrap();
+        conn.execute(
+            "INSERT INTO templates (name, path, engine, description) VALUES (?1, ?2, ?3, ?4)",
+            rusqlite::params!["existing-template", "/old/path", "generic", "Existing"],
+        )
+        .unwrap();
+    }
+
+    let output = CaptureOutput::new(OutputMode::Json);
+    let input = NonInteractiveInput::new();
+
+    let command = TemplateCommands::Register {
+        path: template_path.to_str().unwrap().to_string(),
+        name: Some("existing-template".to_string()), // Same name as existing
+        force: false,
+    };
+
+    // WHEN: We call the handler
+    let result = handler(&command, Some(db_arc), &input, &output).await;
+
+    // THEN: Handler should fail with name conflict error
+    assert!(result.is_err(), "Handler should fail for name conflict");
+    let err = result.unwrap_err();
+    let cli_err = err.downcast_ref::<am::common::errors::CliError>().unwrap();
+    assert_eq!(cli_err.code, -29006); // ERR_TEMPLATE_NAME_CONFLICT
+    assert!(cli_err.suggestion.contains("--force"));
+}
+
+#[tokio::test]
+async fn test_p0_template_register_name_conflict_with_force() {
+    use am::commands::template::{TemplateCommands, handler};
+    use am::input::NonInteractiveInput;
+
+    // GIVEN: A valid template directory
+    let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
+    let template_path = temp_dir.path().join("force-template");
+    std::fs::create_dir_all(&template_path).unwrap();
+
+    std::fs::write(
+        template_path.join(".amproject"),
+        r#"{"name":"test","version":1}"#,
+    )
+    .unwrap();
+    std::fs::write(template_path.join("test.buses.json"), "{}").unwrap();
+    std::fs::write(template_path.join("test.config.json"), "{}").unwrap();
+
+    // Set up database with existing template
+    let (db_arc, _db_temp_dir) = setup_test_database().await;
+    {
+        let conn = db_arc.get_connection();
+        let conn = conn.lock().unwrap();
+        conn.execute(
+            "INSERT INTO templates (name, path, engine, description) VALUES (?1, ?2, ?3, ?4)",
+            rusqlite::params!["overwrite-me", "/old/path", "generic", "Old template"],
+        )
+        .unwrap();
+    }
+
+    let output = CaptureOutput::new(OutputMode::Json);
+    let input = NonInteractiveInput::new();
+
+    let command = TemplateCommands::Register {
+        path: template_path.to_str().unwrap().to_string(),
+        name: Some("overwrite-me".to_string()),
+        force: true, // Use --force
+    };
+
+    // WHEN: We call the handler
+    let result = handler(&command, Some(db_arc.clone()), &input, &output).await;
+
+    // THEN: Handler should succeed (overwrites existing)
+    assert!(result.is_ok(), "Handler should succeed with --force");
+
+    // AND: Template path should be updated
+    let template = am::database::db_get_template_by_name("overwrite-me", Some(db_arc))
+        .unwrap()
+        .expect("Template should exist");
+    assert!(template.path.contains("force-template"));
+}
+
+#[tokio::test]
+async fn test_p0_template_register_cannot_overwrite_embedded() {
+    use am::commands::template::{TemplateCommands, handler};
+    use am::input::NonInteractiveInput;
+
+    // GIVEN: A valid template directory
+    let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
+    let template_path = temp_dir.path().join("fake-default");
+    std::fs::create_dir_all(&template_path).unwrap();
+
+    std::fs::write(
+        template_path.join(".amproject"),
+        r#"{"name":"test","version":1}"#,
+    )
+    .unwrap();
+    std::fs::write(template_path.join("test.buses.json"), "{}").unwrap();
+    std::fs::write(template_path.join("test.config.json"), "{}").unwrap();
+
+    let (db_arc, _db_temp_dir) = setup_test_database().await;
+    let output = CaptureOutput::new(OutputMode::Json);
+    let input = NonInteractiveInput::new();
+
+    let command = TemplateCommands::Register {
+        path: template_path.to_str().unwrap().to_string(),
+        name: Some("default".to_string()), // Try to overwrite embedded template
+        force: true,
+    };
+
+    // WHEN: We call the handler
+    let result = handler(&command, Some(db_arc), &input, &output).await;
+
+    // THEN: Handler should fail - cannot overwrite embedded
+    assert!(
+        result.is_err(),
+        "Handler should fail for embedded template name"
+    );
+    let err = result.unwrap_err();
+    let cli_err = err.downcast_ref::<am::common::errors::CliError>().unwrap();
+    assert_eq!(cli_err.code, -29006); // ERR_TEMPLATE_NAME_CONFLICT
+    assert!(cli_err.why.contains("built-in") || cli_err.why.contains("embedded"));
+}
+
+#[tokio::test]
+async fn test_p1_template_register_uses_manifest_name() {
+    use am::commands::template::{TemplateCommands, handler};
+    use am::input::NonInteractiveInput;
+
+    // GIVEN: A template with manifest containing name
+    let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
+    let template_path = temp_dir.path().join("manifest-template");
+    std::fs::create_dir_all(&template_path).unwrap();
+
+    std::fs::write(
+        template_path.join(".amproject"),
+        r#"{"name":"test","version":1}"#,
+    )
+    .unwrap();
+    std::fs::write(template_path.join("test.buses.json"), "{}").unwrap();
+    std::fs::write(template_path.join("test.config.json"), "{}").unwrap();
+    std::fs::write(
+        template_path.join("template.json"),
+        r#"{"name":"manifest-name","engine":"o3de","description":"From manifest"}"#,
+    )
+    .unwrap();
+
+    let (db_arc, _db_temp_dir) = setup_test_database().await;
+    let output = CaptureOutput::new(OutputMode::Json);
+    let input = NonInteractiveInput::new();
+
+    let command = TemplateCommands::Register {
+        path: template_path.to_str().unwrap().to_string(),
+        name: None, // No --name flag, should use manifest
+        force: false,
+    };
+
+    // WHEN: We call the handler
+    let result = handler(&command, Some(db_arc.clone()), &input, &output).await;
+
+    // THEN: Handler should succeed using manifest name
+    assert!(result.is_ok(), "Handler should succeed: {:?}", result.err());
+
+    let success_data = output.last_success().unwrap();
+    assert_eq!(success_data["name"], "manifest-name");
+    assert_eq!(success_data["engine"], "o3de");
+}
+
+#[tokio::test]
+async fn test_p1_template_register_cli_flag_overrides_manifest() {
+    use am::commands::template::{TemplateCommands, handler};
+    use am::input::NonInteractiveInput;
+
+    // GIVEN: A template with manifest containing name, but CLI provides different name
+    let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
+    let template_path = temp_dir.path().join("override-template");
+    std::fs::create_dir_all(&template_path).unwrap();
+
+    std::fs::write(
+        template_path.join(".amproject"),
+        r#"{"name":"test","version":1}"#,
+    )
+    .unwrap();
+    std::fs::write(template_path.join("test.buses.json"), "{}").unwrap();
+    std::fs::write(template_path.join("test.config.json"), "{}").unwrap();
+    std::fs::write(
+        template_path.join("template.json"),
+        r#"{"name":"manifest-name"}"#,
+    )
+    .unwrap();
+
+    let (db_arc, _db_temp_dir) = setup_test_database().await;
+    let output = CaptureOutput::new(OutputMode::Json);
+    let input = NonInteractiveInput::new();
+
+    let command = TemplateCommands::Register {
+        path: template_path.to_str().unwrap().to_string(),
+        name: Some("cli-override-name".to_string()), // CLI flag should take priority
+        force: false,
+    };
+
+    // WHEN: We call the handler
+    let result = handler(&command, Some(db_arc.clone()), &input, &output).await;
+
+    // THEN: Handler should use CLI name, not manifest
+    assert!(result.is_ok());
+    let success_data = output.last_success().unwrap();
+    assert_eq!(success_data["name"], "cli-override-name");
+}
+
+#[tokio::test]
+async fn test_p1_template_register_non_interactive_requires_name() {
+    use am::commands::template::{TemplateCommands, handler};
+    use am::input::NonInteractiveInput;
+
+    // GIVEN: A template without manifest name, in non-interactive mode
+    let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
+    let template_path = temp_dir.path().join("no-name-template");
+    std::fs::create_dir_all(&template_path).unwrap();
+
+    std::fs::write(
+        template_path.join(".amproject"),
+        r#"{"name":"test","version":1}"#,
+    )
+    .unwrap();
+    std::fs::write(template_path.join("test.buses.json"), "{}").unwrap();
+    std::fs::write(template_path.join("test.config.json"), "{}").unwrap();
+    // No template.json manifest
+
+    let (db_arc, _db_temp_dir) = setup_test_database().await;
+    let output = CaptureOutput::new(OutputMode::Json); // JSON mode = non-interactive
+    let input = NonInteractiveInput::new();
+
+    let command = TemplateCommands::Register {
+        path: template_path.to_str().unwrap().to_string(),
+        name: None, // No name provided
+        force: false,
+    };
+
+    // WHEN: We call the handler
+    let result = handler(&command, Some(db_arc), &input, &output).await;
+
+    // THEN: Handler should fail requiring --name flag
+    assert!(
+        result.is_err(),
+        "Should fail without name in non-interactive"
+    );
+    let err = result.unwrap_err();
+    let cli_err = err.downcast_ref::<am::common::errors::CliError>().unwrap();
+    assert!(cli_err.suggestion.contains("--name"));
+}
+
+// =============================================================================
+// Template Register CLI Integration Tests (Story 1b.5)
+// =============================================================================
+
+#[test]
+fn test_p0_template_register_cli_json_success() {
+    use std::process::Command;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    // Generate unique template name to avoid conflicts with previous test runs
+    let timestamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+    let template_name = format!("cli-test-{}", timestamp);
+
+    // GIVEN: A valid template directory
+    let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
+    let template_path = temp_dir.path().join("cli-test-template");
+    std::fs::create_dir_all(&template_path).unwrap();
+
+    std::fs::write(
+        template_path.join(".amproject"),
+        r#"{"name":"test","version":1}"#,
+    )
+    .unwrap();
+    std::fs::write(template_path.join("test.buses.json"), "{}").unwrap();
+    std::fs::write(template_path.join("test.config.json"), "{}").unwrap();
+
+    // WHEN: Running `am --json template register <path> --name <name>`
+    let output = Command::new(env!("CARGO_BIN_EXE_am"))
+        .env("HOME", test_home_dir())
+        .args([
+            "--json",
+            "template",
+            "register",
+            template_path.to_str().unwrap(),
+            "--name",
+            &template_name,
+        ])
+        .output()
+        .expect("Failed to execute command");
+
+    // THEN: Exit code should be 0 (success)
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "Expected exit code 0. stderr: {}\nstdout: {}",
+        String::from_utf8_lossy(&output.stderr),
+        String::from_utf8_lossy(&output.stdout)
+    );
+
+    // AND: stdout should contain valid JSON with success envelope
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let json: serde_json::Value =
+        serde_json::from_str(&stdout).expect(&format!("Expected valid JSON, got: {}", stdout));
+
+    assert_eq!(json["ok"], true, "Expected ok=true");
+    assert_eq!(json["value"]["name"], template_name);
+    assert_eq!(json["value"]["source"], "custom");
+}
+
+#[test]
+fn test_p0_template_register_cli_json_invalid_path() {
+    use std::process::Command;
+
+    // WHEN: Running `am --json template register /nonexistent/path --name test`
+    let output = Command::new(env!("CARGO_BIN_EXE_am"))
+        .env("HOME", test_home_dir())
+        .args([
+            "--json",
+            "template",
+            "register",
+            "/nonexistent/template/path",
+            "--name",
+            "ghost",
+        ])
+        .output()
+        .expect("Failed to execute command");
+
+    // THEN: Exit code should be 1 (user error)
+    assert_eq!(
+        output.status.code(),
+        Some(1),
+        "Expected exit code 1 for invalid path"
+    );
+
+    // AND: stdout should contain error envelope
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let json: serde_json::Value = serde_json::from_str(&stdout).expect("Expected valid JSON");
+
+    assert_eq!(json["ok"], false, "Expected ok=false");
+    assert!(json["error"]["code"].as_i64().is_some());
+}
+
+#[test]
+fn test_p0_template_register_cli_json_missing_name() {
+    use std::process::Command;
+
+    // GIVEN: A valid template without manifest name
+    let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
+    let template_path = temp_dir.path().join("no-manifest-template");
+    std::fs::create_dir_all(&template_path).unwrap();
+
+    std::fs::write(
+        template_path.join(".amproject"),
+        r#"{"name":"test","version":1}"#,
+    )
+    .unwrap();
+    std::fs::write(template_path.join("test.buses.json"), "{}").unwrap();
+    std::fs::write(template_path.join("test.config.json"), "{}").unwrap();
+
+    // WHEN: Running without --name flag in JSON mode
+    let output = Command::new(env!("CARGO_BIN_EXE_am"))
+        .env("HOME", test_home_dir())
+        .args([
+            "--json",
+            "template",
+            "register",
+            template_path.to_str().unwrap(),
+        ])
+        .output()
+        .expect("Failed to execute command");
+
+    // THEN: Exit code should be 1 (user error - name required)
+    assert_eq!(
+        output.status.code(),
+        Some(1),
+        "Expected exit code 1 for missing name"
+    );
+
+    // AND: Error should mention --name flag
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let json: serde_json::Value = serde_json::from_str(&stdout).expect("Expected valid JSON");
+
+    assert_eq!(json["ok"], false);
+    assert!(
+        json["error"]["suggestion"]
+            .as_str()
+            .unwrap()
+            .contains("--name"),
+        "Suggestion should mention --name flag"
+    );
+}
+
+#[test]
+fn test_p0_template_register_cli_non_interactive_flag_requires_name() {
+    use std::process::Command;
+
+    // GIVEN: A valid template without manifest name
+    let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
+    let template_path = temp_dir.path().join("non-interactive-template");
+    std::fs::create_dir_all(&template_path).unwrap();
+
+    std::fs::write(
+        template_path.join(".amproject"),
+        r#"{"name":"test","version":1}"#,
+    )
+    .unwrap();
+    std::fs::write(template_path.join("test.buses.json"), "{}").unwrap();
+    std::fs::write(template_path.join("test.config.json"), "{}").unwrap();
+
+    // WHEN: Running with --non-interactive flag (NOT --json) without --name
+    let output = Command::new(env!("CARGO_BIN_EXE_am"))
+        .env("HOME", test_home_dir())
+        .args([
+            "--non-interactive",
+            "template",
+            "register",
+            template_path.to_str().unwrap(),
+        ])
+        .output()
+        .expect("Failed to execute command");
+
+    // THEN: Exit code should be non-zero (error)
+    assert_ne!(
+        output.status.code(),
+        Some(0),
+        "Expected non-zero exit for missing name in non-interactive mode"
+    );
+
+    // AND: Error output should mention --name flag
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let combined = format!("{}{}", stderr, stdout);
+    assert!(
+        combined.contains("--name") || combined.contains("name"),
+        "Error should mention --name flag. Got: {}",
+        combined
+    );
+}
+
+// =============================================================================
+// Template Unregister Handler Tests (Story 1b.6)
+// =============================================================================
+
+#[tokio::test]
+async fn test_p0_template_unregister_custom_template_success() {
+    use am::commands::template::{TemplateCommands, handler};
+    use am::input::NonInteractiveInput;
+
+    // GIVEN: A custom template registered in the database
+    let (db_arc, _db_temp_dir) = setup_test_database().await;
+    {
+        let conn = db_arc.get_connection();
+        let conn = conn.lock().unwrap();
+        conn.execute(
+            "INSERT INTO templates (name, path, engine, description) VALUES (?1, ?2, ?3, ?4)",
+            rusqlite::params![
+                "to-remove",
+                "/template/path",
+                "generic",
+                "Template to remove"
+            ],
+        )
+        .unwrap();
+    }
+
+    let output = CaptureOutput::new(OutputMode::Json);
+    let input = NonInteractiveInput::new();
+
+    let command = TemplateCommands::Unregister {
+        name: "to-remove".to_string(),
+        force: true, // Use force to bypass confirmation in non-interactive
+    };
+
+    // WHEN: We call the handler
+    let result = handler(&command, Some(db_arc.clone()), &input, &output).await;
+
+    // THEN: Handler should succeed
+    assert!(result.is_ok(), "Handler should succeed: {:?}", result.err());
+
+    // AND: Output should confirm removal
+    let success_data = output.last_success().expect("Should have success output");
+    assert_eq!(success_data["name"], "to-remove");
+    assert_eq!(success_data["removed"], true);
+
+    // AND: Template should be removed from database
+    let template = am::database::db_get_template_by_name("to-remove", Some(db_arc)).unwrap();
+    assert!(
+        template.is_none(),
+        "Template should be removed from database"
+    );
+}
+
+#[tokio::test]
+async fn test_p0_template_unregister_not_found_returns_error() {
+    use am::commands::template::{TemplateCommands, handler};
+    use am::input::NonInteractiveInput;
+
+    // GIVEN: A fresh database with no templates
+    let (db_arc, _db_temp_dir) = setup_test_database().await;
+    let output = CaptureOutput::new(OutputMode::Json);
+    let input = NonInteractiveInput::new();
+
+    let command = TemplateCommands::Unregister {
+        name: "nonexistent".to_string(),
+        force: true,
+    };
+
+    // WHEN: We call the handler
+    let result = handler(&command, Some(db_arc), &input, &output).await;
+
+    // THEN: Handler should fail with not found error
+    assert!(
+        result.is_err(),
+        "Handler should fail for nonexistent template"
+    );
+
+    let err = result.unwrap_err();
+    let cli_err = err
+        .downcast_ref::<am::common::errors::CliError>()
+        .expect("Error should be a CliError");
+
+    assert_eq!(cli_err.code, -29005); // ERR_TEMPLATE_NOT_FOUND
+    assert!(
+        cli_err.suggestion.contains("template list"),
+        "Suggestion should mention 'template list'"
+    );
+}
+
+#[tokio::test]
+async fn test_p0_template_unregister_embedded_template_returns_error() {
+    use am::commands::template::{TemplateCommands, handler};
+    use am::input::NonInteractiveInput;
+
+    // GIVEN: A fresh database
+    let (db_arc, _db_temp_dir) = setup_test_database().await;
+    let output = CaptureOutput::new(OutputMode::Json);
+    let input = NonInteractiveInput::new();
+
+    let command = TemplateCommands::Unregister {
+        name: "default".to_string(), // The embedded template
+        force: true,
+    };
+
+    // WHEN: We call the handler
+    let result = handler(&command, Some(db_arc), &input, &output).await;
+
+    // THEN: Handler should fail with operation not allowed error
+    assert!(result.is_err(), "Handler should fail for embedded template");
+
+    let err = result.unwrap_err();
+    let cli_err = err
+        .downcast_ref::<am::common::errors::CliError>()
+        .expect("Error should be a CliError");
+
+    assert_eq!(cli_err.code, -29008); // ERR_TEMPLATE_OPERATION_NOT_ALLOWED
+    assert!(
+        cli_err.suggestion.contains("embedded") || cli_err.suggestion.contains("bundled"),
+        "Suggestion should mention embedded templates"
+    );
+}
+
+#[tokio::test]
+async fn test_p0_template_unregister_non_interactive_requires_force() {
+    use am::commands::template::{TemplateCommands, handler};
+    use am::input::NonInteractiveInput;
+
+    // GIVEN: A custom template in the database
+    let (db_arc, _db_temp_dir) = setup_test_database().await;
+    {
+        let conn = db_arc.get_connection();
+        let conn = conn.lock().unwrap();
+        conn.execute(
+            "INSERT INTO templates (name, path, engine, description) VALUES (?1, ?2, ?3, ?4)",
+            rusqlite::params!["no-force-template", "/path", "generic", "Test"],
+        )
+        .unwrap();
+    }
+
+    let output = CaptureOutput::new(OutputMode::Json);
+    let input = NonInteractiveInput::new();
+
+    let command = TemplateCommands::Unregister {
+        name: "no-force-template".to_string(),
+        force: false, // No force flag
+    };
+
+    // WHEN: We call the handler in non-interactive mode without force
+    let result = handler(&command, Some(db_arc), &input, &output).await;
+
+    // THEN: Handler should fail requiring --force flag
+    assert!(
+        result.is_err(),
+        "Should fail without --force in non-interactive mode"
+    );
+
+    let err = result.unwrap_err();
+    let cli_err = err
+        .downcast_ref::<am::common::errors::CliError>()
+        .expect("Error should be a CliError");
+
+    assert!(
+        cli_err.suggestion.contains("--force"),
+        "Suggestion should mention --force flag"
+    );
+}
+
+#[tokio::test]
+async fn test_p0_template_unregister_json_output_format() {
+    use am::commands::template::{TemplateCommands, handler};
+    use am::input::NonInteractiveInput;
+
+    // GIVEN: A custom template in the database
+    let (db_arc, _db_temp_dir) = setup_test_database().await;
+    {
+        let conn = db_arc.get_connection();
+        let conn = conn.lock().unwrap();
+        conn.execute(
+            "INSERT INTO templates (name, path, engine, description) VALUES (?1, ?2, ?3, ?4)",
+            rusqlite::params!["json-test-template", "/path", "generic", "Test"],
+        )
+        .unwrap();
+    }
+
+    let output = CaptureOutput::new(OutputMode::Json);
+    let input = NonInteractiveInput::new();
+
+    let command = TemplateCommands::Unregister {
+        name: "json-test-template".to_string(),
+        force: true,
+    };
+
+    // WHEN: We call the handler
+    let result = handler(&command, Some(db_arc), &input, &output).await;
+
+    // THEN: Handler should succeed
+    assert!(result.is_ok());
+
+    // AND: JSON output should have correct format
+    let success_data = output.last_success().expect("Should have success output");
+    assert_eq!(success_data["name"], "json-test-template");
+    assert_eq!(success_data["removed"], true);
+    // Should NOT have "cancelled" field when successfully removed
+    assert!(success_data.get("cancelled").is_none() || success_data["cancelled"].is_null());
+}
+
+#[tokio::test]
+async fn test_p1_template_unregister_db_delete_returns_false_when_missing() {
+    // GIVEN: A fresh database with no templates
+    let (db_arc, _db_temp_dir) = setup_test_database().await;
+
+    // WHEN: We try to delete a non-existent template
+    let result = am::database::db_delete_template_by_name("nonexistent", Some(db_arc));
+
+    // THEN: Should return Ok(false) indicating no rows deleted
+    assert!(result.is_ok());
+    assert_eq!(
+        result.unwrap(),
+        false,
+        "Should return false when template doesn't exist"
+    );
+}
+
+// =============================================================================
+// Template Unregister CLI Integration Tests (Story 1b.6)
+// =============================================================================
+
+#[test]
+fn test_p0_template_unregister_cli_json_success() {
+    use std::process::Command;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    // Generate unique template name
+    let timestamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+    let template_name = format!("cli-unregister-{}", timestamp);
+
+    // GIVEN: First register a template
+    let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
+    let template_path = temp_dir.path().join("cli-unregister-template");
+    std::fs::create_dir_all(&template_path).unwrap();
+
+    std::fs::write(
+        template_path.join(".amproject"),
+        r#"{"name":"test","version":1}"#,
+    )
+    .unwrap();
+    std::fs::write(template_path.join("test.buses.json"), "{}").unwrap();
+    std::fs::write(template_path.join("test.config.json"), "{}").unwrap();
+
+    // Register the template first
+    let register_output = Command::new(env!("CARGO_BIN_EXE_am"))
+        .env("HOME", test_home_dir())
+        .args([
+            "--json",
+            "template",
+            "register",
+            template_path.to_str().unwrap(),
+            "--name",
+            &template_name,
+        ])
+        .output()
+        .expect("Failed to execute register command");
+
+    assert_eq!(
+        register_output.status.code(),
+        Some(0),
+        "Registration should succeed first"
+    );
+
+    // WHEN: We unregister the template
+    let unregister_output = Command::new(env!("CARGO_BIN_EXE_am"))
+        .env("HOME", test_home_dir())
+        .args([
+            "--json",
+            "template",
+            "unregister",
+            &template_name,
+            "--force",
+        ])
+        .output()
+        .expect("Failed to execute unregister command");
+
+    // THEN: Exit code should be 0 (success)
+    assert_eq!(
+        unregister_output.status.code(),
+        Some(0),
+        "Expected exit code 0. stderr: {}\nstdout: {}",
+        String::from_utf8_lossy(&unregister_output.stderr),
+        String::from_utf8_lossy(&unregister_output.stdout)
+    );
+
+    // AND: stdout should contain valid JSON with success envelope
+    let stdout = String::from_utf8_lossy(&unregister_output.stdout);
+    let json: serde_json::Value =
+        serde_json::from_str(&stdout).expect(&format!("Expected valid JSON, got: {}", stdout));
+
+    assert_eq!(json["ok"], true, "Expected ok=true");
+    assert_eq!(json["value"]["name"], template_name);
+    assert_eq!(json["value"]["removed"], true);
+}
+
+#[test]
+fn test_p0_template_unregister_cli_json_not_found() {
+    use std::process::Command;
+
+    // WHEN: We try to unregister a nonexistent template
+    let output = Command::new(env!("CARGO_BIN_EXE_am"))
+        .env("HOME", test_home_dir())
+        .args([
+            "--json",
+            "template",
+            "unregister",
+            "nonexistent-template-xyz",
+            "--force",
+        ])
+        .output()
+        .expect("Failed to execute command");
+
+    // THEN: Exit code should be 1 (user error)
+    assert_eq!(
+        output.status.code(),
+        Some(1),
+        "Expected exit code 1 for not found"
+    );
+
+    // AND: Error should contain template_not_found
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let json: serde_json::Value =
+        serde_json::from_str(&stdout).expect(&format!("Expected valid JSON, got: {}", stdout));
+
+    assert_eq!(json["ok"], false);
+    assert_eq!(json["error"]["code"], -29005);
+    assert!(
+        json["error"]["suggestion"]
+            .as_str()
+            .unwrap()
+            .contains("template list")
+    );
+}
+
+#[test]
+fn test_p0_template_unregister_cli_json_embedded_not_allowed() {
+    use std::process::Command;
+
+    // WHEN: We try to unregister the embedded "default" template
+    let output = Command::new(env!("CARGO_BIN_EXE_am"))
+        .env("HOME", test_home_dir())
+        .args(["--json", "template", "unregister", "default", "--force"])
+        .output()
+        .expect("Failed to execute command");
+
+    // THEN: Exit code should be 1 (user error)
+    assert_eq!(
+        output.status.code(),
+        Some(1),
+        "Expected exit code 1 for embedded template"
+    );
+
+    // AND: Error should contain operation not allowed
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let json: serde_json::Value =
+        serde_json::from_str(&stdout).expect(&format!("Expected valid JSON, got: {}", stdout));
+
+    assert_eq!(json["ok"], false);
+    assert_eq!(json["error"]["code"], -29008); // ERR_TEMPLATE_OPERATION_NOT_ALLOWED
+}
+
+#[test]
+fn test_p0_template_unregister_cli_non_interactive_requires_force() {
+    use std::process::Command;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    // Generate unique template name
+    let timestamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+    let template_name = format!("cli-noforce-{}", timestamp);
+
+    // GIVEN: First register a template
+    let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
+    let template_path = temp_dir.path().join("cli-noforce-template");
+    std::fs::create_dir_all(&template_path).unwrap();
+
+    std::fs::write(
+        template_path.join(".amproject"),
+        r#"{"name":"test","version":1}"#,
+    )
+    .unwrap();
+    std::fs::write(template_path.join("test.buses.json"), "{}").unwrap();
+    std::fs::write(template_path.join("test.config.json"), "{}").unwrap();
+
+    // Register the template first
+    Command::new(env!("CARGO_BIN_EXE_am"))
+        .env("HOME", test_home_dir())
+        .args([
+            "--json",
+            "template",
+            "register",
+            template_path.to_str().unwrap(),
+            "--name",
+            &template_name,
+        ])
+        .output()
+        .expect("Failed to execute register command");
+
+    // WHEN: We try to unregister WITHOUT --force in non-interactive mode (--json)
+    let output = Command::new(env!("CARGO_BIN_EXE_am"))
+        .env("HOME", test_home_dir())
+        .args([
+            "--json",
+            "template",
+            "unregister",
+            &template_name,
+            // No --force flag
+        ])
+        .output()
+        .expect("Failed to execute command");
+
+    // THEN: Exit code should be 1 (user error)
+    assert_eq!(
+        output.status.code(),
+        Some(1),
+        "Expected exit code 1 without --force in non-interactive mode"
+    );
+
+    // AND: Error should mention --force flag
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let json: serde_json::Value =
+        serde_json::from_str(&stdout).expect(&format!("Expected valid JSON, got: {}", stdout));
+
+    assert_eq!(json["ok"], false);
+    assert!(
+        json["error"]["suggestion"]
+            .as_str()
+            .unwrap()
+            .contains("--force"),
+        "Suggestion should mention --force flag. Got: {}",
+        json["error"]["suggestion"]
+    );
+}
+
+// =============================================================================
+// Template Validation - Invalid .amproject JSON Tests
+// =============================================================================
+
+#[test]
+fn test_p0_validate_template_directory_invalid_amproject_json() {
+    use am::common::utils::validate_template_directory;
+    use std::fs;
+    use tempfile::tempdir;
+
+    // GIVEN: A template directory with invalid JSON in .amproject
+    let temp_dir = tempdir().expect("Failed to create temp dir");
+    let template_path = temp_dir.path();
+
+    // Create .amproject with invalid JSON
+    fs::write(template_path.join(".amproject"), "{ invalid json }").unwrap();
+    fs::write(template_path.join("test.buses.json"), "{}").unwrap();
+    fs::write(template_path.join("test.config.json"), "{}").unwrap();
+
+    // WHEN: We validate the directory
+    let result = validate_template_directory(template_path);
+
+    // THEN: Validation should fail with appropriate error
+    assert!(
+        result.is_err(),
+        "Invalid .amproject JSON should fail validation"
+    );
+    let err = result.unwrap_err();
+    let cli_err = err
+        .downcast_ref::<am::common::errors::CliError>()
+        .expect("Should be CliError");
+    assert_eq!(cli_err.code, -29007); // ERR_INVALID_TEMPLATE_STRUCTURE
+    assert!(
+        cli_err.what.contains("invalid JSON"),
+        "Error should mention invalid JSON"
+    );
+}
+
+#[tokio::test]
+async fn test_p0_template_register_rejects_invalid_amproject_json() {
+    use am::commands::template::{TemplateCommands, handler};
+    use am::input::NonInteractiveInput;
+
+    // GIVEN: A template with invalid .amproject JSON
+    let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
+    let template_path = temp_dir.path().join("invalid-json-template");
+    std::fs::create_dir_all(&template_path).unwrap();
+
+    std::fs::write(template_path.join(".amproject"), "not valid json {").unwrap();
+    std::fs::write(template_path.join("test.buses.json"), "{}").unwrap();
+    std::fs::write(template_path.join("test.config.json"), "{}").unwrap();
+
+    let (db_arc, _db_temp_dir) = setup_test_database().await;
+    let output = CaptureOutput::new(OutputMode::Json);
+    let input = NonInteractiveInput::new();
+
+    let command = TemplateCommands::Register {
+        path: template_path.to_str().unwrap().to_string(),
+        name: Some("invalid-json-template".to_string()),
+        force: false,
+    };
+
+    // WHEN: We call the handler
+    let result = handler(&command, Some(db_arc), &input, &output).await;
+
+    // THEN: Handler should fail with validation error
+    assert!(
+        result.is_err(),
+        "Invalid .amproject JSON should fail registration"
+    );
+    let err = result.unwrap_err();
+    let cli_err = err
+        .downcast_ref::<am::common::errors::CliError>()
+        .expect("Should be CliError");
+    assert_eq!(cli_err.code, -29007); // ERR_INVALID_TEMPLATE_STRUCTURE
+}
+
+// =============================================================================
+// Template Unregister Cancellation Tests
+// =============================================================================
+
+#[tokio::test]
+async fn test_p0_template_unregister_user_cancels_json_mode() {
+    use am::commands::template::{TemplateCommands, handler};
+
+    // GIVEN: A custom template registered in the database
+    let (db_arc, _db_temp_dir) = setup_test_database().await;
+    {
+        let conn = db_arc.get_connection();
+        let conn = conn.lock().unwrap();
+        conn.execute(
+            "INSERT INTO templates (name, path, engine, description) VALUES (?1, ?2, ?3, ?4)",
+            rusqlite::params![
+                "cancel-test-template",
+                "/template/path",
+                "generic",
+                "Template for cancel test"
+            ],
+        )
+        .unwrap();
+    }
+
+    // AND: A mock input that returns false for confirmation (user cancels)
+    let output = CaptureOutput::new(OutputMode::Json);
+    let input = MockInput::with_confirm_response(false);
+
+    let command = TemplateCommands::Unregister {
+        name: "cancel-test-template".to_string(),
+        force: false, // Don't use force so confirmation is attempted
+    };
+
+    // WHEN: We call the handler and user declines the confirmation
+    let result = handler(&command, Some(db_arc.clone()), &input, &output).await;
+
+    // THEN: Handler should succeed (cancellation is not an error)
+    assert!(result.is_ok(), "Handler should succeed when user cancels: {:?}", result.err());
+
+    // AND: JSON output should have correct cancellation format
+    let success_data = output.last_success().expect("Should have success output");
+    assert_eq!(success_data["name"], "cancel-test-template", "Should include template name");
+    assert_eq!(success_data["removed"], false, "Should indicate not removed");
+    assert_eq!(success_data["cancelled"], true, "Should indicate cancelled");
+
+    // AND: Template should still exist in database (not deleted)
+    let template = am::database::db_get_template_by_name("cancel-test-template", Some(db_arc)).unwrap();
+    assert!(
+        template.is_some(),
+        "Template should still exist in database after cancellation"
+    );
+}
+
+#[tokio::test]
+async fn test_p0_template_unregister_user_cancels_interactive_mode() {
+    use am::commands::template::{TemplateCommands, handler};
+
+    // GIVEN: A custom template registered in the database
+    let (db_arc, _db_temp_dir) = setup_test_database().await;
+    {
+        let conn = db_arc.get_connection();
+        let conn = conn.lock().unwrap();
+        conn.execute(
+            "INSERT INTO templates (name, path, engine, description) VALUES (?1, ?2, ?3, ?4)",
+            rusqlite::params![
+                "cancel-interactive-template",
+                "/template/path",
+                "generic",
+                "Template for interactive cancel test"
+            ],
+        )
+        .unwrap();
+    }
+
+    // AND: A mock input that returns false for confirmation (user cancels)
+    let output = CaptureOutput::new(OutputMode::Interactive);
+    let input = MockInput::with_confirm_response(false);
+
+    let command = TemplateCommands::Unregister {
+        name: "cancel-interactive-template".to_string(),
+        force: false, // Don't use force so confirmation is attempted
+    };
+
+    // WHEN: We call the handler and user declines the confirmation
+    let result = handler(&command, Some(db_arc.clone()), &input, &output).await;
+
+    // THEN: Handler should succeed (cancellation is not an error)
+    assert!(result.is_ok(), "Handler should succeed when user cancels: {:?}", result.err());
+
+    // AND: Progress messages should include "Cancelled." message
+    let progress_messages = output.progress_messages();
+    assert!(
+        progress_messages.iter().any(|m| m.contains("Cancelled")),
+        "Should display 'Cancelled.' message in interactive mode. Got messages: {:?}",
+        progress_messages
+    );
+
+    // AND: Template should still exist in database (not deleted)
+    let template = am::database::db_get_template_by_name("cancel-interactive-template", Some(db_arc)).unwrap();
+    assert!(
+        template.is_some(),
+        "Template should still exist in database after cancellation"
+    );
+}
+
+#[test]
+fn test_p0_template_unregister_cli_explicit_non_interactive_requires_force() {
+    use std::process::Command;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    // Generate unique template name
+    let timestamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+    let template_name = format!("cli-nonint-explicit-{}", timestamp);
+
+    // GIVEN: First register a template
+    let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
+    let template_path = temp_dir.path().join("cli-nonint-explicit-template");
+    std::fs::create_dir_all(&template_path).unwrap();
+
+    std::fs::write(
+        template_path.join(".amproject"),
+        r#"{"name":"test","version":1}"#,
+    )
+    .unwrap();
+    std::fs::write(template_path.join("test.buses.json"), "{}").unwrap();
+    std::fs::write(template_path.join("test.config.json"), "{}").unwrap();
+
+    // Register the template first (using --json for reliable output parsing)
+    let register_output = Command::new(env!("CARGO_BIN_EXE_am"))
+        .env("HOME", test_home_dir())
+        .args([
+            "--json",
+            "template",
+            "register",
+            template_path.to_str().unwrap(),
+            "--name",
+            &template_name,
+        ])
+        .output()
+        .expect("Failed to execute register command");
+
+    assert_eq!(
+        register_output.status.code(),
+        Some(0),
+        "Registration should succeed first. stderr: {}",
+        String::from_utf8_lossy(&register_output.stderr)
+    );
+
+    // WHEN: We try to unregister WITH --non-interactive (explicit flag, not --json) WITHOUT --force
+    let output = Command::new(env!("CARGO_BIN_EXE_am"))
+        .env("HOME", test_home_dir())
+        .args([
+            "--non-interactive",  // Explicit non-interactive flag (AC#2)
+            "template",
+            "unregister",
+            &template_name,
+            // No --force flag
+        ])
+        .output()
+        .expect("Failed to execute command");
+
+    // THEN: Exit code should be non-zero (error)
+    assert_ne!(
+        output.status.code(),
+        Some(0),
+        "Expected non-zero exit code without --force in --non-interactive mode. stderr: {}\nstdout: {}",
+        String::from_utf8_lossy(&output.stderr),
+        String::from_utf8_lossy(&output.stdout)
+    );
+
+    // AND: stdout should mention --force flag (interactive-style errors go to stdout)
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("--force") || stdout.contains("force"),
+        "Error message should mention --force flag. Got stdout: {}",
+        stdout
+    );
+}
+
+/// CLI test that --non-interactive with --force succeeds (AC#2 positive case)
+#[test]
+fn test_p0_template_unregister_cli_explicit_non_interactive_with_force_succeeds() {
+    use std::process::Command;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    // Generate unique template name
+    let timestamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+    let template_name = format!("cli-nonint-force-{}", timestamp);
+
+    // GIVEN: First register a template
+    let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
+    let template_path = temp_dir.path().join("cli-nonint-force-template");
+    std::fs::create_dir_all(&template_path).unwrap();
+
+    std::fs::write(
+        template_path.join(".amproject"),
+        r#"{"name":"test","version":1}"#,
+    )
+    .unwrap();
+    std::fs::write(template_path.join("test.buses.json"), "{}").unwrap();
+    std::fs::write(template_path.join("test.config.json"), "{}").unwrap();
+
+    // Register the template first
+    Command::new(env!("CARGO_BIN_EXE_am"))
+        .env("HOME", test_home_dir())
+        .args([
+            "--json",
+            "template",
+            "register",
+            template_path.to_str().unwrap(),
+            "--name",
+            &template_name,
+        ])
+        .output()
+        .expect("Failed to execute register command");
+
+    // WHEN: We unregister WITH --non-interactive AND --force
+    let output = Command::new(env!("CARGO_BIN_EXE_am"))
+        .env("HOME", test_home_dir())
+        .args([
+            "--non-interactive",  // Explicit non-interactive flag
+            "template",
+            "unregister",
+            &template_name,
+            "--force",  // Required in non-interactive mode
+        ])
+        .output()
+        .expect("Failed to execute command");
+
+    // THEN: Exit code should be 0 (success)
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "Expected exit code 0 with --force in --non-interactive mode. stderr: {}\nstdout: {}",
+        String::from_utf8_lossy(&output.stderr),
+        String::from_utf8_lossy(&output.stdout)
+    );
 }

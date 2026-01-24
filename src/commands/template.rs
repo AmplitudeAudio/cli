@@ -1,14 +1,18 @@
 use anyhow::Result;
 use colored::*;
 use serde_json::json;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use crate::{
     app::Resource,
-    common::errors::{CliError, codes},
+    common::{
+        errors::{CliError, codes},
+        utils::{validate_template_directory, validate_template_name},
+    },
     database::{
-        Database, db_get_template_by_name, db_get_templates,
+        Database, db_create_template, db_delete_template_by_name, db_get_template_by_name,
+        db_get_templates,
         entities::{Template, TemplateSource},
     },
     input::Input,
@@ -80,18 +84,49 @@ pub enum TemplateCommands {
         /// Name of the template to display
         name: String,
     },
+
+    /// Register a custom template from a directory
+    Register {
+        /// Path to the template directory
+        path: String,
+
+        /// Template name (optional; uses manifest name or prompts if not provided)
+        #[arg(short, long)]
+        name: Option<String>,
+
+        /// Overwrite existing template with the same name
+        #[arg(short, long, default_value = "false")]
+        force: bool,
+    },
+
+    /// Unregister a custom template
+    Unregister {
+        /// Name of the template to unregister
+        name: String,
+
+        /// Skip confirmation prompt (required in non-interactive mode)
+        #[arg(short, long, default_value = "false")]
+        force: bool,
+    },
 }
 
 pub async fn handler(
     command: &TemplateCommands,
     database: Option<Arc<Database>>,
-    _input: &dyn Input,
+    input: &dyn Input,
     output: &dyn Output,
 ) -> Result<()> {
     match command {
         TemplateCommands::List {} => handle_list_templates_command(database, output).await,
         TemplateCommands::Info { name } => {
             handle_template_info_command(name, database, output).await
+        }
+        TemplateCommands::Register { path, name, force } => {
+            handle_template_register_command(path, name.clone(), *force, database, input, output)
+                .await
+        }
+        TemplateCommands::Unregister { name, force } => {
+            handle_template_unregister_command(name, *force, database, input, output).await
         }
     }
 }
@@ -365,7 +400,8 @@ fn display_template_info(
             if !config_options.is_empty() {
                 output.progress("  Configuration Options:");
                 for option in config_options {
-                    output.progress(&format!("    • {}: {} (default: {})",
+                    output.progress(&format!(
+                        "    • {}: {} (default: {})",
                         option.name.cyan(),
                         option.description,
                         option.default_value.green()
@@ -380,4 +416,292 @@ fn display_template_info(
             }
         }
     }
+}
+
+/// Handle the `am template register <path>` command.
+///
+/// Registers a custom template from a directory path.
+/// Validates the template structure, handles name resolution via manifest/prompt/arg,
+/// and stores the template in the database.
+async fn handle_template_register_command(
+    path: &str,
+    name: Option<String>,
+    force: bool,
+    database: Option<Arc<Database>>,
+    input: &dyn Input,
+    output: &dyn Output,
+) -> Result<()> {
+    // Step 1: Normalize and validate the path
+    let template_path = PathBuf::from(path);
+    let normalized_path = template_path
+        .canonicalize()
+        .map_err(|_| {
+            CliError::new(
+                codes::ERR_INVALID_TEMPLATE_STRUCTURE,
+                format!("Template path '{}' does not exist", path),
+                "The specified path does not exist on the filesystem",
+            )
+            .with_suggestion("Verify the path is correct and the directory exists")
+        })?
+        .to_string_lossy()
+        .to_string();
+
+    // Step 2: Validate template structure (checks for required files)
+    let validation_result = validate_template_directory(Path::new(&normalized_path))?;
+
+    // Step 3: Determine template name (priority: CLI arg > manifest > prompt)
+    let template_name = if let Some(provided_name) = name {
+        // Name provided via --name flag
+        provided_name
+    } else if let Some(ref manifest) = validation_result.manifest {
+        if let Some(ref manifest_name) = manifest.name {
+            // Name from manifest
+            manifest_name.clone()
+        } else {
+            // No name in manifest, need to prompt or fail
+            prompt_for_template_name(input, output)?
+        }
+    } else {
+        // No manifest, need to prompt or fail
+        prompt_for_template_name(input, output)?
+    };
+
+    validate_template_name(&template_name).map_err(|msg| {
+        CliError::new(
+            codes::ERR_VALIDATION_FIELD,
+            format!("Invalid template name '{}'", template_name),
+            msg,
+        )
+        .with_suggestion("Use only letters, numbers, underscores, and hyphens")
+    })?;
+
+    // Step 4: Check for name conflict with embedded templates
+    if EMBEDDED_TEMPLATES.iter().any(|t| t.name == template_name) {
+        return Err(CliError::new(
+            codes::ERR_TEMPLATE_NAME_CONFLICT,
+            format!("Template '{}' is a built-in template", template_name),
+            "Cannot overwrite embedded templates",
+        )
+        .with_suggestion("Choose a different name for your custom template")
+        .into());
+    }
+
+    // Step 5: Check for name conflict with existing custom templates
+    if let Some(existing) = db_get_template_by_name(&template_name, database.clone())? {
+        if force {
+            // Delete existing template to allow overwrite
+            db_delete_template_by_name(&existing.name, database.clone())?;
+            log::debug!(
+                "Deleted existing template '{}' for overwrite",
+                template_name
+            );
+        } else {
+            return Err(CliError::new(
+                codes::ERR_TEMPLATE_NAME_CONFLICT,
+                format!("Template '{}' already exists", template_name),
+                "A custom template with this name is already registered",
+            )
+            .with_suggestion("Use a different name or --force to overwrite")
+            .into());
+        }
+    }
+
+    // Step 6: Create template entity
+    let template = Template {
+        id: None,
+        name: template_name.clone(),
+        path: normalized_path.clone(),
+        engine: validation_result
+            .manifest
+            .as_ref()
+            .and_then(|m| m.engine.clone())
+            .or(Some("generic".to_string())),
+        description: validation_result
+            .manifest
+            .as_ref()
+            .and_then(|m| m.description.clone()),
+        source: TemplateSource::Custom,
+    };
+
+    // Step 7: Insert into database
+    db_create_template(&template, database)?;
+
+    // Step 8: Output success
+    match output.mode() {
+        OutputMode::Json => {
+            output.success(
+                json!({
+                    "name": template.name,
+                    "engine": template.engine.as_deref().unwrap_or("generic"),
+                    "source": "custom",
+                    "path": template.path
+                }),
+                None,
+            );
+        }
+        OutputMode::Interactive => {
+            output.success(
+                json!(format!(
+                    "Template '{}' registered successfully.",
+                    template_name
+                )),
+                None,
+            );
+            output.progress("");
+            output.progress(&format!(
+                "Use '{}' to see all available templates.",
+                "am template list".green()
+            ));
+        }
+    }
+
+    Ok(())
+}
+
+/// Handle the `am template unregister <name>` command.
+///
+/// Unregisters a custom template from the database.
+/// - Embedded templates cannot be unregistered (they are bundled with the CLI)
+/// - Requires confirmation prompt in interactive mode (unless --force is used)
+/// - In non-interactive mode, --force flag is required
+async fn handle_template_unregister_command(
+    name: &str,
+    force: bool,
+    database: Option<Arc<Database>>,
+    input: &dyn Input,
+    output: &dyn Output,
+) -> Result<()> {
+    // Step 1: Check if it's an embedded template (cannot be unregistered)
+    if EMBEDDED_TEMPLATES.iter().any(|t| t.name == name) {
+        return Err(CliError::new(
+            codes::ERR_TEMPLATE_OPERATION_NOT_ALLOWED,
+            format!("Cannot unregister embedded template '{}'", name),
+            "Embedded templates are bundled with the CLI and cannot be removed",
+        )
+        .into());
+    }
+
+    // Step 2: Check if template exists in database
+    let template = db_get_template_by_name(name, database.clone())?;
+    if template.is_none() {
+        return Err(CliError::new(
+            codes::ERR_TEMPLATE_NOT_FOUND,
+            format!("Template '{}' not found", name),
+            "No registered template matches this name",
+        )
+        .into());
+    }
+
+    // Step 3: Handle confirmation
+    if !force {
+        // Try to get confirmation from user
+        let confirm_result =
+            input.confirm(&format!("Unregister template '{}'?", name), Some(false));
+
+        match confirm_result {
+            Ok(confirmed) => {
+                if !confirmed {
+                    // User cancelled
+                    match output.mode() {
+                        OutputMode::Json => {
+                            output.success(
+                                json!({
+                                    "name": name,
+                                    "removed": false,
+                                    "cancelled": true
+                                }),
+                                None,
+                            );
+                        }
+                        OutputMode::Interactive => {
+                            output.progress("Cancelled.");
+                        }
+                    }
+                    return Ok(());
+                }
+            }
+            Err(e) => {
+                // Confirmation prompt failed - this typically happens in non-interactive mode.
+                // Preserve the underlying error context for debugging while providing actionable guidance.
+                let error_detail = e.to_string();
+                let why = if error_detail.contains("non-interactive") || error_detail.contains("blocked") {
+                    "Cannot confirm in non-interactive mode"
+                } else {
+                    "Confirmation prompt failed"
+                };
+                return Err(CliError::new(
+                    codes::ERR_VALIDATION_FIELD,
+                    "Confirmation required",
+                    why,
+                )
+                .with_suggestion("Use --force flag to skip confirmation in non-interactive mode")
+                .with_context(error_detail)
+                .into());
+            }
+        }
+    }
+
+    // Step 4: Delete from database
+    let deleted = db_delete_template_by_name(name, database)?;
+    if !deleted {
+        // Should be unreachable if step 2 succeeded, but handle safely
+        return Err(CliError::new(
+            codes::ERR_TEMPLATE_NOT_FOUND,
+            format!("Template '{}' not found", name),
+            "Template may have been removed by another process",
+        )
+        .into());
+    }
+
+    // Step 5: Output success
+    match output.mode() {
+        OutputMode::Json => {
+            output.success(
+                json!({
+                    "name": name,
+                    "removed": true
+                }),
+                None,
+            );
+        }
+        OutputMode::Interactive => {
+            output.success(
+                json!(format!("Template '{}' unregistered successfully.", name)),
+                None,
+            );
+        }
+    }
+
+    Ok(())
+}
+
+/// Prompt for template name in interactive mode.
+///
+/// Returns an error in non-interactive mode when name is required.
+/// Uses the Input trait to attempt prompting - if input is non-interactive,
+/// the prompt will fail and we return a helpful error with --name suggestion.
+fn prompt_for_template_name(input: &dyn Input, _output: &dyn Output) -> Result<String> {
+    // Attempt to prompt for template name.
+    // If input is NonInteractiveInput (due to --json or --non-interactive flags),
+    // the prompt will fail. We catch that and return a more helpful error.
+    input
+        .prompt_text(
+            "Template name",
+            None,
+            None,
+            Some(&|value: &str| match validate_template_name(value) {
+                Ok(()) => Ok(inquire::validator::Validation::Valid),
+                Err(msg) => Ok(inquire::validator::Validation::Invalid(msg.into())),
+            }),
+        )
+        .map_err(|_| {
+            // Convert the generic "blocked" error to a more helpful CliError
+            CliError::new(
+                codes::ERR_VALIDATION_FIELD,
+                "Template name is required",
+                "No --name provided and no name in template manifest",
+            )
+            .with_suggestion("Provide --name flag or add 'name' to template.json manifest")
+            .into()
+        })
 }
