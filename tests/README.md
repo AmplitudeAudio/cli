@@ -121,6 +121,27 @@ fixture.create_amproject_file("my_project").unwrap();
 // Project directory is cleaned up when fixture is dropped
 ```
 
+### AssetTestFixture
+
+Creates a fully populated project directory with the complete SDK source structure and provides helpers for creating asset JSON files. Designed for Epic 3+ asset testing:
+
+```rust
+let fixture = AssetTestFixture::new("test_project")?;
+fixture.create_test_sound("footstep", 42)?;
+fixture.create_data_file("footstep.wav")?;
+let validator = fixture.create_project_validator()?;
+assert!(validator.validate_sound_exists(42).is_ok());
+```
+
+**Key methods:**
+- `new(project_name)` - Creates temp project with all SDK directories and `.amproject`
+- `create_test_sound(name, id)` - Writes a valid Sound JSON to `sources/sounds/`
+- `create_test_collection(name, id, sound_ids)` - Writes a Collection JSON to `sources/collections/`
+- `write_asset_json(asset_type, name, json)` - Writes arbitrary JSON to `sources/{type}/`
+- `create_project_validator()` - Returns a `ProjectValidator` scanning the fixture's project
+- `create_data_file(name)` - Creates an empty file in `data/` (for audio file existence tests)
+- `project_root()` / `sources_dir()` - Path accessors
+
 ### Factories
 
 Create test data with sensible defaults:
@@ -143,6 +164,41 @@ assert_file_exists(&path);
 assert_dir_exists(&path);
 assert_not_exists(&path);
 assert_file_contains(&path, "expected content");
+```
+
+### Summary
+
+| Fixture | Purpose | Key Methods |
+|---------|---------|-------------|
+| `TestDatabaseFixture` | Isolated temp DB for unit tests | `new()`, `db_path()`, `temp_path()` |
+| `MigratedDatabaseFixture` | DB with migrations applied | `new()`, `database()`, `temp_path()` |
+| `IsolatedHomeFixture` | Temp `.amplitude` directory | `new()`, `amplitude_dir()`, `home_path()` |
+| `TestProjectFixture` | Temp project directory | `new(name)`, `project_path()`, `create_amproject_file()` |
+| `AssetTestFixture` | Full SDK project with asset helpers | `new(name)`, `create_test_sound()`, `create_project_validator()` |
+
+## Asset Testing Pattern
+
+For Epic 3+ asset implementation tests, use `AssetTestFixture` to avoid boilerplate:
+
+```rust
+use common::fixtures::AssetTestFixture;
+
+#[test]
+fn test_p1_collection_references_valid_sounds() {
+    // GIVEN: A project with existing sounds
+    let fixture = AssetTestFixture::new("test_project").unwrap();
+    fixture.create_test_sound("footstep_01", 10).unwrap();
+    fixture.create_test_sound("footstep_02", 11).unwrap();
+
+    // WHEN: Creating a collection that references those sounds
+    fixture.create_test_collection("footsteps", 100, &[10, 11]).unwrap();
+
+    // THEN: Validator can find all assets
+    let validator = fixture.create_project_validator().unwrap();
+    assert!(validator.validate_sound_exists(10).is_ok());
+    assert!(validator.validate_sound_exists(11).is_ok());
+    assert!(validator.validate_collection_exists(100).is_ok());
+}
 ```
 
 ## Writing New Tests

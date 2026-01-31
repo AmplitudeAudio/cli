@@ -2,10 +2,11 @@
 //!
 //! Provides reusable test infrastructure with automatic cleanup.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tempfile::{TempDir, tempdir};
 
+use am::assets::ProjectValidator;
 use am::database::Database;
 
 /// Test fixture that provides an in-memory database for isolated testing.
@@ -155,6 +156,189 @@ impl TestProjectFixture {
         std::fs::write(&amproject_path, serde_json::to_string_pretty(&config)?)?;
 
         Ok(())
+    }
+}
+
+// =============================================================================
+// Asset Test Fixture
+// =============================================================================
+
+/// Test fixture for asset operations with a fully populated project directory.
+///
+/// Creates a temporary project directory with the complete SDK source structure
+/// (`sources/sounds/`, `sources/collections/`, etc.) and provides helpers for
+/// creating asset JSON files. Each fixture instance is isolated via `TempDir`,
+/// so tests can run concurrently without interference.
+///
+/// # Example
+///
+/// ```ignore
+/// let fixture = AssetTestFixture::new("test_project")?;
+/// fixture.create_test_sound("footstep", 42)?;
+/// fixture.create_data_file("footstep.wav")?;
+/// let validator = fixture.create_project_validator()?;
+/// assert!(validator.validate_sound_exists(42).is_ok());
+/// ```
+pub struct AssetTestFixture {
+    _temp_dir: TempDir,
+    project_root: PathBuf,
+}
+
+impl AssetTestFixture {
+    /// Create a new asset test fixture with a full SDK directory structure.
+    ///
+    /// Creates a temp directory containing:
+    /// - `{project_name}/.amproject` (valid project configuration)
+    /// - `sources/{type}/` directories for all SDK asset types
+    /// - `data/`, `build/`, `plugins/` directories
+    pub fn new(project_name: &str) -> anyhow::Result<Self> {
+        let temp_dir = tempdir()?;
+        let project_root = temp_dir.path().join(project_name);
+
+        // Create all SDK source directories
+        let source_dirs = [
+            "sources/sounds",
+            "sources/collections",
+            "sources/effects",
+            "sources/switches",
+            "sources/switch_containers",
+            "sources/soundbanks",
+            "sources/events",
+            "sources/attenuators",
+            "sources/pipelines",
+            "sources/rtpc",
+        ];
+
+        for dir in &source_dirs {
+            std::fs::create_dir_all(project_root.join(dir))?;
+        }
+
+        // Create additional project directories
+        std::fs::create_dir_all(project_root.join("data"))?;
+        std::fs::create_dir_all(project_root.join("build"))?;
+        std::fs::create_dir_all(project_root.join("plugins"))?;
+
+        // Write a valid .amproject file
+        let amproject = serde_json::json!({
+            "name": project_name,
+            "default_configuration": "pc.config.amconfig",
+            "sources_dir": "sources",
+            "data_dir": "data",
+            "build_dir": "build",
+            "version": 1
+        });
+        std::fs::write(
+            project_root.join(".amproject"),
+            serde_json::to_string_pretty(&amproject)?,
+        )?;
+
+        Ok(Self {
+            _temp_dir: temp_dir,
+            project_root,
+        })
+    }
+
+    /// Get the project root path.
+    pub fn project_root(&self) -> &Path {
+        &self.project_root
+    }
+
+    /// Get the sources directory path (`project_root/sources/`).
+    pub fn sources_dir(&self) -> PathBuf {
+        self.project_root.join("sources")
+    }
+
+    /// Create a minimal valid Sound JSON file.
+    ///
+    /// Writes a sound JSON matching the SDK format (with `RtpcCompatibleValue` tagged
+    /// enum for `gain`/`priority` and `SoundLoopConfig` for `loop`) to
+    /// `sources/sounds/{name}.json`.
+    pub fn create_test_sound(&self, name: &str, id: u64) -> anyhow::Result<PathBuf> {
+        let sound_json = serde_json::json!({
+            "id": id,
+            "name": name,
+            "path": format!("data/{}.wav", name),
+            "bus": 0,
+            "gain": { "kind": "Static", "value": 1.0 },
+            "priority": { "kind": "Static", "value": 128.0 },
+            "stream": false,
+            "loop": { "enabled": false, "loop_count": 0 },
+            "spatialization": "None",
+            "attenuation": 0,
+            "scope": "World",
+            "fader": "Linear",
+            "effect": 0
+        });
+
+        let path = self
+            .project_root
+            .join("sources/sounds")
+            .join(format!("{}.json", name));
+        std::fs::write(&path, serde_json::to_string_pretty(&sound_json)?)?;
+        Ok(path)
+    }
+
+    /// Create a minimal Collection JSON file.
+    ///
+    /// Writes a collection JSON with the given sound ID references to
+    /// `sources/collections/{name}.json`. Uses `serde_json::Value` directly
+    /// since the Collection struct is not yet implemented.
+    pub fn create_test_collection(
+        &self,
+        name: &str,
+        id: u64,
+        sound_ids: &[u64],
+    ) -> anyhow::Result<PathBuf> {
+        let collection_json = serde_json::json!({
+            "id": id,
+            "name": name,
+            "sound_ids": sound_ids,
+            "mode": "random",
+            "scope": "World"
+        });
+
+        let path = self
+            .project_root
+            .join("sources/collections")
+            .join(format!("{}.json", name));
+        std::fs::write(&path, serde_json::to_string_pretty(&collection_json)?)?;
+        Ok(path)
+    }
+
+    /// Write an arbitrary asset JSON file to the appropriate source directory.
+    ///
+    /// Maps `asset_type` to its directory under `sources/` and writes the JSON
+    /// value to `sources/{asset_type}/{name}.json`.
+    pub fn write_asset_json(
+        &self,
+        asset_type: &str,
+        name: &str,
+        json: serde_json::Value,
+    ) -> anyhow::Result<PathBuf> {
+        let path = self
+            .project_root
+            .join("sources")
+            .join(asset_type)
+            .join(format!("{}.json", name));
+        std::fs::write(&path, serde_json::to_string_pretty(&json)?)?;
+        Ok(path)
+    }
+
+    /// Create a `ProjectValidator` that scans this fixture's project directory.
+    pub fn create_project_validator(&self) -> anyhow::Result<ProjectValidator> {
+        ProjectValidator::new(self.project_root.clone())
+    }
+
+    /// Create an empty file in the `data/` directory.
+    ///
+    /// Useful for tests that validate audio file existence (e.g., `Sound::validate_rules`).
+    pub fn create_data_file(&self, name: &str) -> anyhow::Result<PathBuf> {
+        let path = self.project_root.join("data").join(name);
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        std::fs::write(&path, b"")?;
+        Ok(path)
     }
 }
 
