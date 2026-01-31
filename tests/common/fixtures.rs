@@ -4,7 +4,7 @@
 
 use std::path::PathBuf;
 use std::sync::Arc;
-use tempfile::{tempdir, TempDir};
+use tempfile::{TempDir, tempdir};
 
 use am::database::Database;
 
@@ -251,11 +251,17 @@ impl Output for CaptureOutput {
     }
 
     fn progress(&self, message: &str) {
-        self.progress_messages.write().unwrap().push(message.to_string());
+        self.progress_messages
+            .write()
+            .unwrap()
+            .push(message.to_string());
     }
 
     fn table(&self, title: Option<&str>, data: serde_json::Value) {
-        self.tables.write().unwrap().push((title.map(|s| s.to_string()), data));
+        self.tables
+            .write()
+            .unwrap()
+            .push((title.map(|s| s.to_string()), data));
     }
 
     fn mode(&self) -> OutputMode {

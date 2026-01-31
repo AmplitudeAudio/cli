@@ -612,7 +612,9 @@ async fn handle_template_unregister_command(
                 // Confirmation prompt failed - this typically happens in non-interactive mode.
                 // Preserve the underlying error context for debugging while providing actionable guidance.
                 let error_detail = e.to_string();
-                let why = if error_detail.contains("non-interactive") || error_detail.contains("blocked") {
+                let why = if error_detail.contains("non-interactive")
+                    || error_detail.contains("blocked")
+                {
                     "Cannot confirm in non-interactive mode"
                 } else {
                     "Confirmation prompt failed"

@@ -15,9 +15,13 @@ fn test_p0_sound_create_command_parses_with_name_only() {
 
     match app.command {
         Commands::Asset {
-            command: AssetCommands::Sound {
-                command: SoundCommands::Create { name, file, gain, .. },
-            },
+            command:
+                AssetCommands::Sound {
+                    command:
+                        SoundCommands::Create {
+                            name, file, gain, ..
+                        },
+                },
         } => {
             assert_eq!(name, "explosion");
             assert!(file.is_none());
@@ -30,16 +34,22 @@ fn test_p0_sound_create_command_parses_with_name_only() {
 #[test]
 fn test_p0_sound_create_command_parses_with_file_flag() {
     let args = [
-        "am", "asset", "sound", "create", "explosion",
-        "--file", "sfx/explosion.wav",
+        "am",
+        "asset",
+        "sound",
+        "create",
+        "explosion",
+        "--file",
+        "sfx/explosion.wav",
     ];
     let app = App::try_parse_from(args).expect("Should parse");
 
     match app.command {
         Commands::Asset {
-            command: AssetCommands::Sound {
-                command: SoundCommands::Create { name, file, .. },
-            },
+            command:
+                AssetCommands::Sound {
+                    command: SoundCommands::Create { name, file, .. },
+                },
         } => {
             assert_eq!(name, "explosion");
             assert_eq!(file, Some("sfx/explosion.wav".to_string()));
@@ -51,16 +61,22 @@ fn test_p0_sound_create_command_parses_with_file_flag() {
 #[test]
 fn test_p0_sound_create_command_parses_with_gain_flag() {
     let args = [
-        "am", "asset", "sound", "create", "explosion",
-        "--gain", "0.8",
+        "am",
+        "asset",
+        "sound",
+        "create",
+        "explosion",
+        "--gain",
+        "0.8",
     ];
     let app = App::try_parse_from(args).expect("Should parse");
 
     match app.command {
         Commands::Asset {
-            command: AssetCommands::Sound {
-                command: SoundCommands::Create { name, gain, .. },
-            },
+            command:
+                AssetCommands::Sound {
+                    command: SoundCommands::Create { name, gain, .. },
+                },
         } => {
             assert_eq!(name, "explosion");
             assert_eq!(gain, Some(0.8));
@@ -72,33 +88,45 @@ fn test_p0_sound_create_command_parses_with_gain_flag() {
 #[test]
 fn test_p0_sound_create_command_parses_with_all_flags() {
     let args = [
-        "am", "asset", "sound", "create", "explosion",
-        "--file", "sfx/explosion.wav",
-        "--gain", "0.8",
-        "--bus", "100",
-        "--priority", "200",
+        "am",
+        "asset",
+        "sound",
+        "create",
+        "explosion",
+        "--file",
+        "sfx/explosion.wav",
+        "--gain",
+        "0.8",
+        "--bus",
+        "100",
+        "--priority",
+        "200",
         "--stream",
         "--loop",
-        "--loop-count", "3",
-        "--spatialization", "position",
+        "--loop-count",
+        "3",
+        "--spatialization",
+        "position",
     ];
     let app = App::try_parse_from(args).expect("Should parse");
 
     match app.command {
         Commands::Asset {
-            command: AssetCommands::Sound {
-                command: SoundCommands::Create {
-                    name,
-                    file,
-                    gain,
-                    bus,
-                    priority,
-                    stream,
-                    loop_enabled,
-                    loop_count,
-                    spatialization,
+            command:
+                AssetCommands::Sound {
+                    command:
+                        SoundCommands::Create {
+                            name,
+                            file,
+                            gain,
+                            bus,
+                            priority,
+                            stream,
+                            loop_enabled,
+                            loop_count,
+                            spatialization,
+                        },
                 },
-            },
         } => {
             assert_eq!(name, "explosion");
             assert_eq!(file, Some("sfx/explosion.wav".to_string()));
@@ -117,28 +145,39 @@ fn test_p0_sound_create_command_parses_with_all_flags() {
 #[test]
 fn test_p1_sound_create_command_short_flags() {
     let args = [
-        "am", "asset", "sound", "create", "explosion",
-        "-f", "sfx/explosion.wav",
-        "-g", "0.75",
-        "-b", "50",
-        "-p", "100",
-        "-s", "hrtf",
+        "am",
+        "asset",
+        "sound",
+        "create",
+        "explosion",
+        "-f",
+        "sfx/explosion.wav",
+        "-g",
+        "0.75",
+        "-b",
+        "50",
+        "-p",
+        "100",
+        "-s",
+        "hrtf",
     ];
     let app = App::try_parse_from(args).expect("Should parse");
 
     match app.command {
         Commands::Asset {
-            command: AssetCommands::Sound {
-                command: SoundCommands::Create {
-                    name,
-                    file,
-                    gain,
-                    bus,
-                    priority,
-                    spatialization,
-                    ..
+            command:
+                AssetCommands::Sound {
+                    command:
+                        SoundCommands::Create {
+                            name,
+                            file,
+                            gain,
+                            bus,
+                            priority,
+                            spatialization,
+                            ..
+                        },
                 },
-            },
         } => {
             assert_eq!(name, "explosion");
             assert_eq!(file, Some("sfx/explosion.wav".to_string()));
@@ -165,18 +204,24 @@ fn test_p1_sound_create_command_requires_name() {
 #[test]
 fn test_p1_sound_create_with_non_interactive_flag() {
     let args = [
-        "am", "--non-interactive",
-        "asset", "sound", "create", "explosion",
-        "--file", "sfx/explosion.wav",
+        "am",
+        "--non-interactive",
+        "asset",
+        "sound",
+        "create",
+        "explosion",
+        "--file",
+        "sfx/explosion.wav",
     ];
     let app = App::try_parse_from(args).expect("Should parse");
 
     assert!(app.non_interactive);
     match app.command {
         Commands::Asset {
-            command: AssetCommands::Sound {
-                command: SoundCommands::Create { name, file, .. },
-            },
+            command:
+                AssetCommands::Sound {
+                    command: SoundCommands::Create { name, file, .. },
+                },
         } => {
             assert_eq!(name, "explosion");
             assert_eq!(file, Some("sfx/explosion.wav".to_string()));
@@ -188,18 +233,24 @@ fn test_p1_sound_create_with_non_interactive_flag() {
 #[test]
 fn test_p1_sound_create_with_json_flag() {
     let args = [
-        "am", "--json",
-        "asset", "sound", "create", "explosion",
-        "--file", "sfx/explosion.wav",
+        "am",
+        "--json",
+        "asset",
+        "sound",
+        "create",
+        "explosion",
+        "--file",
+        "sfx/explosion.wav",
     ];
     let app = App::try_parse_from(args).expect("Should parse");
 
     assert!(app.json);
     match app.command {
         Commands::Asset {
-            command: AssetCommands::Sound {
-                command: SoundCommands::Create { name, file, .. },
-            },
+            command:
+                AssetCommands::Sound {
+                    command: SoundCommands::Create { name, file, .. },
+                },
         } => {
             assert_eq!(name, "explosion");
             assert_eq!(file, Some("sfx/explosion.wav".to_string()));
@@ -238,9 +289,7 @@ fn test_p0_sound_builder_creates_valid_sound() {
 
 #[test]
 fn test_p0_sound_default_values() {
-    let sound = Sound::builder(1, "test")
-        .path("test.wav")
-        .build();
+    let sound = Sound::builder(1, "test").path("test.wav").build();
 
     assert_eq!(sound.gain.as_static(), Some(1.0));
     assert_eq!(sound.priority.as_static(), Some(128.0));
@@ -274,7 +323,10 @@ fn test_p1_sound_loop_config_count() {
 fn test_p1_spatialization_modes() {
     assert_eq!(Spatialization::None, Spatialization::None);
     assert_eq!(Spatialization::Position, Spatialization::Position);
-    assert_eq!(Spatialization::PositionOrientation, Spatialization::PositionOrientation);
+    assert_eq!(
+        Spatialization::PositionOrientation,
+        Spatialization::PositionOrientation
+    );
     assert_eq!(Spatialization::Hrtf, Spatialization::Hrtf);
 }
 
@@ -328,8 +380,8 @@ fn test_p0_sound_deserializes_from_json() {
 // =============================================================================
 
 use am::assets::ProjectContext;
-use tempfile::tempdir;
 use std::fs;
+use tempfile::tempdir;
 
 #[test]
 fn test_p1_sound_validate_rules_passes_with_valid_audio_file() {
@@ -371,10 +423,7 @@ fn test_p1_sound_validate_rules_fails_invalid_gain_above_one() {
     let dir = tempdir().unwrap();
     let context = ProjectContext::new(dir.path().to_path_buf());
 
-    let sound = Sound::builder(1, "test")
-        .path("")
-        .gain(1.5)
-        .build();
+    let sound = Sound::builder(1, "test").path("").gain(1.5).build();
 
     use am::assets::Asset;
     let result = sound.validate_rules(&context);
@@ -389,10 +438,7 @@ fn test_p1_sound_validate_rules_fails_invalid_gain_below_zero() {
     let dir = tempdir().unwrap();
     let context = ProjectContext::new(dir.path().to_path_buf());
 
-    let sound = Sound::builder(1, "test")
-        .path("")
-        .gain(-0.5)
-        .build();
+    let sound = Sound::builder(1, "test").path("").gain(-0.5).build();
 
     use am::assets::Asset;
     let result = sound.validate_rules(&context);
@@ -461,9 +507,10 @@ fn test_p0_sound_list_command_parses() {
 
     match app.command {
         Commands::Asset {
-            command: AssetCommands::Sound {
-                command: SoundCommands::List {},
-            },
+            command:
+                AssetCommands::Sound {
+                    command: SoundCommands::List {},
+                },
         } => {
             // Success - command parsed correctly
         }
@@ -479,9 +526,10 @@ fn test_p1_sound_list_command_with_json_flag() {
     assert!(app.json);
     match app.command {
         Commands::Asset {
-            command: AssetCommands::Sound {
-                command: SoundCommands::List {},
-            },
+            command:
+                AssetCommands::Sound {
+                    command: SoundCommands::List {},
+                },
         } => {
             // Success - command parsed correctly
         }
@@ -494,10 +542,10 @@ fn test_p1_sound_list_command_with_json_flag() {
 // =============================================================================
 
 mod common;
-use common::fixtures::{CaptureOutput, TestProjectFixture};
 use am::commands::asset::handle_sound_command;
 use am::input::NonInteractiveInput;
 use am::presentation::{Output, OutputMode};
+use common::fixtures::{CaptureOutput, TestProjectFixture};
 
 /// Create a minimal .amproject file.
 fn create_amproject(path: &std::path::Path, name: &str) -> anyhow::Result<()> {
@@ -509,12 +557,20 @@ fn create_amproject(path: &std::path::Path, name: &str) -> anyhow::Result<()> {
         "build_dir": "build",
         "version": 1
     });
-    std::fs::write(path.join(".amproject"), serde_json::to_string_pretty(&config)?)?;
+    std::fs::write(
+        path.join(".amproject"),
+        serde_json::to_string_pretty(&config)?,
+    )?;
     Ok(())
 }
 
 /// Create a sound JSON file.
-fn create_sound_file(sounds_dir: &std::path::Path, name: &str, id: u64, gain: f32) -> anyhow::Result<()> {
+fn create_sound_file(
+    sounds_dir: &std::path::Path,
+    name: &str,
+    id: u64,
+    gain: f32,
+) -> anyhow::Result<()> {
     let sound = serde_json::json!({
         "id": id,
         "name": name,
@@ -532,7 +588,7 @@ fn create_sound_file(sounds_dir: &std::path::Path, name: &str, id: u64, gain: f3
     });
     std::fs::write(
         sounds_dir.join(format!("{}.json", name)),
-        serde_json::to_string_pretty(&sound)?
+        serde_json::to_string_pretty(&sound)?,
     )?;
     Ok(())
 }
@@ -562,12 +618,7 @@ async fn test_p0_sound_list_multiple_sounds_displays_all() {
     let output = CaptureOutput::json();
 
     // Run the list command
-    let result = handle_sound_command(
-        &SoundCommands::List {},
-        None,
-        &input,
-        &output,
-    ).await;
+    let result = handle_sound_command(&SoundCommands::List {}, None, &input, &output).await;
 
     // Restore original directory if we had one
     if let Some(dir) = original_dir {
@@ -579,9 +630,15 @@ async fn test_p0_sound_list_multiple_sounds_displays_all() {
 
     // Verify output content
     let success_data = output.last_success().expect("Should have success output");
-    assert_eq!(success_data["count"].as_u64().unwrap(), 3, "Should list 3 sounds");
+    assert_eq!(
+        success_data["count"].as_u64().unwrap(),
+        3,
+        "Should list 3 sounds"
+    );
 
-    let sounds = success_data["sounds"].as_array().expect("Should have sounds array");
+    let sounds = success_data["sounds"]
+        .as_array()
+        .expect("Should have sounds array");
     assert_eq!(sounds.len(), 3, "Should have 3 sounds in array");
 
     // Verify sounds are sorted alphabetically by name
@@ -590,7 +647,10 @@ async fn test_p0_sound_list_multiple_sounds_displays_all() {
     assert_eq!(sounds[2]["name"].as_str().unwrap(), "footstep");
 
     // Verify gain is numeric in JSON output
-    assert!(sounds[0]["gain"].is_number(), "Gain should be numeric in JSON");
+    assert!(
+        sounds[0]["gain"].is_number(),
+        "Gain should be numeric in JSON"
+    );
 }
 
 #[tokio::test]
@@ -613,12 +673,7 @@ async fn test_p0_sound_list_empty_directory_shows_message() {
     let output = CaptureOutput::json();
 
     // Run the list command
-    let result = handle_sound_command(
-        &SoundCommands::List {},
-        None,
-        &input,
-        &output,
-    ).await;
+    let result = handle_sound_command(&SoundCommands::List {}, None, &input, &output).await;
 
     // Restore original directory if we had one
     if let Some(dir) = original_dir {
@@ -626,12 +681,23 @@ async fn test_p0_sound_list_empty_directory_shows_message() {
     }
 
     // Verify result
-    assert!(result.is_ok(), "Handler should succeed with empty directory: {:?}", result);
+    assert!(
+        result.is_ok(),
+        "Handler should succeed with empty directory: {:?}",
+        result
+    );
 
     // Verify JSON output shows empty array and count=0
     let success_data = output.last_success().expect("Should have success output");
-    assert_eq!(success_data["count"].as_u64().unwrap(), 0, "Should have count 0");
-    assert!(success_data["sounds"].as_array().unwrap().is_empty(), "Should have empty sounds array");
+    assert_eq!(
+        success_data["count"].as_u64().unwrap(),
+        0,
+        "Should have count 0"
+    );
+    assert!(
+        success_data["sounds"].as_array().unwrap().is_empty(),
+        "Should have empty sounds array"
+    );
 }
 
 #[tokio::test]
@@ -660,12 +726,7 @@ async fn test_p1_sound_list_invalid_json_warns_but_continues() {
     let output = CaptureOutput::json();
 
     // Run the list command
-    let result = handle_sound_command(
-        &SoundCommands::List {},
-        None,
-        &input,
-        &output,
-    ).await;
+    let result = handle_sound_command(&SoundCommands::List {}, None, &input, &output).await;
 
     // Restore original directory if we had one
     if let Some(dir) = original_dir {
@@ -673,17 +734,30 @@ async fn test_p1_sound_list_invalid_json_warns_but_continues() {
     }
 
     // Should still succeed (invalid files are warned but don't fail the command)
-    assert!(result.is_ok(), "Handler should succeed despite invalid JSON: {:?}", result);
+    assert!(
+        result.is_ok(),
+        "Handler should succeed despite invalid JSON: {:?}",
+        result
+    );
 
     // Verify the valid sound is still listed
     let success_data = output.last_success().expect("Should have success output");
-    assert_eq!(success_data["count"].as_u64().unwrap(), 1, "Should list 1 valid sound");
+    assert_eq!(
+        success_data["count"].as_u64().unwrap(),
+        1,
+        "Should list 1 valid sound"
+    );
 
     // Verify warnings array contains the invalid file warning
-    let warnings = success_data["warnings"].as_array().expect("Should have warnings array");
+    let warnings = success_data["warnings"]
+        .as_array()
+        .expect("Should have warnings array");
     assert!(!warnings.is_empty(), "Should have at least one warning");
     let warning_text = warnings[0].as_str().unwrap();
-    assert!(warning_text.contains("invalid.json"), "Warning should mention invalid file");
+    assert!(
+        warning_text.contains("invalid.json"),
+        "Warning should mention invalid file"
+    );
 }
 
 #[tokio::test]
@@ -710,12 +784,7 @@ async fn test_p1_sound_list_json_output_envelope_format() {
     assert_eq!(output.mode(), OutputMode::Json);
 
     // Run the list command
-    let result = handle_sound_command(
-        &SoundCommands::List {},
-        None,
-        &input,
-        &output,
-    ).await;
+    let result = handle_sound_command(&SoundCommands::List {}, None, &input, &output).await;
 
     // Restore original directory if we had one
     if let Some(dir) = original_dir {
@@ -727,20 +796,44 @@ async fn test_p1_sound_list_json_output_envelope_format() {
 
     // Verify envelope format: sounds array, count, warnings
     let success_data = output.last_success().expect("Should have success output");
-    assert!(success_data.get("sounds").is_some(), "Should have 'sounds' field");
-    assert!(success_data.get("count").is_some(), "Should have 'count' field");
-    assert!(success_data.get("warnings").is_some(), "Should have 'warnings' field");
+    assert!(
+        success_data.get("sounds").is_some(),
+        "Should have 'sounds' field"
+    );
+    assert!(
+        success_data.get("count").is_some(),
+        "Should have 'count' field"
+    );
+    assert!(
+        success_data.get("warnings").is_some(),
+        "Should have 'warnings' field"
+    );
 
     // Verify sound object structure
     let sounds = success_data["sounds"].as_array().unwrap();
     assert_eq!(sounds.len(), 1);
     let sound = &sounds[0];
     assert!(sound.get("id").is_some(), "Sound should have 'id' field");
-    assert!(sound.get("name").is_some(), "Sound should have 'name' field");
-    assert!(sound.get("path").is_some(), "Sound should have 'path' field");
-    assert!(sound.get("gain").is_some(), "Sound should have 'gain' field");
-    assert!(sound.get("loop_enabled").is_some(), "Sound should have 'loop_enabled' field");
-    assert!(sound.get("spatialization").is_some(), "Sound should have 'spatialization' field");
+    assert!(
+        sound.get("name").is_some(),
+        "Sound should have 'name' field"
+    );
+    assert!(
+        sound.get("path").is_some(),
+        "Sound should have 'path' field"
+    );
+    assert!(
+        sound.get("gain").is_some(),
+        "Sound should have 'gain' field"
+    );
+    assert!(
+        sound.get("loop_enabled").is_some(),
+        "Sound should have 'loop_enabled' field"
+    );
+    assert!(
+        sound.get("spatialization").is_some(),
+        "Sound should have 'spatialization' field"
+    );
 }
 
 #[tokio::test]
@@ -770,12 +863,7 @@ async fn test_p1_sound_list_table_format_has_correct_columns() {
     let output = CaptureOutput::interactive();
 
     // Run the list command
-    let result = handle_sound_command(
-        &SoundCommands::List {},
-        None,
-        &input,
-        &output,
-    ).await;
+    let result = handle_sound_command(&SoundCommands::List {}, None, &input, &output).await;
 
     // Restore original directory if we had one
     if let Some(dir) = original_dir {
@@ -800,14 +888,29 @@ async fn test_p1_sound_list_table_format_has_correct_columns() {
 
     // Verify table columns: id, name, audio_file, gain
     let first_row = &rows[0];
-    assert!(first_row.get("id").is_some(), "Table row should have 'id' column");
-    assert!(first_row.get("name").is_some(), "Table row should have 'name' column");
-    assert!(first_row.get("audio_file").is_some(), "Table row should have 'audio_file' column");
-    assert!(first_row.get("gain").is_some(), "Table row should have 'gain' column");
+    assert!(
+        first_row.get("id").is_some(),
+        "Table row should have 'id' column"
+    );
+    assert!(
+        first_row.get("name").is_some(),
+        "Table row should have 'name' column"
+    );
+    assert!(
+        first_row.get("audio_file").is_some(),
+        "Table row should have 'audio_file' column"
+    );
+    assert!(
+        first_row.get("gain").is_some(),
+        "Table row should have 'gain' column"
+    );
 
     // Verify progress message shows count
     let progress = output.all_progress();
-    assert!(progress.iter().any(|msg| msg.contains("3 sound(s) found")), "Should show count");
+    assert!(
+        progress.iter().any(|msg| msg.contains("3 sound(s) found")),
+        "Should show count"
+    );
 }
 
 #[tokio::test]
@@ -829,12 +932,7 @@ async fn test_p1_sound_list_no_sounds_directory() {
     let output = CaptureOutput::json();
 
     // Run the list command
-    let result = handle_sound_command(
-        &SoundCommands::List {},
-        None,
-        &input,
-        &output,
-    ).await;
+    let result = handle_sound_command(&SoundCommands::List {}, None, &input, &output).await;
 
     // Restore original directory if we had one
     if let Some(dir) = original_dir {
@@ -842,7 +940,11 @@ async fn test_p1_sound_list_no_sounds_directory() {
     }
 
     // Should succeed with empty result (directory doesn't exist is handled gracefully)
-    assert!(result.is_ok(), "Handler should succeed with missing sounds dir: {:?}", result);
+    assert!(
+        result.is_ok(),
+        "Handler should succeed with missing sounds dir: {:?}",
+        result
+    );
 
     // Verify empty result
     let success_data = output.last_success().expect("Should have success output");
@@ -874,12 +976,7 @@ async fn test_p1_sound_list_all_invalid_shows_warnings_in_interactive() {
     let output = CaptureOutput::interactive();
 
     // Run the list command
-    let result = handle_sound_command(
-        &SoundCommands::List {},
-        None,
-        &input,
-        &output,
-    ).await;
+    let result = handle_sound_command(&SoundCommands::List {}, None, &input, &output).await;
 
     // Restore original directory
     if let Some(dir) = original_dir {
@@ -892,10 +989,17 @@ async fn test_p1_sound_list_all_invalid_shows_warnings_in_interactive() {
     // Verify warnings ARE displayed in interactive mode (this was the bug fix)
     let progress = output.all_progress();
     let has_warning = progress.iter().any(|msg| msg.contains("Warning:"));
-    assert!(has_warning, "Should display warnings about invalid files in interactive mode. Progress messages: {:?}", progress);
+    assert!(
+        has_warning,
+        "Should display warnings about invalid files in interactive mode. Progress messages: {:?}",
+        progress
+    );
 
     // Verify the "no sounds found" message is also present
-    assert!(progress.iter().any(|msg| msg.contains("No sounds found")), "Should show 'No sounds found' message");
+    assert!(
+        progress.iter().any(|msg| msg.contains("No sounds found")),
+        "Should show 'No sounds found' message"
+    );
 }
 
 // =============================================================================
@@ -909,9 +1013,13 @@ fn test_p0_sound_update_command_parses_with_name_only() {
 
     match app.command {
         Commands::Asset {
-            command: AssetCommands::Sound {
-                command: SoundCommands::Update { name, file, gain, .. },
-            },
+            command:
+                AssetCommands::Sound {
+                    command:
+                        SoundCommands::Update {
+                            name, file, gain, ..
+                        },
+                },
         } => {
             assert_eq!(name, "explosion");
             assert!(file.is_none());
@@ -924,16 +1032,22 @@ fn test_p0_sound_update_command_parses_with_name_only() {
 #[test]
 fn test_p0_sound_update_command_parses_with_gain_flag() {
     let args = [
-        "am", "asset", "sound", "update", "explosion",
-        "--gain", "0.5",
+        "am",
+        "asset",
+        "sound",
+        "update",
+        "explosion",
+        "--gain",
+        "0.5",
     ];
     let app = App::try_parse_from(args).expect("Should parse");
 
     match app.command {
         Commands::Asset {
-            command: AssetCommands::Sound {
-                command: SoundCommands::Update { name, gain, .. },
-            },
+            command:
+                AssetCommands::Sound {
+                    command: SoundCommands::Update { name, gain, .. },
+                },
         } => {
             assert_eq!(name, "explosion");
             assert_eq!(gain, Some(0.5));
@@ -945,33 +1059,47 @@ fn test_p0_sound_update_command_parses_with_gain_flag() {
 #[test]
 fn test_p0_sound_update_command_parses_with_all_flags() {
     let args = [
-        "am", "asset", "sound", "update", "explosion",
-        "--file", "sfx/explosion_v2.wav",
-        "--gain", "0.5",
-        "--bus", "50",
-        "--priority", "200",
-        "--stream", "true",
-        "--loop", "true",
-        "--loop-count", "5",
-        "--spatialization", "hrtf",
+        "am",
+        "asset",
+        "sound",
+        "update",
+        "explosion",
+        "--file",
+        "sfx/explosion_v2.wav",
+        "--gain",
+        "0.5",
+        "--bus",
+        "50",
+        "--priority",
+        "200",
+        "--stream",
+        "true",
+        "--loop",
+        "true",
+        "--loop-count",
+        "5",
+        "--spatialization",
+        "hrtf",
     ];
     let app = App::try_parse_from(args).expect("Should parse");
 
     match app.command {
         Commands::Asset {
-            command: AssetCommands::Sound {
-                command: SoundCommands::Update {
-                    name,
-                    file,
-                    gain,
-                    bus,
-                    priority,
-                    stream,
-                    loop_enabled,
-                    loop_count,
-                    spatialization,
+            command:
+                AssetCommands::Sound {
+                    command:
+                        SoundCommands::Update {
+                            name,
+                            file,
+                            gain,
+                            bus,
+                            priority,
+                            stream,
+                            loop_enabled,
+                            loop_count,
+                            spatialization,
+                        },
                 },
-            },
         } => {
             assert_eq!(name, "explosion");
             assert_eq!(file, Some("sfx/explosion_v2.wav".to_string()));
@@ -990,28 +1118,39 @@ fn test_p0_sound_update_command_parses_with_all_flags() {
 #[test]
 fn test_p1_sound_update_command_short_flags() {
     let args = [
-        "am", "asset", "sound", "update", "explosion",
-        "-f", "sfx/new.wav",
-        "-g", "0.75",
-        "-b", "25",
-        "-p", "150",
-        "-s", "position",
+        "am",
+        "asset",
+        "sound",
+        "update",
+        "explosion",
+        "-f",
+        "sfx/new.wav",
+        "-g",
+        "0.75",
+        "-b",
+        "25",
+        "-p",
+        "150",
+        "-s",
+        "position",
     ];
     let app = App::try_parse_from(args).expect("Should parse");
 
     match app.command {
         Commands::Asset {
-            command: AssetCommands::Sound {
-                command: SoundCommands::Update {
-                    name,
-                    file,
-                    gain,
-                    bus,
-                    priority,
-                    spatialization,
-                    ..
+            command:
+                AssetCommands::Sound {
+                    command:
+                        SoundCommands::Update {
+                            name,
+                            file,
+                            gain,
+                            bus,
+                            priority,
+                            spatialization,
+                            ..
+                        },
                 },
-            },
         } => {
             assert_eq!(name, "explosion");
             assert_eq!(file, Some("sfx/new.wav".to_string()));
@@ -1034,18 +1173,24 @@ fn test_p1_sound_update_command_requires_name() {
 #[test]
 fn test_p1_sound_update_with_json_flag() {
     let args = [
-        "am", "--json",
-        "asset", "sound", "update", "explosion",
-        "--gain", "0.5",
+        "am",
+        "--json",
+        "asset",
+        "sound",
+        "update",
+        "explosion",
+        "--gain",
+        "0.5",
     ];
     let app = App::try_parse_from(args).expect("Should parse");
 
     assert!(app.json);
     match app.command {
         Commands::Asset {
-            command: AssetCommands::Sound {
-                command: SoundCommands::Update { name, gain, .. },
-            },
+            command:
+                AssetCommands::Sound {
+                    command: SoundCommands::Update { name, gain, .. },
+                },
         } => {
             assert_eq!(name, "explosion");
             assert_eq!(gain, Some(0.5));
@@ -1103,7 +1248,8 @@ async fn test_p0_sound_update_changes_gain_preserves_other_fields() {
         None,
         &input,
         &output,
-    ).await;
+    )
+    .await;
 
     // Restore original directory
     if let Some(dir) = original_dir {
@@ -1118,12 +1264,20 @@ async fn test_p0_sound_update_changes_gain_preserves_other_fields() {
     let updated: Sound = serde_json::from_str(&updated_content).unwrap();
 
     // Gain should be updated to 0.5
-    assert_eq!(updated.gain.as_static(), Some(0.5), "Gain should be updated to 0.5");
+    assert_eq!(
+        updated.gain.as_static(),
+        Some(0.5),
+        "Gain should be updated to 0.5"
+    );
 
     // Other fields should be preserved
     assert_eq!(updated.id, 12345, "ID should be preserved");
     assert_eq!(updated.name, "explosion", "Name should be preserved");
-    assert_eq!(updated.priority.as_static(), Some(128.0), "Priority should be preserved");
+    assert_eq!(
+        updated.priority.as_static(),
+        Some(128.0),
+        "Priority should be preserved"
+    );
 }
 
 #[tokio::test]
@@ -1161,7 +1315,8 @@ async fn test_p0_sound_update_not_found_returns_error() {
         None,
         &input,
         &output,
-    ).await;
+    )
+    .await;
 
     // Restore original directory
     if let Some(dir) = original_dir {
@@ -1169,9 +1324,15 @@ async fn test_p0_sound_update_not_found_returns_error() {
     }
 
     // Verify error
-    assert!(result.is_err(), "Should return error for non-existent sound");
+    assert!(
+        result.is_err(),
+        "Should return error for non-existent sound"
+    );
     let err = result.unwrap_err();
-    assert!(err.to_string().contains("not found"), "Error should indicate sound not found");
+    assert!(
+        err.to_string().contains("not found"),
+        "Error should indicate sound not found"
+    );
 }
 
 #[tokio::test]
@@ -1222,7 +1383,8 @@ async fn test_p1_sound_update_invalid_path_does_not_modify_original() {
         None,
         &input,
         &output,
-    ).await;
+    )
+    .await;
 
     // Restore original directory
     if let Some(dir) = original_dir {
@@ -1230,11 +1392,17 @@ async fn test_p1_sound_update_invalid_path_does_not_modify_original() {
     }
 
     // Verify error
-    assert!(result.is_err(), "Should return error for invalid audio path");
+    assert!(
+        result.is_err(),
+        "Should return error for invalid audio path"
+    );
 
     // Verify original file is NOT modified
     let after_content = std::fs::read_to_string(sounds_dir.join("explosion.json")).unwrap();
-    assert_eq!(original_content, after_content, "Original file should not be modified on validation failure");
+    assert_eq!(
+        original_content, after_content,
+        "Original file should not be modified on validation failure"
+    );
 }
 
 #[tokio::test]
@@ -1282,7 +1450,8 @@ async fn test_p1_sound_update_json_output_envelope_format() {
         None,
         &input,
         &output,
-    ).await;
+    )
+    .await;
 
     // Restore original directory
     if let Some(dir) = original_dir {
@@ -1295,8 +1464,14 @@ async fn test_p1_sound_update_json_output_envelope_format() {
     // Verify JSON envelope format
     let success_data = output.last_success().expect("Should have success output");
     assert!(success_data.get("id").is_some(), "Should have 'id' field");
-    assert!(success_data.get("name").is_some(), "Should have 'name' field");
-    assert!(success_data.get("path").is_some(), "Should have 'path' field");
+    assert!(
+        success_data.get("name").is_some(),
+        "Should have 'name' field"
+    );
+    assert!(
+        success_data.get("path").is_some(),
+        "Should have 'path' field"
+    );
 }
 
 #[tokio::test]
@@ -1335,8 +1510,9 @@ async fn test_p1_sound_update_only_updates_specified_flags() {
     });
     std::fs::write(
         sounds_dir.join("explosion.json"),
-        serde_json::to_string_pretty(&original_sound).unwrap()
-    ).unwrap();
+        serde_json::to_string_pretty(&original_sound).unwrap(),
+    )
+    .unwrap();
 
     // Change to project directory
     let original_dir = std::env::current_dir().ok();
@@ -1362,7 +1538,8 @@ async fn test_p1_sound_update_only_updates_specified_flags() {
         None,
         &input,
         &output,
-    ).await;
+    )
+    .await;
 
     // Restore original directory
     if let Some(dir) = original_dir {
@@ -1377,16 +1554,34 @@ async fn test_p1_sound_update_only_updates_specified_flags() {
     let updated: Sound = serde_json::from_str(&updated_content).unwrap();
 
     // Updated fields
-    assert_eq!(updated.gain.as_static(), Some(0.5), "Gain should be updated");
-    assert_eq!(updated.priority.as_static(), Some(150.0), "Priority should be updated");
+    assert_eq!(
+        updated.gain.as_static(),
+        Some(0.5),
+        "Gain should be updated"
+    );
+    assert_eq!(
+        updated.priority.as_static(),
+        Some(150.0),
+        "Priority should be updated"
+    );
 
     // Preserved fields
     assert_eq!(updated.id, 99999, "ID should be preserved");
     assert_eq!(updated.bus, 5, "Bus should be preserved");
     assert!(updated.stream, "Stream should be preserved as true");
-    assert!(updated.loop_config.enabled, "Loop enabled should be preserved");
-    assert_eq!(updated.loop_config.loop_count, 3, "Loop count should be preserved");
-    assert_eq!(updated.spatialization, Spatialization::Position, "Spatialization should be preserved");
+    assert!(
+        updated.loop_config.enabled,
+        "Loop enabled should be preserved"
+    );
+    assert_eq!(
+        updated.loop_config.loop_count, 3,
+        "Loop count should be preserved"
+    );
+    assert_eq!(
+        updated.spatialization,
+        Spatialization::Position,
+        "Spatialization should be preserved"
+    );
 }
 
 #[tokio::test]
@@ -1426,8 +1621,9 @@ async fn test_p1_sound_update_preserves_sound_id() {
     });
     std::fs::write(
         sounds_dir.join("explosion.json"),
-        serde_json::to_string_pretty(&sound).unwrap()
-    ).unwrap();
+        serde_json::to_string_pretty(&sound).unwrap(),
+    )
+    .unwrap();
 
     // Change to project directory
     let original_dir = std::env::current_dir().ok();
@@ -1453,7 +1649,8 @@ async fn test_p1_sound_update_preserves_sound_id() {
         None,
         &input,
         &output,
-    ).await;
+    )
+    .await;
 
     // Restore original directory
     if let Some(dir) = original_dir {
@@ -1467,7 +1664,10 @@ async fn test_p1_sound_update_preserves_sound_id() {
     let updated_content = std::fs::read_to_string(sounds_dir.join("explosion.json")).unwrap();
     let updated: Sound = serde_json::from_str(&updated_content).unwrap();
 
-    assert_eq!(updated.id, specific_id, "Sound ID must NEVER change during update");
+    assert_eq!(
+        updated.id, specific_id,
+        "Sound ID must NEVER change during update"
+    );
 }
 
 #[tokio::test]
@@ -1515,7 +1715,8 @@ async fn test_p1_sound_update_invalid_gain_returns_error() {
         None,
         &input,
         &output,
-    ).await;
+    )
+    .await;
 
     // Restore original directory
     if let Some(dir) = original_dir {
@@ -1525,8 +1726,11 @@ async fn test_p1_sound_update_invalid_gain_returns_error() {
     // Verify error
     assert!(result.is_err(), "Should return error for invalid gain");
     let err = result.unwrap_err();
-    assert!(err.to_string().contains("gain") || err.to_string().contains("Gain"),
-        "Error should mention gain: {}", err);
+    assert!(
+        err.to_string().contains("gain") || err.to_string().contains("Gain"),
+        "Error should mention gain: {}",
+        err
+    );
 }
 
 #[tokio::test]
@@ -1574,7 +1778,8 @@ async fn test_p1_sound_update_bus_field_updates_correctly() {
         None,
         &input,
         &output,
-    ).await;
+    )
+    .await;
 
     // Restore original directory
     if let Some(dir) = original_dir {
@@ -1590,7 +1795,11 @@ async fn test_p1_sound_update_bus_field_updates_correctly() {
 
     assert_eq!(updated.bus, 42, "Bus should be updated to 42");
     // Verify other fields preserved
-    assert_eq!(updated.gain.as_static(), Some(0.8), "Gain should be preserved");
+    assert_eq!(
+        updated.gain.as_static(),
+        Some(0.8),
+        "Gain should be preserved"
+    );
 }
 
 #[tokio::test]
@@ -1638,7 +1847,8 @@ async fn test_p1_sound_update_json_includes_updated_fields() {
         None,
         &input,
         &output,
-    ).await;
+    )
+    .await;
 
     // Restore original directory
     if let Some(dir) = original_dir {
@@ -1650,12 +1860,29 @@ async fn test_p1_sound_update_json_includes_updated_fields() {
 
     // Verify JSON output includes updated_fields
     let success_data = output.last_success().expect("Should have success output");
-    assert!(success_data.get("updated_fields").is_some(), "Should have 'updated_fields' field");
+    assert!(
+        success_data.get("updated_fields").is_some(),
+        "Should have 'updated_fields' field"
+    );
 
-    let updated_fields = success_data["updated_fields"].as_array().expect("updated_fields should be array");
-    assert!(updated_fields.iter().any(|f| f.as_str() == Some("gain")), "Should include 'gain' in updated_fields");
-    assert!(updated_fields.iter().any(|f| f.as_str() == Some("priority")), "Should include 'priority' in updated_fields");
-    assert_eq!(updated_fields.len(), 2, "Should have exactly 2 updated fields");
+    let updated_fields = success_data["updated_fields"]
+        .as_array()
+        .expect("updated_fields should be array");
+    assert!(
+        updated_fields.iter().any(|f| f.as_str() == Some("gain")),
+        "Should include 'gain' in updated_fields"
+    );
+    assert!(
+        updated_fields
+            .iter()
+            .any(|f| f.as_str() == Some("priority")),
+        "Should include 'priority' in updated_fields"
+    );
+    assert_eq!(
+        updated_fields.len(),
+        2,
+        "Should have exactly 2 updated fields"
+    );
 }
 
 #[tokio::test]
@@ -1690,8 +1917,9 @@ async fn test_p1_sound_list_table_truncates_long_paths() {
     });
     std::fs::write(
         sounds_dir.join("long_path_sound.json"),
-        serde_json::to_string_pretty(&sound).unwrap()
-    ).unwrap();
+        serde_json::to_string_pretty(&sound).unwrap(),
+    )
+    .unwrap();
 
     // Change to project directory
     let original_dir = std::env::current_dir().ok();
@@ -1702,12 +1930,7 @@ async fn test_p1_sound_list_table_truncates_long_paths() {
     let output = CaptureOutput::interactive();
 
     // Run the list command
-    let result = handle_sound_command(
-        &SoundCommands::List {},
-        None,
-        &input,
-        &output,
-    ).await;
+    let result = handle_sound_command(&SoundCommands::List {}, None, &input, &output).await;
 
     // Restore original directory if we had one
     if let Some(dir) = original_dir {
@@ -1725,9 +1948,19 @@ async fn test_p1_sound_list_table_truncates_long_paths() {
 
     let audio_file = rows[0]["audio_file"].as_str().unwrap();
     // Path should be truncated to 40 chars max and end with "..."
-    assert!(audio_file.len() <= 40, "Path should be truncated to max 40 chars, got {} chars", audio_file.len());
-    assert!(audio_file.ends_with("..."), "Truncated path should end with '...'");
+    assert!(
+        audio_file.len() <= 40,
+        "Path should be truncated to max 40 chars, got {} chars",
+        audio_file.len()
+    );
+    assert!(
+        audio_file.ends_with("..."),
+        "Truncated path should end with '...'"
+    );
 
     // Original path was longer than 40 chars
-    assert!(long_path.len() > 40, "Test precondition: original path should be > 40 chars");
+    assert!(
+        long_path.len() > 40,
+        "Test precondition: original path should be > 40 chars"
+    );
 }

@@ -34,27 +34,28 @@ use crate::common::errors::CliError;
 mod collection;
 mod effect;
 mod event;
+/// Shared SDK types used across multiple asset types (Spatialization, Scope, RTPC, etc.).
+pub mod shared;
 mod sound;
 mod soundbank;
 mod switch;
 mod switch_container;
 
-// Re-export all asset types
-// Note: Some types are currently unused but are part of the public API for future asset type implementations.
-// These will be used when Collection, Effect, Event, etc. CRUD commands are added in later stories.
+// Re-export all asset types.
+// Note: Some types are currently unused but are part of the public API for future asset type
+// implementations. These will be used when Collection, Effect, Event, etc. CRUD commands are added.
 #[allow(unused_imports)]
 pub use collection::Collection;
 #[allow(unused_imports)]
 pub use effect::Effect;
 #[allow(unused_imports)]
 pub use event::Event;
-// Sound types - Some are exported for completeness but not yet used by commands
 #[allow(unused_imports)]
-pub use sound::{
+pub use shared::{
     CurveDefinition, CurvePart, CurvePoint, FaderAlgorithm, RtpcCompatibleValue, RtpcReference,
-    Scope, SoundBuilder,
+    Scope, SoundLoopConfig, Spatialization,
 };
-pub use sound::{Sound, SoundLoopConfig, Spatialization};
+pub use sound::{Sound, SoundBuilder};
 #[allow(unused_imports)]
 pub use soundbank::Soundbank;
 #[allow(unused_imports)]

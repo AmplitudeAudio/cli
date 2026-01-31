@@ -128,11 +128,17 @@ impl Input for MockInput {
         _formatter: Option<&dyn Fn(&str) -> String>,
         _validator: Option<&dyn Fn(&str) -> anyhow::Result<Validation, inquire::CustomUserError>>,
     ) -> anyhow::Result<String> {
-        Err(anyhow::anyhow!("MockInput: prompt_text not implemented for '{}'", prompt))
+        Err(anyhow::anyhow!(
+            "MockInput: prompt_text not implemented for '{}'",
+            prompt
+        ))
     }
 
     fn select(&self, prompt: &str, _options: &[String]) -> anyhow::Result<String> {
-        Err(anyhow::anyhow!("MockInput: select not implemented for '{}'", prompt))
+        Err(anyhow::anyhow!(
+            "MockInput: select not implemented for '{}'",
+            prompt
+        ))
     }
 
     fn confirm(&self, _prompt: &str, _default: Option<bool>) -> anyhow::Result<bool> {
@@ -2544,16 +2550,27 @@ async fn test_p0_template_unregister_user_cancels_json_mode() {
     let result = handler(&command, Some(db_arc.clone()), &input, &output).await;
 
     // THEN: Handler should succeed (cancellation is not an error)
-    assert!(result.is_ok(), "Handler should succeed when user cancels: {:?}", result.err());
+    assert!(
+        result.is_ok(),
+        "Handler should succeed when user cancels: {:?}",
+        result.err()
+    );
 
     // AND: JSON output should have correct cancellation format
     let success_data = output.last_success().expect("Should have success output");
-    assert_eq!(success_data["name"], "cancel-test-template", "Should include template name");
-    assert_eq!(success_data["removed"], false, "Should indicate not removed");
+    assert_eq!(
+        success_data["name"], "cancel-test-template",
+        "Should include template name"
+    );
+    assert_eq!(
+        success_data["removed"], false,
+        "Should indicate not removed"
+    );
     assert_eq!(success_data["cancelled"], true, "Should indicate cancelled");
 
     // AND: Template should still exist in database (not deleted)
-    let template = am::database::db_get_template_by_name("cancel-test-template", Some(db_arc)).unwrap();
+    let template =
+        am::database::db_get_template_by_name("cancel-test-template", Some(db_arc)).unwrap();
     assert!(
         template.is_some(),
         "Template should still exist in database after cancellation"
@@ -2594,7 +2611,11 @@ async fn test_p0_template_unregister_user_cancels_interactive_mode() {
     let result = handler(&command, Some(db_arc.clone()), &input, &output).await;
 
     // THEN: Handler should succeed (cancellation is not an error)
-    assert!(result.is_ok(), "Handler should succeed when user cancels: {:?}", result.err());
+    assert!(
+        result.is_ok(),
+        "Handler should succeed when user cancels: {:?}",
+        result.err()
+    );
 
     // AND: Progress messages should include "Cancelled." message
     let progress_messages = output.progress_messages();
@@ -2605,7 +2626,8 @@ async fn test_p0_template_unregister_user_cancels_interactive_mode() {
     );
 
     // AND: Template should still exist in database (not deleted)
-    let template = am::database::db_get_template_by_name("cancel-interactive-template", Some(db_arc)).unwrap();
+    let template =
+        am::database::db_get_template_by_name("cancel-interactive-template", Some(db_arc)).unwrap();
     assert!(
         template.is_some(),
         "Template should still exist in database after cancellation"
@@ -2662,7 +2684,7 @@ fn test_p0_template_unregister_cli_explicit_non_interactive_requires_force() {
     let output = Command::new(env!("CARGO_BIN_EXE_am"))
         .env("HOME", test_home_dir())
         .args([
-            "--non-interactive",  // Explicit non-interactive flag (AC#2)
+            "--non-interactive", // Explicit non-interactive flag (AC#2)
             "template",
             "unregister",
             &template_name,
@@ -2733,11 +2755,11 @@ fn test_p0_template_unregister_cli_explicit_non_interactive_with_force_succeeds(
     let output = Command::new(env!("CARGO_BIN_EXE_am"))
         .env("HOME", test_home_dir())
         .args([
-            "--non-interactive",  // Explicit non-interactive flag
+            "--non-interactive", // Explicit non-interactive flag
             "template",
             "unregister",
             &template_name,
-            "--force",  // Required in non-interactive mode
+            "--force", // Required in non-interactive mode
         ])
         .output()
         .expect("Failed to execute command");

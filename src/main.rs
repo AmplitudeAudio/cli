@@ -172,9 +172,7 @@ async fn run_command(
     output: &dyn Output,
 ) -> anyhow::Result<()> {
     match &cli.command {
-        Commands::Asset { command } => {
-            handle_asset_command(command, database, input, output).await
-        }
+        Commands::Asset { command } => handle_asset_command(command, database, input, output).await,
         Commands::Project { command } => {
             handle_project_command(command, database, input, output).await
         }

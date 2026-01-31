@@ -20,12 +20,12 @@ use std::path::PathBuf;
 use crate::{
     assets::{Asset, ProjectContext, RtpcCompatibleValue, Sound, SoundLoopConfig, Spatialization},
     common::{
-        errors::{asset_already_exists, asset_not_found, codes, CliError},
+        errors::{CliError, asset_already_exists, asset_not_found, codes},
         files::atomic_write,
         utils::{read_amproject_file, truncate_string},
     },
     database::Database,
-    input::{select_index, Input},
+    input::{Input, select_index},
     presentation::{Output, OutputMode},
 };
 
@@ -227,7 +227,10 @@ async fn create_sound(
     let current_dir = env::current_dir()?;
     let project_config = read_amproject_file(&current_dir)?;
 
-    output.progress(&format!("Creating sound '{}' in project '{}'...", name, project_config.name));
+    output.progress(&format!(
+        "Creating sound '{}' in project '{}'...",
+        name, project_config.name
+    ));
 
     // Step 2: Validate sound name doesn't already exist
     let sounds_dir = current_dir.join("sources").join("sounds");
@@ -280,11 +283,7 @@ async fn create_sound(
     };
 
     // Step 7: Get stream value (already from flag, or prompt)
-    let stream_value = if stream {
-        true
-    } else {
-        prompt_stream(input)?
-    };
+    let stream_value = if stream { true } else { prompt_stream(input)? };
 
     // Step 8: Get loop configuration
     let loop_config = if loop_enabled {
@@ -327,8 +326,8 @@ async fn create_sound(
     sound.validate_rules(&context)?;
 
     // Step 14: Serialize to JSON
-    let json_content = serde_json::to_string_pretty(&sound)
-        .context("Failed to serialize sound to JSON")?;
+    let json_content =
+        serde_json::to_string_pretty(&sound).context("Failed to serialize sound to JSON")?;
 
     // Step 15: Write using atomic write pattern
     atomic_write(&sound_file_path, json_content.as_bytes())?;
@@ -570,14 +569,12 @@ fn prompt_gain(input: &dyn Input) -> Result<f32> {
         "Volume gain [0.0-1.0]",
         Some("1.0"),
         None,
-        Some(&|value: &str| {
-            match value.trim().parse::<f32>() {
-                Ok(g) if (0.0..=1.0).contains(&g) => Ok(Validation::Valid),
-                Ok(g) => Ok(Validation::Invalid(
-                    format!("Gain must be between 0.0 and 1.0, got {}", g).into(),
-                )),
-                Err(_) => Ok(Validation::Invalid("Must be a number".into())),
-            }
+        Some(&|value: &str| match value.trim().parse::<f32>() {
+            Ok(g) if (0.0..=1.0).contains(&g) => Ok(Validation::Valid),
+            Ok(g) => Ok(Validation::Invalid(
+                format!("Gain must be between 0.0 and 1.0, got {}", g).into(),
+            )),
+            Err(_) => Ok(Validation::Invalid("Must be a number".into())),
         }),
     );
 
@@ -593,11 +590,11 @@ fn prompt_priority(input: &dyn Input) -> Result<u8> {
         "Playback priority [0-255]",
         Some("128"),
         None,
-        Some(&|value: &str| {
-            match value.trim().parse::<u8>() {
-                Ok(_) => Ok(Validation::Valid),
-                Err(_) => Ok(Validation::Invalid("Must be a number between 0 and 255".into())),
-            }
+        Some(&|value: &str| match value.trim().parse::<u8>() {
+            Ok(_) => Ok(Validation::Valid),
+            Err(_) => Ok(Validation::Invalid(
+                "Must be a number between 0 and 255".into(),
+            )),
         }),
     );
 
@@ -631,11 +628,9 @@ fn prompt_loop_config(input: &dyn Input) -> Result<SoundLoopConfig> {
         "Loop count (0=infinite)",
         Some("0"),
         None,
-        Some(&|value: &str| {
-            match value.trim().parse::<u32>() {
-                Ok(_) => Ok(Validation::Valid),
-                Err(_) => Ok(Validation::Invalid("Must be a non-negative number".into())),
-            }
+        Some(&|value: &str| match value.trim().parse::<u32>() {
+            Ok(_) => Ok(Validation::Valid),
+            Err(_) => Ok(Validation::Invalid("Must be a non-negative number".into())),
         }),
     );
 
@@ -712,10 +707,14 @@ async fn update_sound(
     }
 
     // Step 3: Parse existing sound
-    let content = fs::read_to_string(&sound_file_path)
-        .context(format!("Failed to read sound file: {}", sound_file_path.display()))?;
-    let mut sound: Sound = serde_json::from_str(&content)
-        .context(format!("Failed to parse sound file: {}", sound_file_path.display()))?;
+    let content = fs::read_to_string(&sound_file_path).context(format!(
+        "Failed to read sound file: {}",
+        sound_file_path.display()
+    ))?;
+    let mut sound: Sound = serde_json::from_str(&content).context(format!(
+        "Failed to parse sound file: {}",
+        sound_file_path.display()
+    ))?;
 
     // Step 4: Determine if we have any flag values (non-interactive mode)
     let has_any_flag = file.is_some()
@@ -751,8 +750,8 @@ async fn update_sound(
     sound.validate_rules(&context)?;
 
     // Step 7: Serialize and write atomically
-    let json_content = serde_json::to_string_pretty(&sound)
-        .context("Failed to serialize sound to JSON")?;
+    let json_content =
+        serde_json::to_string_pretty(&sound).context("Failed to serialize sound to JSON")?;
     atomic_write(&sound_file_path, json_content.as_bytes())?;
 
     // Step 8: Output success
@@ -853,11 +852,9 @@ fn prompt_sound_updates(sound: &mut Sound, input: &dyn Input) -> Result<Vec<Stri
     let mut updated_fields = Vec::new();
 
     // Prompt for audio file path
-    if let Some(new_file) = prompt_update_text(
-        input,
-        "Audio file path",
-        &sound.path.to_string_lossy(),
-    )? {
+    if let Some(new_file) =
+        prompt_update_text(input, "Audio file path", &sound.path.to_string_lossy())?
+    {
         sound.path = PathBuf::from(new_file);
         updated_fields.push("audio_file".to_string());
     }
@@ -895,7 +892,8 @@ fn prompt_sound_updates(sound: &mut Sound, input: &dyn Input) -> Result<Vec<Stri
     }
 
     // Prompt for looping
-    if let Some(new_loop) = prompt_update_bool(input, "Enable looping", sound.loop_config.enabled)? {
+    if let Some(new_loop) = prompt_update_bool(input, "Enable looping", sound.loop_config.enabled)?
+    {
         sound.loop_config.enabled = new_loop;
         updated_fields.push("loop_enabled".to_string());
         if new_loop {
@@ -953,12 +951,10 @@ fn prompt_update_number(
         &prompt,
         Some(&current_str),
         None,
-        Some(&move |value: &str| {
-            match value.trim().parse::<f32>() {
-                Ok(v) if validator(v) => Ok(Validation::Valid),
-                Ok(_) => Ok(Validation::Invalid(error_msg.clone().into())),
-                Err(_) => Ok(Validation::Invalid("Must be a number".into())),
-            }
+        Some(&move |value: &str| match value.trim().parse::<f32>() {
+            Ok(v) if validator(v) => Ok(Validation::Valid),
+            Ok(_) => Ok(Validation::Invalid(error_msg.clone().into())),
+            Err(_) => Ok(Validation::Invalid("Must be a number".into())),
         }),
     );
 
@@ -976,12 +972,12 @@ fn prompt_update_number(
 }
 
 /// Prompt for an optional boolean field update.
-fn prompt_update_bool(
-    input: &dyn Input,
-    label: &str,
-    current_value: bool,
-) -> Result<Option<bool>> {
-    let prompt = format!("{} (current: {})", label, if current_value { "yes" } else { "no" });
+fn prompt_update_bool(input: &dyn Input, label: &str, current_value: bool) -> Result<Option<bool>> {
+    let prompt = format!(
+        "{} (current: {})",
+        label,
+        if current_value { "yes" } else { "no" }
+    );
     match input.confirm(&prompt, Some(current_value)) {
         Ok(value) if value == current_value => Ok(None), // No change
         Ok(value) => Ok(Some(value)),

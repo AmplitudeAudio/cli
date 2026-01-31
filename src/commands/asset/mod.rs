@@ -11,11 +11,7 @@ use anyhow::Result;
 use clap::Subcommand;
 use std::sync::Arc;
 
-use crate::{
-    database::Database,
-    input::Input,
-    presentation::Output,
-};
+use crate::{database::Database, input::Input, presentation::Output};
 
 /// Asset management commands.
 ///
