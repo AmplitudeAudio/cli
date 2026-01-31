@@ -299,6 +299,15 @@ impl Asset for Sound {
             .with_field("gain"));
         }
 
+        // Cross-asset reference checks (only if validator is available)
+        // Bus and attenuation validation deferred to Epic 6.
+        if let Some(validator) = &context.validator {
+            // Validate effect reference (zero IDs handled internally as no-op)
+            validator
+                .validate_effect_exists(self.effect)
+                .map_err(|e| e.with_field("effect"))?;
+        }
+
         Ok(())
     }
 }

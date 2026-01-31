@@ -29,6 +29,9 @@ pub mod codes {
     /// Format validation failed (e.g., invalid date format, malformed ID)
     pub const ERR_VALIDATION_FORMAT: i32 = -31003;
 
+    /// Reference validation failed (e.g., referenced asset ID does not exist)
+    pub const ERR_VALIDATION_REFERENCE: i32 = -31004;
+
     // =========================================================================
     // Asset errors (-30xxx)
     // =========================================================================
@@ -180,6 +183,7 @@ pub fn error_type_name(code: i32) -> String {
         codes::ERR_VALIDATION_SCHEMA => "schema_validation_error".to_string(),
         codes::ERR_VALIDATION_FIELD => "field_validation_error".to_string(),
         codes::ERR_VALIDATION_FORMAT => "format_validation_error".to_string(),
+        codes::ERR_VALIDATION_REFERENCE => "reference_validation_error".to_string(),
         -31999..=-31000 => "validation_error".to_string(),
 
         // Asset errors (-30xxx)
@@ -268,6 +272,9 @@ pub fn error_suggestion(code: i32) -> String {
             "Check your input values and correct the invalid field".to_string()
         }
         codes::ERR_VALIDATION_FORMAT => "Check the format of your input and try again".to_string(),
+        codes::ERR_VALIDATION_REFERENCE => {
+            "Verify the referenced asset exists or create it first".to_string()
+        }
 
         // Generic fallbacks by range
         -31999..=-31000 => "Check your input values and try again".to_string(),

@@ -40,6 +40,8 @@ mod sound;
 mod soundbank;
 mod switch;
 mod switch_container;
+/// Cross-asset reference validation infrastructure.
+pub mod validator;
 
 // Re-export all asset types.
 // Note: Some types are currently unused but are part of the public API for future asset type
@@ -62,6 +64,7 @@ pub use soundbank::Soundbank;
 pub use switch::Switch;
 #[allow(unused_imports)]
 pub use switch_container::SwitchContainer;
+pub use validator::ProjectValidator;
 
 use crate::common::utils::{
     ASSET_DIR_COLLECTIONS, ASSET_DIR_EFFECTS, ASSET_DIR_EVENTS, ASSET_DIR_SOUNDBANKS,
@@ -465,6 +468,8 @@ pub struct ProjectContext {
     pub id_registry: HashSet<u64>,
     /// Registry of existing asset names by type (populated lazily)
     pub name_registry: HashMap<AssetType, HashSet<String>>,
+    /// Optional cross-asset reference validator for checking inter-asset dependencies.
+    pub validator: Option<validator::ProjectValidator>,
 }
 
 impl ProjectContext {
@@ -477,6 +482,7 @@ impl ProjectContext {
             project_root,
             id_registry: HashSet::new(),
             name_registry: HashMap::new(),
+            validator: None,
         }
     }
 
@@ -486,6 +492,15 @@ impl ProjectContext {
     /// operations are needed without actual file system access.
     pub fn empty() -> Self {
         Self::new(PathBuf::new())
+    }
+
+    /// Attaches a `ProjectValidator` for cross-asset reference checking.
+    ///
+    /// When set, `validate_rules()` implementations can use it to verify
+    /// that referenced asset IDs actually exist.
+    pub fn with_validator(mut self, validator: validator::ProjectValidator) -> Self {
+        self.validator = Some(validator);
+        self
     }
 
     /// Checks if an ID is already registered.
