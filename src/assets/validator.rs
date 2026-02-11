@@ -47,9 +47,11 @@ pub struct ProjectValidator {
     /// Root path of the project (where .amproject lives).
     project_root: PathBuf,
     /// All known asset IDs grouped by type.
-    asset_ids: HashMap<AssetType, HashSet<u64>>,
+    pub(crate) asset_ids: HashMap<AssetType, HashSet<u64>>,
     /// All known asset names grouped by type.
-    asset_names: HashMap<AssetType, HashSet<String>>,
+    pub(crate) asset_names: HashMap<AssetType, HashSet<String>>,
+    /// Maps each asset ID to the asset type directory it was found in.
+    asset_locations: HashMap<u64, AssetType>,
 }
 
 // ValidationError is the project-wide error type for all validation methods.
@@ -78,6 +80,7 @@ impl ProjectValidator {
             project_root,
             asset_ids: HashMap::new(),
             asset_names: HashMap::new(),
+            asset_locations: HashMap::new(),
         };
 
         // Scan all asset types
@@ -106,6 +109,7 @@ impl ProjectValidator {
             project_root: PathBuf::new(),
             asset_ids: HashMap::new(),
             asset_names: HashMap::new(),
+            asset_locations: HashMap::new(),
         }
     }
 
@@ -134,6 +138,11 @@ impl ProjectValidator {
         if exists {
             Ok(())
         } else {
+            // Check if the ID exists but in a different type directory
+            if let Err(failure) = self.validate_asset_in_correct_directory(asset_type, id) {
+                return Err(failure);
+            }
+
             Err(ValidationError::new(
                 ValidationLayer::TypeRules,
                 codes::ERR_VALIDATION_REFERENCE,
@@ -149,6 +158,48 @@ impl ProjectValidator {
                 asset_type.directory_name()
             )))
         }
+    }
+
+    /// Validates that an asset ID is located in the correct type directory.
+    ///
+    /// Returns `Ok(())` if:
+    /// - `id == 0` (zero means "no reference")
+    /// - The ID is not found (validated separately by `validate_asset_exists`)
+    /// - The ID is in the correct type directory
+    ///
+    /// Returns `Err` if the ID exists but in a different type directory.
+    pub fn validate_asset_in_correct_directory(
+        &self,
+        asset_type: AssetType,
+        id: u64,
+    ) -> Result<(), ValidationError> {
+        if id == 0 {
+            return Ok(());
+        }
+
+        if let Some(actual_type) = self.asset_locations.get(&id) {
+            if *actual_type != asset_type {
+                return Err(ValidationError::new(
+                    ValidationLayer::TypeRules,
+                    codes::ERR_VALIDATION_REFERENCE,
+                    format!(
+                        "Asset ID {} exists but is a {}, not a {}",
+                        id, actual_type, asset_type
+                    ),
+                    format!(
+                        "The asset was found in sources/{} instead of sources/{}",
+                        actual_type.directory_name(),
+                        asset_type.directory_name()
+                    ),
+                )
+                .with_suggestion(format!(
+                    "Move the asset to sources/{} or use the correct asset type reference",
+                    asset_type.directory_name()
+                )));
+            }
+        }
+
+        Ok(())
     }
 
     /// Validates that a Sound with the given ID exists.
@@ -261,6 +312,7 @@ impl ProjectValidator {
             // Extract id (u64) and name (String)
             if let Some(id) = value.get("id").and_then(|v| v.as_u64()) {
                 self.asset_ids.entry(asset_type).or_default().insert(id);
+                self.asset_locations.insert(id, asset_type);
             }
 
             if let Some(name) = value.get("name").and_then(|v| v.as_str()) {
@@ -504,6 +556,91 @@ mod tests {
         // Suggestion: actionable fix
         assert!(!err.suggestion().is_empty());
         assert!(err.suggestion().contains("Create"));
+    }
+
+    // =========================================================================
+    // P1: Type-directory mismatch tests
+    // =========================================================================
+
+    #[test]
+    fn test_p1_type_directory_mismatch_detected() {
+        let dir = tempdir().unwrap();
+
+        // Place a sound JSON in the effects directory (wrong type)
+        let effects_dir = dir.path().join("sources/effects");
+        fs::create_dir_all(&effects_dir).unwrap();
+        write_sound_json(&effects_dir, "misplaced.json", 100, "misplaced");
+
+        let validator = ProjectValidator::new(dir.path().to_path_buf()).unwrap();
+
+        // ID 100 is in effects, so asking for it as a Sound should fail
+        let result = validator.validate_sound_exists(100);
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(err.what().contains("Effect"));
+        assert!(err.what().contains("not a Sound"));
+    }
+
+    #[test]
+    fn test_p1_type_directory_correct_passes() {
+        let dir = tempdir().unwrap();
+
+        let sounds_dir = dir.path().join("sources/sounds");
+        fs::create_dir_all(&sounds_dir).unwrap();
+        write_sound_json(&sounds_dir, "correct.json", 200, "correct");
+
+        let validator = ProjectValidator::new(dir.path().to_path_buf()).unwrap();
+
+        // ID 200 is in sounds, so asking for it as a Sound should pass
+        assert!(validator.validate_sound_exists(200).is_ok());
+    }
+
+    #[test]
+    fn test_p1_validate_asset_in_correct_directory() {
+        let dir = tempdir().unwrap();
+
+        let sounds_dir = dir.path().join("sources/sounds");
+        fs::create_dir_all(&sounds_dir).unwrap();
+        write_sound_json(&sounds_dir, "beep.json", 10, "beep");
+
+        let effects_dir = dir.path().join("sources/effects");
+        fs::create_dir_all(&effects_dir).unwrap();
+        write_minimal_asset_json(&effects_dir, "reverb.json", 20, "reverb");
+
+        let validator = ProjectValidator::new(dir.path().to_path_buf()).unwrap();
+
+        // Correct directory
+        assert!(
+            validator
+                .validate_asset_in_correct_directory(AssetType::Sound, 10)
+                .is_ok()
+        );
+        assert!(
+            validator
+                .validate_asset_in_correct_directory(AssetType::Effect, 20)
+                .is_ok()
+        );
+
+        // Wrong directory
+        let err = validator
+            .validate_asset_in_correct_directory(AssetType::Effect, 10)
+            .unwrap_err();
+        assert!(err.what().contains("Sound"));
+        assert!(err.what().contains("not a Effect"));
+
+        // Zero ID always ok
+        assert!(
+            validator
+                .validate_asset_in_correct_directory(AssetType::Sound, 0)
+                .is_ok()
+        );
+
+        // Unknown ID is ok (not found = not a mismatch)
+        assert!(
+            validator
+                .validate_asset_in_correct_directory(AssetType::Sound, 999)
+                .is_ok()
+        );
     }
 
     #[test]

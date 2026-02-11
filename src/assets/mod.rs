@@ -498,7 +498,25 @@ impl ProjectContext {
     ///
     /// When set, `validate_rules()` implementations can use it to verify
     /// that referenced asset IDs actually exist.
+    ///
+    /// Also populates `id_registry` and `name_registry` from the validator's
+    /// scanned data so that `has_id()` and `has_name()` checks work.
     pub fn with_validator(mut self, validator: validator::ProjectValidator) -> Self {
+        // Populate id_registry from the validator's scanned asset IDs
+        for ids in validator.asset_ids.values() {
+            for &id in ids {
+                self.id_registry.insert(id);
+            }
+        }
+
+        // Populate name_registry from the validator's scanned asset names
+        for (asset_type, names) in &validator.asset_names {
+            let entry = self.name_registry.entry(*asset_type).or_default();
+            for name in names {
+                entry.insert(name.clone());
+            }
+        }
+
         self.validator = Some(validator);
         self
     }

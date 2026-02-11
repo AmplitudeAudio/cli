@@ -4,8 +4,11 @@
 //! that may be used across multiple commands.
 
 use std::collections::HashMap;
+use std::collections::hash_map::DefaultHasher;
 use std::fs;
+use std::hash::{Hash, Hasher};
 use std::path::Path;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use anyhow::Context;
 use serde::{Deserialize, Serialize};
@@ -431,4 +434,20 @@ pub fn parse_template_manifest(path: &Path) -> anyhow::Result<Option<TemplateMan
     })?;
 
     Ok(Some(manifest))
+}
+
+/// Generate a unique ID for an asset.
+///
+/// Uses a combination of the asset name and current timestamp to generate
+/// a unique u64 identifier.
+pub fn generate_unique_id(name: &str) -> u64 {
+    let timestamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+
+    let mut hasher = DefaultHasher::new();
+    name.hash(&mut hasher);
+    timestamp.hash(&mut hasher);
+    hasher.finish()
 }

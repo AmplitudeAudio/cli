@@ -2,12 +2,9 @@
 //!
 //! Implements CRUD operations for Sound assets in Amplitude projects.
 
-use std::collections::hash_map::DefaultHasher;
 use std::env;
 use std::fs;
-use std::hash::{Hash, Hasher};
 use std::sync::Arc;
-use std::time::{SystemTime, UNIX_EPOCH};
 
 use anyhow::{Context, Result};
 use clap::Subcommand;
@@ -17,8 +14,12 @@ use serde_json::json;
 
 use std::path::PathBuf;
 
+use crate::common::utils::generate_unique_id;
 use crate::{
-    assets::{Asset, ProjectContext, RtpcCompatibleValue, Sound, SoundLoopConfig, Spatialization},
+    assets::{
+        Asset, ProjectContext, ProjectValidator, RtpcCompatibleValue, Sound, SoundLoopConfig,
+        Spatialization,
+    },
     common::{
         errors::{CliError, asset_already_exists, asset_not_found, codes},
         files::atomic_write,
@@ -28,6 +29,11 @@ use crate::{
     input::{Input, select_index},
     presentation::{Output, OutputMode},
 };
+
+/// The name of the current asset.
+///
+/// Used in error messages and other outputs.
+const ASSET_NAME: &str = "Sound";
 
 /// Sound asset subcommands.
 #[derive(Subcommand, Debug)]
@@ -41,23 +47,23 @@ pub enum SoundCommands {
         #[arg(short, long)]
         file: Option<String>,
 
-        /// Volume gain (0.0-1.0, default: 1.0)
+        /// Volume gain (0.0-1.0, omit for default: 1.0; invalid values are rejected)
         #[arg(short, long)]
         gain: Option<f32>,
 
-        /// Bus ID for audio routing (default: 0 = master)
+        /// Bus ID for audio routing (omit for default: 0 = master)
         #[arg(short, long)]
         bus: Option<u64>,
 
-        /// Playback priority (0-255, default: 128)
+        /// Playback priority (0-255, omit for default: 128; invalid values are rejected)
         #[arg(short, long)]
         priority: Option<u8>,
 
-        /// Stream from disk instead of loading into memory
+        /// Stream from disk instead of loading into memory (default: false)
         #[arg(long)]
         stream: bool,
 
-        /// Enable looping
+        /// Enable looping (default: disabled)
         #[arg(long = "loop")]
         loop_enabled: bool,
 
@@ -65,7 +71,7 @@ pub enum SoundCommands {
         #[arg(long)]
         loop_count: Option<u32>,
 
-        /// Spatialization mode: none, position, position_orientation, hrtf
+        /// Spatialization mode: none, position, position_orientation, hrtf (default: none)
         #[arg(short, long)]
         spatialization: Option<String>,
     },
@@ -176,22 +182,6 @@ pub async fn handler(
     }
 }
 
-/// Generate a unique ID for a sound asset.
-///
-/// Uses a combination of the sound name and current timestamp to generate
-/// a unique u64 identifier.
-fn generate_unique_id(name: &str) -> u64 {
-    let timestamp = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_nanos();
-
-    let mut hasher = DefaultHasher::new();
-    name.hash(&mut hasher);
-    timestamp.hash(&mut hasher);
-    hasher.finish()
-}
-
 /// Parse spatialization mode from string.
 fn parse_spatialization(s: &str) -> Result<Spatialization> {
     match s.to_lowercase().as_str() {
@@ -232,12 +222,26 @@ async fn create_sound(
         name, project_config.name
     ));
 
-    // Step 2: Validate sound name doesn't already exist
+    // Step 2: Validate sound name doesn't already exist (filesystem + registry)
     let sounds_dir = current_dir.join("sources").join("sounds");
     let sound_file_path = sounds_dir.join(format!("{}.json", name));
 
     if sound_file_path.exists() {
-        return Err(asset_already_exists("Sound", name)
+        return Err(asset_already_exists(ASSET_NAME, name)
+            .with_suggestion(format!(
+                "Use 'am asset sound update {}' to modify it, or choose a different name",
+                name
+            ))
+            .into());
+    }
+
+    // Build populated ProjectContext for validation (used throughout)
+    let validator = ProjectValidator::new(current_dir.clone())?;
+    let context = ProjectContext::new(current_dir.clone()).with_validator(validator);
+
+    // Check name uniqueness via ProjectContext registry
+    if context.has_name(crate::assets::AssetType::Sound, name) {
+        return Err(asset_already_exists(ASSET_NAME, name)
             .with_suggestion(format!(
                 "Use 'am asset sound update {}' to modify it, or choose a different name",
                 name
@@ -307,8 +311,22 @@ async fn create_sound(
     // Step 10: Get bus ID (use default or provided)
     let bus_id = bus.unwrap_or(0);
 
-    // Step 11: Generate unique ID
-    let id = generate_unique_id(name);
+    // Step 11: Generate unique ID and check for collisions against all project assets
+    let mut id = generate_unique_id(name);
+    let mut retries = 0;
+    while context.has_id(id) && retries < 3 {
+        id = generate_unique_id(&format!("{}{}", name, retries));
+        retries += 1;
+    }
+    if context.has_id(id) {
+        return Err(CliError::new(
+            codes::ERR_ASSET_ALREADY_EXISTS,
+            format!("Generated ID {} collides with an existing asset", id),
+            "All generated ID attempts collided with existing assets in the project",
+        )
+        .with_suggestion("Try a different name or wait a moment and retry")
+        .into());
+    }
 
     // Step 12: Build the Sound asset
     let sound = Sound::builder(id, name)
@@ -321,8 +339,7 @@ async fn create_sound(
         .spatialization(spatialization_mode)
         .build();
 
-    // Step 13: Validate the sound (type rules)
-    let context = ProjectContext::new(current_dir.clone());
+    // Step 13: Validate the sound (type rules) with populated context (built in step 2)
     sound.validate_rules(&context)?;
 
     // Step 14: Serialize to JSON
@@ -402,30 +419,77 @@ async fn list_sounds(output: &dyn Output) -> Result<()> {
     // Step 2: Scan sounds directory
     let sounds_dir = current_dir.join("sources").join("sounds");
 
-    // Step 3: Read and parse all .json files
+    // Step 3: Handle missing or unreadable directory
+    if !sounds_dir.exists() {
+        match output.mode() {
+            OutputMode::Json => {
+                output.success(
+                    json!({
+                        "sounds": [],
+                        "count": 0,
+                        "warnings": ["No sounds directory found. Create sounds with 'am asset sound create'."]
+                    }),
+                    None,
+                );
+            }
+            OutputMode::Interactive => {
+                output.progress("No sounds directory found.");
+                output.progress(&format!(
+                    "Create sounds with '{}'.",
+                    "am asset sound create <name>".green()
+                ));
+            }
+        }
+        return Ok(());
+    }
+
+    // Step 4: Read and parse all .json files
     let mut sounds: Vec<Sound> = Vec::new();
     let mut warnings: Vec<String> = Vec::new();
 
-    if sounds_dir.exists() {
-        for entry in fs::read_dir(&sounds_dir)? {
-            let entry = entry?;
-            let path = entry.path();
+    let entries = match fs::read_dir(&sounds_dir) {
+        Ok(entries) => entries,
+        Err(e) => {
+            return Err(CliError::new(
+                codes::ERR_VALIDATION_FIELD,
+                "Cannot read sounds directory",
+                format!("Permission denied on {}", sounds_dir.display()),
+            )
+            .with_suggestion("Check directory permissions")
+            .with_context(format!("I/O error: {}", e))
+            .into());
+        }
+    };
 
-            if path.extension().map(|e| e == "json").unwrap_or(false) {
-                match fs::read_to_string(&path) {
-                    Ok(content) => match serde_json::from_str::<Sound>(&content) {
-                        Ok(sound) => sounds.push(sound),
-                        Err(e) => {
-                            let filename = path.file_name().unwrap_or_default().to_string_lossy();
-                            log::warn!("Skipping invalid sound file: {}", path.display());
-                            warnings.push(format!("Invalid JSON in {}: {}", filename, e));
+    for entry in entries {
+        let entry = entry?;
+        let path = entry.path();
+
+        if path.extension().map(|e| e == "json").unwrap_or(false) {
+            match fs::read_to_string(&path) {
+                Ok(content) => match serde_json::from_str::<Sound>(&content) {
+                    Ok(sound) => {
+                        // Check if referenced audio file exists
+                        let audio_path = current_dir.join("data").join(&sound.path);
+                        if !audio_path.exists() {
+                            warnings.push(format!(
+                                "Warning: Sound '{}' references missing audio file: {}. Re-add the file or update the sound.",
+                                sound.name,
+                                sound.path.display()
+                            ));
                         }
-                    },
+                        sounds.push(sound);
+                    }
                     Err(e) => {
                         let filename = path.file_name().unwrap_or_default().to_string_lossy();
-                        log::warn!("Failed to read sound file: {}", path.display());
-                        warnings.push(format!("Failed to read {}: {}", filename, e));
+                        log::warn!("Skipping invalid sound file: {}", path.display());
+                        warnings.push(format!("Invalid JSON in {}: {}", filename, e));
                     }
+                },
+                Err(e) => {
+                    let filename = path.file_name().unwrap_or_default().to_string_lossy();
+                    log::warn!("Failed to read sound file: {}", path.display());
+                    warnings.push(format!("Failed to read {}: {}", filename, e));
                 }
             }
         }
@@ -564,6 +628,10 @@ fn prompt_audio_file(input: &dyn Input) -> Result<String> {
 }
 
 /// Prompt for gain value.
+///
+/// Only called when --gain flag was NOT provided (field omitted).
+/// Uses default of 1.0 in non-interactive mode, which is correct
+/// because omitted fields should get defaults (AC #5).
 fn prompt_gain(input: &dyn Input) -> Result<f32> {
     let result = input.prompt_text(
         "Volume gain [0.0-1.0]",
@@ -580,11 +648,15 @@ fn prompt_gain(input: &dyn Input) -> Result<f32> {
 
     match result {
         Ok(value) => Ok(value.trim().parse().unwrap_or(1.0)),
-        Err(_) => Ok(1.0), // Default to 1.0 in non-interactive mode
+        Err(_) => Ok(1.0), // Default to 1.0 when field omitted in non-interactive mode
     }
 }
 
 /// Prompt for priority value.
+///
+/// Only called when --priority flag was NOT provided (field omitted).
+/// Uses default of 128 in non-interactive mode, which is correct
+/// because omitted fields should get defaults (AC #5).
 fn prompt_priority(input: &dyn Input) -> Result<u8> {
     let result = input.prompt_text(
         "Playback priority [0-255]",
@@ -600,7 +672,7 @@ fn prompt_priority(input: &dyn Input) -> Result<u8> {
 
     match result {
         Ok(value) => Ok(value.trim().parse().unwrap_or(128)),
-        Err(_) => Ok(128), // Default to 128 in non-interactive mode
+        Err(_) => Ok(128), // Default to 128 when field omitted in non-interactive mode
     }
 }
 
@@ -698,7 +770,7 @@ async fn update_sound(
     let sound_file_path = sounds_dir.join(format!("{}.json", name));
 
     if !sound_file_path.exists() {
-        return Err(asset_not_found("Sound", name)
+        return Err(asset_not_found(ASSET_NAME, name)
             .with_suggestion(format!(
                 "Use 'am asset sound list' to see available sounds, or 'am asset sound create {}' to create it",
                 name
@@ -745,8 +817,9 @@ async fn update_sound(
         prompt_sound_updates(&mut sound, input)?
     };
 
-    // Step 6: Validate the updated sound
-    let context = ProjectContext::new(current_dir.clone());
+    // Step 6: Validate the updated sound with populated context
+    let validator = ProjectValidator::new(current_dir.clone())?;
+    let context = ProjectContext::new(current_dir.clone()).with_validator(validator);
     sound.validate_rules(&context)?;
 
     // Step 7: Serialize and write atomically

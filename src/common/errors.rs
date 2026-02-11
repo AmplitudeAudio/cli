@@ -32,6 +32,12 @@ pub mod codes {
     /// Reference validation failed (e.g., referenced asset ID does not exist)
     pub const ERR_VALIDATION_REFERENCE: i32 = -31004;
 
+    /// Empty required reference list (e.g., collection with no sounds)
+    pub const ERR_VALIDATION_EMPTY_REFERENCE: i32 = -31005;
+
+    /// Circular dependency detected between assets
+    pub const ERR_VALIDATION_CIRCULAR_REFERENCE: i32 = -31006;
+
     // =========================================================================
     // Asset errors (-30xxx)
     // =========================================================================
@@ -184,6 +190,10 @@ pub fn error_type_name(code: i32) -> String {
         codes::ERR_VALIDATION_FIELD => "field_validation_error".to_string(),
         codes::ERR_VALIDATION_FORMAT => "format_validation_error".to_string(),
         codes::ERR_VALIDATION_REFERENCE => "reference_validation_error".to_string(),
+        codes::ERR_VALIDATION_EMPTY_REFERENCE => "empty_reference_validation_error".to_string(),
+        codes::ERR_VALIDATION_CIRCULAR_REFERENCE => {
+            "circular_reference_validation_error".to_string()
+        }
         -31999..=-31000 => "validation_error".to_string(),
 
         // Asset errors (-30xxx)
@@ -274,6 +284,13 @@ pub fn error_suggestion(code: i32) -> String {
         codes::ERR_VALIDATION_FORMAT => "Check the format of your input and try again".to_string(),
         codes::ERR_VALIDATION_REFERENCE => {
             "Verify the referenced asset exists or create it first".to_string()
+        }
+        codes::ERR_VALIDATION_EMPTY_REFERENCE => {
+            "Add at least one reference to the required list (e.g., add sounds to a collection)"
+                .to_string()
+        }
+        codes::ERR_VALIDATION_CIRCULAR_REFERENCE => {
+            "Remove the circular dependency between assets to break the cycle".to_string()
         }
 
         // Generic fallbacks by range
@@ -516,6 +533,38 @@ mod tests {
         );
         let anyhow_err: anyhow::Error = err.into();
         assert_eq!(determine_exit_code(&anyhow_err), exit_codes::USER_ERROR);
+    }
+
+    #[test]
+    fn test_empty_reference_error_code_mapping() {
+        assert_eq!(
+            error_type_name(codes::ERR_VALIDATION_EMPTY_REFERENCE),
+            "empty_reference_validation_error"
+        );
+        assert_eq!(codes::ERR_VALIDATION_EMPTY_REFERENCE, -31005);
+        assert!((-31999..=-31000).contains(&codes::ERR_VALIDATION_EMPTY_REFERENCE));
+    }
+
+    #[test]
+    fn test_circular_reference_error_code_mapping() {
+        assert_eq!(
+            error_type_name(codes::ERR_VALIDATION_CIRCULAR_REFERENCE),
+            "circular_reference_validation_error"
+        );
+        assert_eq!(codes::ERR_VALIDATION_CIRCULAR_REFERENCE, -31006);
+        assert!((-31999..=-31000).contains(&codes::ERR_VALIDATION_CIRCULAR_REFERENCE));
+    }
+
+    #[test]
+    fn test_empty_reference_error_suggestion() {
+        let suggestion = error_suggestion(codes::ERR_VALIDATION_EMPTY_REFERENCE);
+        assert!(suggestion.contains("Add at least one reference"));
+    }
+
+    #[test]
+    fn test_circular_reference_error_suggestion() {
+        let suggestion = error_suggestion(codes::ERR_VALIDATION_CIRCULAR_REFERENCE);
+        assert!(suggestion.contains("circular dependency"));
     }
 
     #[test]
