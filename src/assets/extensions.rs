@@ -6,7 +6,10 @@
 
 use serde::{Deserialize, Serialize};
 
-use super::generated::{RtpcCompatibleValue, SoundLoopConfig, ValueKind};
+use super::generated::{
+    CollectionPlayMode, RtpcCompatibleValue, SoundLoopConfig, SoundSchedulerMode,
+    SoundSchedulerSettings, ValueKind,
+};
 
 // =============================================================================
 // FaderAlgorithm Enum
@@ -167,6 +170,96 @@ impl Default for SoundLoopConfig {
 
 impl Eq for SoundLoopConfig {}
 
+// =============================================================================
+// CollectionPlayMode Convenience Methods
+// =============================================================================
+
+/// All valid collection play mode names, for use in error messages.
+pub const COLLECTION_PLAY_MODE_NAMES: &[&str] = &["PlayOne", "PlayAll"];
+
+impl std::fmt::Display for CollectionPlayMode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::PlayOne => write!(f, "PlayOne"),
+            Self::PlayAll => write!(f, "PlayAll"),
+        }
+    }
+}
+
+impl CollectionPlayMode {
+    /// Parse a collection play mode from its string representation.
+    pub fn from_str(s: &str) -> Result<Self, String> {
+        match s {
+            "PlayOne" => Ok(Self::PlayOne),
+            "PlayAll" => Ok(Self::PlayAll),
+            _ => Err(format!(
+                "Unknown collection play mode '{}'. Valid values: {}",
+                s,
+                COLLECTION_PLAY_MODE_NAMES.join(", ")
+            )),
+        }
+    }
+}
+
+// =============================================================================
+// SoundSchedulerMode Convenience Methods
+// =============================================================================
+
+/// All valid sound scheduler mode names, for use in error messages.
+pub const SOUND_SCHEDULER_MODE_NAMES: &[&str] = &["Random", "Sequence"];
+
+impl std::fmt::Display for SoundSchedulerMode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Random => write!(f, "Random"),
+            Self::Sequence => write!(f, "Sequence"),
+        }
+    }
+}
+
+impl SoundSchedulerMode {
+    /// Parse a sound scheduler mode from its string representation.
+    pub fn from_str(s: &str) -> Result<Self, String> {
+        match s {
+            "Random" => Ok(Self::Random),
+            "Sequence" => Ok(Self::Sequence),
+            _ => Err(format!(
+                "Unknown sound scheduler mode '{}'. Valid values: {}",
+                s,
+                SOUND_SCHEDULER_MODE_NAMES.join(", ")
+            )),
+        }
+    }
+}
+
+// =============================================================================
+// SoundSchedulerSettings Convenience Methods
+// =============================================================================
+
+impl SoundSchedulerSettings {
+    /// Creates a random scheduler configuration.
+    pub fn random() -> Self {
+        Self {
+            mode: SoundSchedulerMode::Random,
+        }
+    }
+
+    /// Creates a sequential scheduler configuration.
+    pub fn sequential() -> Self {
+        Self {
+            mode: SoundSchedulerMode::Sequence,
+        }
+    }
+}
+
+impl Default for SoundSchedulerSettings {
+    fn default() -> Self {
+        Self::random()
+    }
+}
+
+impl Eq for SoundSchedulerSettings {}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -290,5 +383,87 @@ mod tests {
         let config = SoundLoopConfig::default();
         assert!(!config.enabled);
         assert_eq!(config.loop_count, 0);
+    }
+
+    // =========================================================================
+    // CollectionPlayMode Tests
+    // =========================================================================
+
+    #[test]
+    fn test_p0_collection_play_mode_display() {
+        assert_eq!(CollectionPlayMode::PlayOne.to_string(), "PlayOne");
+        assert_eq!(CollectionPlayMode::PlayAll.to_string(), "PlayAll");
+    }
+
+    #[test]
+    fn test_p0_collection_play_mode_from_str() {
+        assert_eq!(
+            CollectionPlayMode::from_str("PlayOne"),
+            Ok(CollectionPlayMode::PlayOne)
+        );
+        assert_eq!(
+            CollectionPlayMode::from_str("PlayAll"),
+            Ok(CollectionPlayMode::PlayAll)
+        );
+        let err = CollectionPlayMode::from_str("Unknown").unwrap_err();
+        assert!(err.contains("Unknown collection play mode 'Unknown'"));
+        assert!(err.contains("PlayOne"));
+    }
+
+    #[test]
+    fn test_p0_collection_play_mode_default() {
+        assert_eq!(CollectionPlayMode::default(), CollectionPlayMode::PlayOne);
+    }
+
+    // =========================================================================
+    // SoundSchedulerMode Tests
+    // =========================================================================
+
+    #[test]
+    fn test_p0_sound_scheduler_mode_display() {
+        assert_eq!(SoundSchedulerMode::Random.to_string(), "Random");
+        assert_eq!(SoundSchedulerMode::Sequence.to_string(), "Sequence");
+    }
+
+    #[test]
+    fn test_p0_sound_scheduler_mode_from_str() {
+        assert_eq!(
+            SoundSchedulerMode::from_str("Random"),
+            Ok(SoundSchedulerMode::Random)
+        );
+        assert_eq!(
+            SoundSchedulerMode::from_str("Sequence"),
+            Ok(SoundSchedulerMode::Sequence)
+        );
+        let err = SoundSchedulerMode::from_str("Unknown").unwrap_err();
+        assert!(err.contains("Unknown sound scheduler mode 'Unknown'"));
+        assert!(err.contains("Random"));
+    }
+
+    #[test]
+    fn test_p0_sound_scheduler_mode_default() {
+        assert_eq!(SoundSchedulerMode::default(), SoundSchedulerMode::Random);
+    }
+
+    // =========================================================================
+    // SoundSchedulerSettings Tests
+    // =========================================================================
+
+    #[test]
+    fn test_p0_sound_scheduler_settings_random() {
+        let s = SoundSchedulerSettings::random();
+        assert_eq!(s.mode, SoundSchedulerMode::Random);
+    }
+
+    #[test]
+    fn test_p0_sound_scheduler_settings_sequential() {
+        let s = SoundSchedulerSettings::sequential();
+        assert_eq!(s.mode, SoundSchedulerMode::Sequence);
+    }
+
+    #[test]
+    fn test_p0_sound_scheduler_settings_default() {
+        let s = SoundSchedulerSettings::default();
+        assert_eq!(s.mode, SoundSchedulerMode::Random);
     }
 }

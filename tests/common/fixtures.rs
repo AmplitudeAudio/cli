@@ -280,21 +280,28 @@ impl AssetTestFixture {
 
     /// Create a minimal Collection JSON file.
     ///
-    /// Writes a collection JSON with the given sound ID references to
-    /// `sources/collections/{name}.json`. Uses `serde_json::Value` directly
-    /// since the Collection struct is not yet implemented.
+    /// Writes a collection JSON to `sources/collections/{name}.json`.
+    /// The `sound_ids` parameter is accepted for API compatibility but is not
+    /// stored in the Collection struct (sound association is managed at a higher level).
     pub fn create_test_collection(
         &self,
         name: &str,
         id: u64,
-        sound_ids: &[u64],
+        _sound_ids: &[u64],
     ) -> anyhow::Result<PathBuf> {
         let collection_json = serde_json::json!({
             "id": id,
             "name": name,
-            "sound_ids": sound_ids,
-            "mode": "random",
-            "scope": "World"
+            "bus": 0,
+            "attenuation": 0,
+            "effect": 0,
+            "gain": { "kind": "Static", "value": 1.0 },
+            "priority": { "kind": "Static", "value": 128.0 },
+            "fader": "Linear",
+            "spatialization": "None",
+            "scope": "World",
+            "play_mode": "PlayOne",
+            "scheduler": { "mode": "Random" }
         });
 
         let path = self

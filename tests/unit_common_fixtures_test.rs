@@ -127,15 +127,11 @@ fn test_p1_create_test_collection_writes_valid_json() {
 
     assert_eq!(json["id"], 200);
     assert_eq!(json["name"], "footsteps");
-    assert_eq!(json["mode"], "random");
     assert_eq!(json["scope"], "World");
-
-    // Verify sound_ids array
-    let sound_ids = json["sound_ids"].as_array().unwrap();
-    assert_eq!(sound_ids.len(), 3);
-    assert_eq!(sound_ids[0], 42);
-    assert_eq!(sound_ids[1], 43);
-    assert_eq!(sound_ids[2], 44);
+    assert_eq!(json["play_mode"], "PlayOne");
+    assert_eq!(json["scheduler"]["mode"], "Random");
+    assert_eq!(json["bus"], 0);
+    assert_eq!(json["fader"], "Linear");
 }
 
 // =============================================================================

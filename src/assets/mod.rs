@@ -60,17 +60,19 @@ pub mod validator;
 // Re-export generated types used across asset modules.
 #[allow(unused_imports)]
 pub use generated::{
-    CurveDefinition, CurvePartDefinition, CurvePointDefinition, RtpcCompatibleValue, RtpcParameter,
-    Scope, SoundLoopConfig, Spatialization, ValueKind,
+    CollectionPlayMode, CurveDefinition, CurvePartDefinition, CurvePointDefinition,
+    RtpcCompatibleValue, RtpcParameter, Scope, SoundLoopConfig, SoundSchedulerMode,
+    SoundSchedulerSettings, Spatialization, ValueKind,
 };
 // Re-export hand-written types that have no generated equivalent.
-pub use extensions::FaderAlgorithm;
+#[allow(unused_imports)]
+pub use extensions::{COLLECTION_PLAY_MODE_NAMES, FaderAlgorithm, SOUND_SCHEDULER_MODE_NAMES};
 
 // Re-export all asset types.
 // Note: Some types are currently unused but are part of the public API for future asset type
 // implementations. These will be used when Collection, Effect, Event, etc. CRUD commands are added.
 #[allow(unused_imports)]
-pub use collection::Collection;
+pub use collection::{Collection, CollectionBuilder};
 #[allow(unused_imports)]
 pub use effect::Effect;
 #[allow(unused_imports)]
