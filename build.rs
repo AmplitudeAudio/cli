@@ -594,7 +594,17 @@ fn main() {
             let out_path = PathBuf::from(&out_dir).join("generated_assets.rs");
             fs::write(
                 &out_path,
-                r#"compile_error!("AM_SDK_PATH environment variable not set. Set it to your Amplitude SDK installation path.");"#,
+                r#"compile_error!("
+AM_SDK_PATH environment variable is not set.
+
+The Amplitude Audio SDK is required at build time for FlatBuffer schema code generation.
+
+To fix this:
+  1. Clone the SDK:  git clone https://github.com/AmplitudeAudio/sdk
+  2. Set the environment variable:  export AM_SDK_PATH=/path/to/amplitude/sdk
+
+See the README for detailed setup instructions.
+");"#,
             )
             .unwrap();
             println!("cargo:rerun-if-env-changed=AM_SDK_PATH");
@@ -676,7 +686,11 @@ fn main() {
                 schema_data.push((path.clone(), bytes));
             }
             Err(e) => {
-                println!("cargo:warning=Failed to read schema file {}: {}", path.display(), e);
+                println!(
+                    "cargo:warning=Failed to read schema file {}: {}",
+                    path.display(),
+                    e
+                );
             }
         }
     }
@@ -687,7 +701,11 @@ fn main() {
 
     for (path, bytes) in &schema_data {
         if let Err(e) = process_schema(bytes, &mut enums, &mut structs, &all_enum_names) {
-            println!("cargo:warning=Failed to process schema {}: {}", path.display(), e);
+            println!(
+                "cargo:warning=Failed to process schema {}: {}",
+                path.display(),
+                e
+            );
         }
     }
 
