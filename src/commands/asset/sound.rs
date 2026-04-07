@@ -12,8 +12,6 @@ use colored::Colorize;
 use inquire::validator::Validation;
 use serde_json::json;
 
-use std::path::PathBuf;
-
 use crate::common::utils::generate_unique_id;
 use crate::{
     assets::{
@@ -188,7 +186,7 @@ fn parse_spatialization(s: &str) -> Result<Spatialization> {
         "none" => Ok(Spatialization::None),
         "position" => Ok(Spatialization::Position),
         "position_orientation" | "positionorientation" => Ok(Spatialization::PositionOrientation),
-        "hrtf" => Ok(Spatialization::Hrtf),
+        "hrtf" => Ok(Spatialization::HRTF),
         _ => Err(CliError::new(
             codes::ERR_VALIDATION_FIELD,
             format!("Invalid spatialization mode: '{}'", s),
@@ -355,9 +353,9 @@ async fn create_sound(
             output.success(
                 json!({
                     "id": sound.id,
-                    "name": sound.name,
+                    "name": sound.name(),
                     "path": sound_file_path.to_string_lossy(),
-                    "audio_file": sound.path.to_string_lossy(),
+                    "audio_file": sound.path.as_deref().unwrap_or(""),
                 }),
                 None,
             );
@@ -382,21 +380,28 @@ const PATH_MAX_LENGTH: usize = 40;
 
 /// Format gain value for display in interactive mode.
 ///
-/// Returns the static value formatted to 1 decimal place, or "RTPC" if controlled by RTPC.
-fn format_gain(gain: &RtpcCompatibleValue) -> String {
-    match gain.as_static() {
-        Some(v) => format!("{:.1}", v),
-        None => "RTPC".to_string(),
+/// Returns the static value formatted to 1 decimal place, "RTPC" if RTPC-controlled,
+/// or "N/A" if not set.
+fn format_gain(gain: &Option<RtpcCompatibleValue>) -> String {
+    match gain {
+        Some(g) => match g.as_static() {
+            Some(v) => format!("{:.1}", v),
+            None => "RTPC".to_string(),
+        },
+        None => "N/A".to_string(),
     }
 }
 
 /// Format gain value for JSON output.
 ///
-/// Returns a numeric value when static, or the string "RTPC" when RTPC-controlled.
-fn gain_to_json(gain: &RtpcCompatibleValue) -> serde_json::Value {
-    match gain.as_static() {
-        Some(v) => json!(v),
-        None => json!("RTPC"),
+/// Returns a numeric value when static, "RTPC" when RTPC-controlled, or null when not set.
+fn gain_to_json(gain: &Option<RtpcCompatibleValue>) -> serde_json::Value {
+    match gain {
+        Some(g) => match g.as_static() {
+            Some(v) => json!(v),
+            None => json!("RTPC"),
+        },
+        None => serde_json::Value::Null,
     }
 }
 
@@ -406,7 +411,7 @@ fn spatialization_to_string(spatialization: &Spatialization) -> &'static str {
         Spatialization::None => "None",
         Spatialization::Position => "Position",
         Spatialization::PositionOrientation => "PositionOrientation",
-        Spatialization::Hrtf => "HRTF",
+        Spatialization::HRTF => "HRTF",
     }
 }
 
@@ -470,13 +475,16 @@ async fn list_sounds(output: &dyn Output) -> Result<()> {
                 Ok(content) => match serde_json::from_str::<Sound>(&content) {
                     Ok(sound) => {
                         // Check if referenced audio file exists
-                        let audio_path = current_dir.join("data").join(&sound.path);
-                        if !audio_path.exists() {
-                            warnings.push(format!(
-                                "Warning: Sound '{}' references missing audio file: {}. Re-add the file or update the sound.",
-                                sound.name,
-                                sound.path.display()
-                            ));
+                        let path_str = sound.path.as_deref().unwrap_or("");
+                        if !path_str.is_empty() {
+                            let audio_path = current_dir.join("data").join(path_str);
+                            if !audio_path.exists() {
+                                warnings.push(format!(
+                                    "Warning: Sound '{}' references missing audio file: {}. Re-add the file or update the sound.",
+                                    sound.name(),
+                                    path_str
+                                ));
+                            }
                         }
                         sounds.push(sound);
                     }
@@ -496,7 +504,7 @@ async fn list_sounds(output: &dyn Output) -> Result<()> {
     }
 
     // Step 4: Sort by name for consistent output
-    sounds.sort_by(|a, b| a.name.cmp(&b.name));
+    sounds.sort_by(|a, b| a.name().cmp(b.name()));
 
     // Step 5: Handle empty directory
     if sounds.is_empty() {
@@ -537,10 +545,10 @@ async fn list_sounds(output: &dyn Output) -> Result<()> {
                 .map(|s| {
                     json!({
                         "id": s.id,
-                        "name": s.name,
-                        "path": s.path.to_string_lossy(),
+                        "name": s.name(),
+                        "path": s.path.as_deref().unwrap_or(""),
                         "gain": gain_to_json(&s.gain),
-                        "loop_enabled": s.loop_config.enabled,
+                        "loop_enabled": s.loop_.as_ref().map(|l| l.enabled).unwrap_or(false),
                         "spatialization": spatialization_to_string(&s.spatialization)
                     })
                 })
@@ -567,8 +575,8 @@ async fn list_sounds(output: &dyn Output) -> Result<()> {
                 .map(|s| {
                     json!({
                         "id": s.id,
-                        "name": s.name,
-                        "audio_file": truncate_string(&s.path.to_string_lossy(), PATH_MAX_LENGTH),
+                        "name": s.name(),
+                        "audio_file": truncate_string(s.path.as_deref().unwrap_or(""), PATH_MAX_LENGTH),
                         "gain": format_gain(&s.gain)
                     })
                 })
@@ -732,7 +740,7 @@ fn prompt_spatialization(input: &dyn Input) -> Result<Spatialization> {
         Spatialization::None,
         Spatialization::Position,
         Spatialization::PositionOrientation,
-        Spatialization::Hrtf,
+        Spatialization::HRTF,
     ];
 
     match select_index(input, "Spatialization mode:", &options) {
@@ -833,9 +841,9 @@ async fn update_sound(
             output.success(
                 json!({
                     "id": sound.id,
-                    "name": sound.name,
+                    "name": sound.name(),
                     "path": sound_file_path.to_string_lossy(),
-                    "audio_file": sound.path.to_string_lossy(),
+                    "audio_file": sound.path.as_deref().unwrap_or(""),
                     "updated_fields": updated_fields,
                 }),
                 None,
@@ -872,13 +880,13 @@ fn apply_flag_updates(
     let mut updated_fields = Vec::new();
 
     if let Some(f) = file {
-        sound.path = PathBuf::from(f);
+        sound.path = Some(f);
         updated_fields.push("audio_file".to_string());
     }
 
     if let Some(g) = gain {
         validate_gain(g)?;
-        sound.gain = RtpcCompatibleValue::static_value(g);
+        sound.gain = Some(RtpcCompatibleValue::static_value(g));
         updated_fields.push("gain".to_string());
     }
 
@@ -888,7 +896,7 @@ fn apply_flag_updates(
     }
 
     if let Some(p) = priority {
-        sound.priority = RtpcCompatibleValue::static_value(p as f32);
+        sound.priority = Some(RtpcCompatibleValue::static_value(p as f32));
         updated_fields.push("priority".to_string());
     }
 
@@ -898,15 +906,17 @@ fn apply_flag_updates(
     }
 
     if let Some(enabled) = loop_enabled {
-        sound.loop_config.enabled = enabled;
+        let loop_cfg = sound.loop_.get_or_insert(SoundLoopConfig::disabled());
+        loop_cfg.enabled = enabled;
         updated_fields.push("loop_enabled".to_string());
     }
 
     if let Some(count) = loop_count {
-        sound.loop_config.loop_count = count;
+        let loop_cfg = sound.loop_.get_or_insert(SoundLoopConfig::disabled());
+        loop_cfg.loop_count = count;
         // Auto-enable looping if count is specified
-        if count > 0 && !sound.loop_config.enabled {
-            sound.loop_config.enabled = true;
+        if count > 0 && !loop_cfg.enabled {
+            loop_cfg.enabled = true;
         }
         updated_fields.push("loop_count".to_string());
     }
@@ -925,15 +935,18 @@ fn prompt_sound_updates(sound: &mut Sound, input: &dyn Input) -> Result<Vec<Stri
     let mut updated_fields = Vec::new();
 
     // Prompt for audio file path
-    if let Some(new_file) =
-        prompt_update_text(input, "Audio file path", &sound.path.to_string_lossy())?
-    {
-        sound.path = PathBuf::from(new_file);
+    let current_path = sound.path.as_deref().unwrap_or("");
+    if let Some(new_file) = prompt_update_text(input, "Audio file path", current_path)? {
+        sound.path = Some(new_file);
         updated_fields.push("audio_file".to_string());
     }
 
     // Prompt for gain
-    let current_gain = sound.gain.as_static().unwrap_or(1.0);
+    let current_gain = sound
+        .gain
+        .as_ref()
+        .and_then(|g| g.as_static())
+        .unwrap_or(1.0);
     if let Some(new_gain) = prompt_update_number(
         input,
         "Volume gain [0.0-1.0]",
@@ -941,12 +954,16 @@ fn prompt_sound_updates(sound: &mut Sound, input: &dyn Input) -> Result<Vec<Stri
         |v| (0.0..=1.0).contains(&v),
         "Gain must be between 0.0 and 1.0",
     )? {
-        sound.gain = RtpcCompatibleValue::static_value(new_gain);
+        sound.gain = Some(RtpcCompatibleValue::static_value(new_gain));
         updated_fields.push("gain".to_string());
     }
 
     // Prompt for priority
-    let current_priority = sound.priority.as_static().unwrap_or(128.0) as u8;
+    let current_priority = sound
+        .priority
+        .as_ref()
+        .and_then(|p| p.as_static())
+        .unwrap_or(128.0) as u8;
     if let Some(new_priority) = prompt_update_number(
         input,
         "Playback priority [0-255]",
@@ -954,7 +971,7 @@ fn prompt_sound_updates(sound: &mut Sound, input: &dyn Input) -> Result<Vec<Stri
         |_| true, // u8 parse already validates range
         "Priority must be between 0 and 255",
     )? {
-        sound.priority = RtpcCompatibleValue::static_value(new_priority);
+        sound.priority = Some(RtpcCompatibleValue::static_value(new_priority));
         updated_fields.push("priority".to_string());
     }
 
@@ -965,20 +982,40 @@ fn prompt_sound_updates(sound: &mut Sound, input: &dyn Input) -> Result<Vec<Stri
     }
 
     // Prompt for looping
-    if let Some(new_loop) = prompt_update_bool(input, "Enable looping", sound.loop_config.enabled)?
-    {
-        sound.loop_config.enabled = new_loop;
+    let loop_cfg = sound.loop_.get_or_insert(SoundLoopConfig::disabled());
+    let current_loop_enabled = loop_cfg.enabled;
+    let current_loop_count = loop_cfg.loop_count;
+    if let Some(new_loop) = prompt_update_bool(input, "Enable looping", current_loop_enabled)? {
+        let loop_cfg = sound.loop_.get_or_insert(SoundLoopConfig::disabled());
+        loop_cfg.enabled = new_loop;
         updated_fields.push("loop_enabled".to_string());
         if new_loop {
             // Ask for loop count
             if let Some(new_count) = prompt_update_number(
                 input,
                 "Loop count (0=infinite)",
-                sound.loop_config.loop_count as f32,
+                current_loop_count as f32,
                 |_| true,
                 "",
             )? {
-                sound.loop_config.loop_count = new_count as u32;
+                let loop_cfg = sound.loop_.get_or_insert(SoundLoopConfig::disabled());
+                if new_count < 0.0 {
+                    return Err(CliError::new(
+                        crate::common::errors::codes::ERR_VALIDATION_FIELD,
+                        "Loop count cannot be negative",
+                        "Loop count must be a non-negative integer (0 = infinite)",
+                    )
+                    .into());
+                }
+                if new_count > u32::MAX as f32 {
+                    return Err(CliError::new(
+                        crate::common::errors::codes::ERR_VALIDATION_FIELD,
+                        format!("Loop count too large: maximum is {}", u32::MAX),
+                        "Loop count exceeds maximum allowed value",
+                    )
+                    .into());
+                }
+                loop_cfg.loop_count = new_count as u32;
                 updated_fields.push("loop_count".to_string());
             }
         }
@@ -1074,7 +1111,7 @@ fn prompt_update_spatialization(
         Spatialization::None,
         Spatialization::Position,
         Spatialization::PositionOrientation,
-        Spatialization::Hrtf,
+        Spatialization::HRTF,
     ];
 
     let current_idx = modes.iter().position(|m| m == current).unwrap_or(0);

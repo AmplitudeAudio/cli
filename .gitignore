@@ -5,3 +5,10 @@
 /.codex/
 /.opencode/
 /_bmad/
+/.agents
+/.crush
+/.trae
+/.goose
+/.junie
+/skills-lock.json
+/.env

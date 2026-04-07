@@ -277,13 +277,16 @@ fn test_p0_sound_builder_creates_valid_sound() {
         .build();
 
     assert_eq!(sound.id, 12345);
-    assert_eq!(sound.name, "explosion");
-    assert_eq!(sound.path.to_string_lossy(), "sfx/explosion.wav");
-    assert_eq!(sound.gain.as_static(), Some(0.8));
-    assert_eq!(sound.priority.as_static(), Some(200.0));
+    assert_eq!(sound.name.as_deref(), Some("explosion"));
+    assert_eq!(sound.path.as_deref(), Some("sfx/explosion.wav"));
+    assert_eq!(sound.gain.as_ref().and_then(|g| g.as_static()), Some(0.8));
+    assert_eq!(
+        sound.priority.as_ref().and_then(|p| p.as_static()),
+        Some(200.0)
+    );
     assert!(sound.stream);
-    assert!(sound.loop_config.enabled);
-    assert_eq!(sound.loop_config.loop_count, 0);
+    assert!(sound.loop_.as_ref().unwrap().enabled);
+    assert_eq!(sound.loop_.as_ref().unwrap().loop_count, 0);
     assert_eq!(sound.spatialization, Spatialization::Position);
 }
 
@@ -291,10 +294,13 @@ fn test_p0_sound_builder_creates_valid_sound() {
 fn test_p0_sound_default_values() {
     let sound = Sound::builder(1, "test").path("test.wav").build();
 
-    assert_eq!(sound.gain.as_static(), Some(1.0));
-    assert_eq!(sound.priority.as_static(), Some(128.0));
+    assert_eq!(sound.gain.as_ref().and_then(|g| g.as_static()), Some(1.0));
+    assert_eq!(
+        sound.priority.as_ref().and_then(|p| p.as_static()),
+        Some(128.0)
+    );
     assert!(!sound.stream);
-    assert!(!sound.loop_config.enabled);
+    assert!(!sound.loop_.as_ref().unwrap().enabled);
     assert_eq!(sound.spatialization, Spatialization::None);
 }
 
@@ -327,7 +333,7 @@ fn test_p1_spatialization_modes() {
         Spatialization::PositionOrientation,
         Spatialization::PositionOrientation
     );
-    assert_eq!(Spatialization::Hrtf, Spatialization::Hrtf);
+    assert_eq!(Spatialization::HRTF, Spatialization::HRTF);
 }
 
 // =============================================================================
@@ -370,8 +376,8 @@ fn test_p0_sound_deserializes_from_json() {
     let sound: Sound = serde_json::from_str(json).expect("Should deserialize");
 
     assert_eq!(sound.id, 54321);
-    assert_eq!(sound.name, "footstep");
-    assert_eq!(sound.gain.as_static(), Some(0.9));
+    assert_eq!(sound.name.as_deref(), Some("footstep"));
+    assert_eq!(sound.gain.as_ref().and_then(|g| g.as_static()), Some(0.9));
     assert_eq!(sound.spatialization, Spatialization::Position);
 }
 
@@ -421,9 +427,15 @@ fn test_p1_sound_validate_rules_fails_missing_audio_file() {
 #[test]
 fn test_p1_sound_validate_rules_fails_invalid_gain_above_one() {
     let dir = tempdir().unwrap();
+    let data_dir = dir.path().join("data").join("sfx");
+    std::fs::create_dir_all(&data_dir).unwrap();
+    std::fs::write(data_dir.join("test.wav"), b"fake audio").unwrap();
     let context = ProjectContext::new(dir.path().to_path_buf());
 
-    let sound = Sound::builder(1, "test").path("").gain(1.5).build();
+    let sound = Sound::builder(1, "test")
+        .path("sfx/test.wav")
+        .gain(1.5)
+        .build();
 
     use am::assets::Asset;
     let result = sound.validate_rules(&context);
@@ -436,9 +448,15 @@ fn test_p1_sound_validate_rules_fails_invalid_gain_above_one() {
 #[test]
 fn test_p1_sound_validate_rules_fails_invalid_gain_below_zero() {
     let dir = tempdir().unwrap();
+    let data_dir = dir.path().join("data").join("sfx");
+    std::fs::create_dir_all(&data_dir).unwrap();
+    std::fs::write(data_dir.join("test.wav"), b"fake audio").unwrap();
     let context = ProjectContext::new(dir.path().to_path_buf());
 
-    let sound = Sound::builder(1, "test").path("").gain(-0.5).build();
+    let sound = Sound::builder(1, "test")
+        .path("sfx/test.wav")
+        .gain(-0.5)
+        .build();
 
     use am::assets::Asset;
     let result = sound.validate_rules(&context);
@@ -1265,16 +1283,20 @@ async fn test_p0_sound_update_changes_gain_preserves_other_fields() {
 
     // Gain should be updated to 0.5
     assert_eq!(
-        updated.gain.as_static(),
+        updated.gain.as_ref().and_then(|g| g.as_static()),
         Some(0.5),
         "Gain should be updated to 0.5"
     );
 
     // Other fields should be preserved
     assert_eq!(updated.id, 12345, "ID should be preserved");
-    assert_eq!(updated.name, "explosion", "Name should be preserved");
     assert_eq!(
-        updated.priority.as_static(),
+        updated.name.as_deref(),
+        Some("explosion"),
+        "Name should be preserved"
+    );
+    assert_eq!(
+        updated.priority.as_ref().and_then(|p| p.as_static()),
         Some(128.0),
         "Priority should be preserved"
     );
@@ -1555,12 +1577,12 @@ async fn test_p1_sound_update_only_updates_specified_flags() {
 
     // Updated fields
     assert_eq!(
-        updated.gain.as_static(),
+        updated.gain.as_ref().and_then(|g| g.as_static()),
         Some(0.5),
         "Gain should be updated"
     );
     assert_eq!(
-        updated.priority.as_static(),
+        updated.priority.as_ref().and_then(|p| p.as_static()),
         Some(150.0),
         "Priority should be updated"
     );
@@ -1570,11 +1592,12 @@ async fn test_p1_sound_update_only_updates_specified_flags() {
     assert_eq!(updated.bus, 5, "Bus should be preserved");
     assert!(updated.stream, "Stream should be preserved as true");
     assert!(
-        updated.loop_config.enabled,
+        updated.loop_.as_ref().unwrap().enabled,
         "Loop enabled should be preserved"
     );
     assert_eq!(
-        updated.loop_config.loop_count, 3,
+        updated.loop_.as_ref().unwrap().loop_count,
+        3,
         "Loop count should be preserved"
     );
     assert_eq!(
@@ -1796,7 +1819,7 @@ async fn test_p1_sound_update_bus_field_updates_correctly() {
     assert_eq!(updated.bus, 42, "Bus should be updated to 42");
     // Verify other fields preserved
     assert_eq!(
-        updated.gain.as_static(),
+        updated.gain.as_ref().and_then(|g| g.as_static()),
         Some(0.8),
         "Gain should be preserved"
     );

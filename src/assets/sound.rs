@@ -6,24 +6,25 @@
 
 use std::path::PathBuf;
 
-use serde::{Deserialize, Serialize};
-
-use super::shared::{FaderAlgorithm, RtpcCompatibleValue, Scope, SoundLoopConfig, Spatialization};
-use super::{Asset, AssetType, ProjectContext, Schema, ValidationError};
+use super::generated::{
+    RtpcCompatibleValue, Scope, SoundDefinition, SoundLoopConfig, Spatialization,
+};
+use super::{Asset, AssetType, FaderAlgorithm, ProjectContext, Schema, ValidationError};
 
 // =============================================================================
-// Sound Struct
+// Sound Type Alias
 // =============================================================================
 
 /// Individual sound definition.
 ///
+/// Type alias to the build-time generated `SoundDefinition` from SDK FlatBuffer schemas.
 /// Represents a single audio source with playback configuration.
 /// Sounds reference audio files in the project's `data/` directory.
 ///
 /// # Example
 ///
 /// ```
-/// use am::assets::{Sound, Spatialization, RtpcCompatibleValue};
+/// use am::assets::Sound;
 ///
 /// let sound = Sound::builder(12345, "explosion")
 ///     .path("sfx/explosion_01.wav")
@@ -31,107 +32,12 @@ use super::{Asset, AssetType, ProjectContext, Schema, ValidationError};
 ///     .priority(200)
 ///     .build();
 /// ```
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Sound {
-    /// Unique identifier for this sound.
-    pub id: u64,
-
-    /// Name of the sound.
-    pub name: String,
-
-    /// Path to the audio file relative to the project's `data/` directory.
-    pub path: PathBuf,
-
-    /// Bus ID for routing this sound (0 = master bus).
-    #[serde(default)]
-    pub bus: u64,
-
-    /// Gain/volume control (default: 1.0 static).
-    #[serde(default)]
-    pub gain: RtpcCompatibleValue,
-
-    /// Playback priority (default: 128 static, higher = more important).
-    #[serde(default = "default_priority")]
-    pub priority: RtpcCompatibleValue,
-
-    /// Whether to stream from disk vs load into memory.
-    #[serde(default)]
-    pub stream: bool,
-
-    /// Looping configuration.
-    #[serde(rename = "loop", default)]
-    pub loop_config: SoundLoopConfig,
-
-    /// How the sound is rendered in 3D space.
-    #[serde(default)]
-    pub spatialization: Spatialization,
-
-    /// Attenuation model ID (0 = none).
-    #[serde(default)]
-    pub attenuation: u64,
-
-    /// How playback data is shared between instances.
-    #[serde(default)]
-    pub scope: Scope,
-
-    /// Fader algorithm for fade-in/fade-out.
-    #[serde(default)]
-    pub fader: FaderAlgorithm,
-
-    /// Effect ID to apply (0 = none).
-    #[serde(default)]
-    pub effect: u64,
-}
-
-fn default_priority() -> RtpcCompatibleValue {
-    RtpcCompatibleValue::Static { value: 128.0 }
-}
+pub type Sound = SoundDefinition;
 
 impl Sound {
-    /// Creates a new Sound with required fields only.
-    ///
-    /// Use `Sound::builder()` for more control over optional fields.
-    pub fn new(id: u64, name: impl Into<String>, path: impl Into<PathBuf>) -> Self {
-        Self {
-            id,
-            name: name.into(),
-            path: path.into(),
-            bus: 0,
-            gain: RtpcCompatibleValue::default(),
-            priority: default_priority(),
-            stream: false,
-            loop_config: SoundLoopConfig::default(),
-            spatialization: Spatialization::default(),
-            attenuation: 0,
-            scope: Scope::default(),
-            fader: FaderAlgorithm::default(),
-            effect: 0,
-        }
-    }
-
     /// Creates a builder for constructing a Sound with optional fields.
     pub fn builder(id: u64, name: impl Into<String>) -> SoundBuilder {
         SoundBuilder::new(id, name)
-    }
-}
-
-impl Default for Sound {
-    fn default() -> Self {
-        Self {
-            id: 0,
-            name: String::new(),
-            path: PathBuf::new(),
-            bus: 0,
-            gain: RtpcCompatibleValue::default(),
-            priority: default_priority(),
-            stream: false,
-            loop_config: SoundLoopConfig::default(),
-            spatialization: Spatialization::default(),
-            attenuation: 0,
-            scope: Scope::default(),
-            fader: FaderAlgorithm::default(),
-            effect: 0,
-        }
     }
 }
 
@@ -151,25 +57,28 @@ impl SoundBuilder {
         Self {
             sound: Sound {
                 id,
-                name: name.into(),
-                path: PathBuf::new(),
+                name: Some(name.into()),
+                path: Some(String::new()),
                 bus: 0,
-                gain: RtpcCompatibleValue::default(),
-                priority: default_priority(),
+                gain: Some(RtpcCompatibleValue::static_value(1.0)),
+                priority: Some(RtpcCompatibleValue::static_value(128.0)),
                 stream: false,
-                loop_config: SoundLoopConfig::default(),
-                spatialization: Spatialization::default(),
+                loop_: Some(SoundLoopConfig::disabled()),
+                spatialization: Spatialization::None,
                 attenuation: 0,
-                scope: Scope::default(),
-                fader: FaderAlgorithm::default(),
+                scope: Scope::World,
+                fader: Some(FaderAlgorithm::Linear.to_string()),
                 effect: 0,
+                near_field_gain: None,
+                pitch: None,
             },
         }
     }
 
     /// Sets the path to the audio file.
     pub fn path(mut self, path: impl Into<PathBuf>) -> Self {
-        self.sound.path = path.into();
+        let path_buf: PathBuf = path.into();
+        self.sound.path = path_buf.to_str().map(|s| s.to_string());
         self
     }
 
@@ -181,25 +90,25 @@ impl SoundBuilder {
 
     /// Sets the gain as a static value.
     pub fn gain(mut self, value: f32) -> Self {
-        self.sound.gain = RtpcCompatibleValue::static_value(value);
+        self.sound.gain = Some(RtpcCompatibleValue::static_value(value));
         self
     }
 
     /// Sets the gain with full RtpcCompatibleValue control.
     pub fn gain_rtpc(mut self, value: RtpcCompatibleValue) -> Self {
-        self.sound.gain = value;
+        self.sound.gain = Some(value);
         self
     }
 
     /// Sets the priority as a static value.
     pub fn priority(mut self, value: u8) -> Self {
-        self.sound.priority = RtpcCompatibleValue::static_value(value as f32);
+        self.sound.priority = Some(RtpcCompatibleValue::static_value(value as f32));
         self
     }
 
     /// Sets the priority with full RtpcCompatibleValue control.
     pub fn priority_rtpc(mut self, value: RtpcCompatibleValue) -> Self {
-        self.sound.priority = value;
+        self.sound.priority = Some(value);
         self
     }
 
@@ -211,7 +120,7 @@ impl SoundBuilder {
 
     /// Sets the loop configuration.
     pub fn loop_config(mut self, config: SoundLoopConfig) -> Self {
-        self.sound.loop_config = config;
+        self.sound.loop_ = Some(config);
         self
     }
 
@@ -235,7 +144,7 @@ impl SoundBuilder {
 
     /// Sets the fader algorithm.
     pub fn fader(mut self, fader: FaderAlgorithm) -> Self {
-        self.sound.fader = fader;
+        self.sound.fader = Some(fader.to_string());
         self
     }
 
@@ -257,7 +166,7 @@ impl Asset for Sound {
     }
 
     fn name(&self) -> &str {
-        &self.name
+        self.name.as_deref().unwrap_or("")
     }
 
     fn asset_type(&self) -> AssetType {
@@ -274,22 +183,41 @@ impl Asset for Sound {
     }
 
     fn validate_rules(&self, context: &ProjectContext) -> Result<(), ValidationError> {
-        // Check audio file path exists
-        if !self.path.as_os_str().is_empty() {
-            let audio_path = context.project_root.join("data").join(&self.path);
-            if !audio_path.exists() {
-                return Err(ValidationError::type_rule_violation(
-                    format!("Audio file not found: {}", self.path.display()),
-                    "Sound assets must reference an existing audio file in the data/ directory",
-                )
-                .with_suggestion(format!("Add the audio file at: {}", audio_path.display()))
-                .with_field("path"));
-            }
+        // Validate name is not empty
+        if self.name.as_deref().unwrap_or("").is_empty() {
+            return Err(ValidationError::type_rule_violation(
+                "Sound asset has no name",
+                "Sound assets must have a non-empty name",
+            )
+            .with_suggestion("Set the 'name' field to a valid identifier (e.g., \"explosion\")")
+            .with_field("name"));
+        }
+
+        // Check audio file path is set and exists
+        let path_str = self.path.as_deref().unwrap_or("");
+        if path_str.is_empty() {
+            return Err(ValidationError::type_rule_violation(
+                "Sound asset has no audio file path",
+                "Sound assets must reference an audio file in the data/ directory",
+            )
+            .with_suggestion(
+                "Set the 'path' field to a valid audio file path (e.g., \"sfx/explosion.wav\")",
+            )
+            .with_field("path"));
+        }
+        let audio_path = context.project_root.join("data").join(path_str);
+        if !audio_path.exists() {
+            return Err(ValidationError::type_rule_violation(
+                format!("Audio file not found: {}", path_str),
+                "Sound assets must reference an existing audio file in the data/ directory",
+            )
+            .with_suggestion(format!("Add the audio file at: {}", audio_path.display()))
+            .with_field("path"));
         }
 
         // Check gain range (if static value)
-        if let Some(gain_value) = self.gain.as_static()
-            && !(0.0..=1.0).contains(&gain_value)
+        if let Some(gain_value) = self.gain.as_ref().and_then(|g| g.as_static())
+            && (!gain_value.is_finite() || !(0.0..=1.0).contains(&gain_value))
         {
             return Err(ValidationError::type_rule_violation(
                 format!("Invalid gain value: {}", gain_value),
@@ -297,6 +225,21 @@ impl Asset for Sound {
             )
             .with_suggestion("Set gain to a value between 0.0 (silent) and 1.0 (full volume)")
             .with_field("gain"));
+        }
+
+        // Validate fader algorithm is a known value
+        if let Some(fader_str) = &self.fader {
+            if FaderAlgorithm::from_str(fader_str).is_err() {
+                return Err(ValidationError::type_rule_violation(
+                    format!("Unknown fader algorithm: '{}'", fader_str),
+                    "Fader must be a valid algorithm name",
+                )
+                .with_suggestion(format!(
+                    "Use one of: {}",
+                    super::extensions::FADER_ALGORITHM_NAMES.join(", ")
+                ))
+                .with_field("fader"));
+            }
         }
 
         // Cross-asset reference checks (only if validator is available)
@@ -317,31 +260,36 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_sound_new() {
-        let sound = Sound::new(12345, "explosion", "sfx/explosion.wav");
+    fn test_sound_builder_basic() {
+        let sound = Sound::builder(12345, "explosion")
+            .path("sfx/explosion.wav")
+            .build();
         assert_eq!(sound.id(), 12345);
         assert_eq!(sound.name(), "explosion");
-        assert_eq!(sound.path, PathBuf::from("sfx/explosion.wav"));
+        assert_eq!(sound.path.as_deref(), Some("sfx/explosion.wav"));
     }
 
     #[test]
-    fn test_sound_default() {
-        let sound = Sound::default();
-        assert_eq!(sound.id, 0);
-        assert_eq!(sound.name, "");
-        assert_eq!(sound.path, PathBuf::new());
+    fn test_sound_builder_defaults() {
+        let sound = Sound::builder(1, "test").build();
+        assert_eq!(sound.id, 1);
+        assert_eq!(sound.name.as_deref(), Some("test"));
+        assert_eq!(sound.path.as_deref(), Some(""));
         assert_eq!(sound.bus, 0);
-        assert_eq!(sound.gain.as_static(), Some(1.0));
-        assert_eq!(sound.priority.as_static(), Some(128.0));
+        assert_eq!(sound.gain.as_ref().and_then(|g| g.as_static()), Some(1.0));
+        assert_eq!(
+            sound.priority.as_ref().and_then(|p| p.as_static()),
+            Some(128.0)
+        );
         assert!(!sound.stream);
-        assert!(!sound.loop_config.enabled);
+        assert_eq!(sound.loop_.as_ref(), Some(&SoundLoopConfig::disabled()));
         assert_eq!(sound.spatialization, Spatialization::None);
         assert_eq!(sound.scope, Scope::World);
-        assert_eq!(sound.fader, FaderAlgorithm::Linear);
+        assert_eq!(sound.fader.as_deref(), Some("Linear"));
     }
 
     #[test]
-    fn test_sound_builder() {
+    fn test_sound_builder_all_fields() {
         let sound = Sound::builder(12345, "explosion")
             .path("sfx/explosion.wav")
             .bus(100)
@@ -357,30 +305,38 @@ mod tests {
             .build();
 
         assert_eq!(sound.id, 12345);
-        assert_eq!(sound.name, "explosion");
-        assert_eq!(sound.path, PathBuf::from("sfx/explosion.wav"));
+        assert_eq!(sound.name.as_deref(), Some("explosion"));
+        assert_eq!(sound.path.as_deref(), Some("sfx/explosion.wav"));
         assert_eq!(sound.bus, 100);
-        assert_eq!(sound.gain.as_static(), Some(0.8));
-        assert_eq!(sound.priority.as_static(), Some(200.0));
+        assert_eq!(sound.gain.as_ref().and_then(|g| g.as_static()), Some(0.8));
+        assert_eq!(
+            sound.priority.as_ref().and_then(|p| p.as_static()),
+            Some(200.0)
+        );
         assert!(sound.stream);
-        assert!(sound.loop_config.enabled);
-        assert_eq!(sound.loop_config.loop_count, 0);
+        assert_eq!(
+            sound.loop_,
+            Some(SoundLoopConfig {
+                enabled: true,
+                loop_count: 0
+            })
+        );
         assert_eq!(sound.spatialization, Spatialization::Position);
         assert_eq!(sound.attenuation, 50);
         assert_eq!(sound.scope, Scope::Entity);
-        assert_eq!(sound.fader, FaderAlgorithm::SCurveSmooth);
+        assert_eq!(sound.fader.as_deref(), Some("SCurveSmooth"));
         assert_eq!(sound.effect, 25);
     }
 
     #[test]
     fn test_sound_asset_type() {
-        let sound = Sound::new(1, "test", "test.wav");
+        let sound = Sound::builder(1, "test").build();
         assert_eq!(sound.asset_type(), AssetType::Sound);
     }
 
     #[test]
     fn test_sound_file_extension() {
-        let sound = Sound::new(1, "test", "test.wav");
+        let sound = Sound::builder(1, "test").build();
         assert_eq!(sound.file_extension(), ".json");
     }
 
@@ -410,7 +366,7 @@ mod tests {
         assert_eq!(parsed.gain, sound.gain);
         assert_eq!(parsed.priority, sound.priority);
         assert_eq!(parsed.stream, sound.stream);
-        assert_eq!(parsed.loop_config, sound.loop_config);
+        assert_eq!(parsed.loop_, sound.loop_);
         assert_eq!(parsed.spatialization, sound.spatialization);
         assert_eq!(parsed.attenuation, sound.attenuation);
         assert_eq!(parsed.scope, sound.scope);
@@ -428,7 +384,7 @@ mod tests {
             .priority(128)
             .stream(true)
             .loop_config(SoundLoopConfig::infinite())
-            .spatialization(Spatialization::Hrtf)
+            .spatialization(Spatialization::HRTF)
             .scope(Scope::Entity)
             .fader(FaderAlgorithm::SCurveSmooth)
             .build();
@@ -471,16 +427,25 @@ mod tests {
 
         let sound: Sound = serde_json::from_str(sdk_json).unwrap();
         assert_eq!(sound.id, 54321);
-        assert_eq!(sound.name, "footstep");
-        assert_eq!(sound.path, PathBuf::from("sfx/footstep_01.wav"));
+        assert_eq!(sound.name.as_deref(), Some("footstep"));
+        assert_eq!(sound.path.as_deref(), Some("sfx/footstep_01.wav"));
         assert_eq!(sound.bus, 100);
-        assert_eq!(sound.gain.as_static(), Some(0.8));
-        assert_eq!(sound.priority.as_static(), Some(128.0));
+        assert_eq!(sound.gain.as_ref().and_then(|g| g.as_static()), Some(0.8));
+        assert_eq!(
+            sound.priority.as_ref().and_then(|p| p.as_static()),
+            Some(128.0)
+        );
         assert!(!sound.stream);
-        assert!(!sound.loop_config.enabled);
+        assert_eq!(
+            sound.loop_,
+            Some(SoundLoopConfig {
+                enabled: false,
+                loop_count: 0
+            })
+        );
         assert_eq!(sound.spatialization, Spatialization::Position);
         assert_eq!(sound.scope, Scope::World);
-        assert_eq!(sound.fader, FaderAlgorithm::Linear);
+        assert_eq!(sound.fader.as_deref(), Some("Linear"));
     }
 
     #[test]
@@ -523,12 +488,30 @@ mod tests {
     }
 
     #[test]
-    fn test_sound_validate_rules_fails_invalid_gain() {
+    fn test_sound_validate_rules_fails_empty_path() {
         let context = ProjectContext::empty();
+        let sound = Sound::builder(1, "test").build(); // default path is empty string
+        let result = sound.validate_rules(&context);
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(err.what().contains("no audio file path"));
+        assert_eq!(err.field, Some("path".to_string()));
+    }
+
+    #[test]
+    fn test_sound_validate_rules_fails_invalid_gain() {
+        use std::fs;
+        use tempfile::tempdir;
+
+        let temp_dir = tempdir().unwrap();
+        let data_dir = temp_dir.path().join("data").join("sfx");
+        fs::create_dir_all(&data_dir).unwrap();
+        fs::write(data_dir.join("test.wav"), b"fake audio").unwrap();
+        let context = ProjectContext::new(temp_dir.path().to_path_buf());
 
         // Test gain > 1.0
         let sound = Sound::builder(1, "test")
-            .path("") // Empty path to skip file check
+            .path("sfx/test.wav")
             .gain(1.5)
             .build();
 
@@ -540,13 +523,55 @@ mod tests {
         assert_eq!(err.field, Some("gain".to_string()));
 
         // Test gain < 0.0
-        let sound = Sound::builder(2, "test2").path("").gain(-0.5).build();
+        let sound = Sound::builder(2, "test2")
+            .path("sfx/test.wav")
+            .gain(-0.5)
+            .build();
 
         let result = sound.validate_rules(&context);
         assert!(result.is_err());
     }
 
-    // NOTE: Standalone tests for shared types (Spatialization, Scope, FaderAlgorithm,
-    // RtpcCompatibleValue, SoundLoopConfig) are in src/assets/shared.rs. Tests here
-    // focus on Sound-specific behavior and integration with shared types.
+    #[test]
+    fn test_sound_validate_rules_fails_nan_gain() {
+        use std::fs;
+        use tempfile::tempdir;
+
+        let temp_dir = tempdir().unwrap();
+        let data_dir = temp_dir.path().join("data").join("sfx");
+        fs::create_dir_all(&data_dir).unwrap();
+        fs::write(data_dir.join("test.wav"), b"fake audio").unwrap();
+        let context = ProjectContext::new(temp_dir.path().to_path_buf());
+
+        let sound = Sound::builder(1, "test")
+            .path("sfx/test.wav")
+            .gain(f32::NAN)
+            .build();
+
+        let result = sound.validate_rules(&context);
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(err.what().contains("Invalid gain value"));
+    }
+
+    #[test]
+    fn test_sound_validate_rules_fails_invalid_fader() {
+        use std::fs;
+        use tempfile::tempdir;
+
+        let temp_dir = tempdir().unwrap();
+        let data_dir = temp_dir.path().join("data").join("sfx");
+        fs::create_dir_all(&data_dir).unwrap();
+        fs::write(data_dir.join("test.wav"), b"fake audio").unwrap();
+        let context = ProjectContext::new(temp_dir.path().to_path_buf());
+
+        let mut sound = Sound::builder(1, "test").path("sfx/test.wav").build();
+        sound.fader = Some("InvalidFader".to_string());
+
+        let result = sound.validate_rules(&context);
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(err.what().contains("Unknown fader algorithm"));
+        assert_eq!(err.field, Some("fader".to_string()));
+    }
 }

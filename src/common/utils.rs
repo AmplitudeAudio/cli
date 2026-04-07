@@ -443,7 +443,7 @@ pub fn parse_template_manifest(path: &Path) -> anyhow::Result<Option<TemplateMan
 pub fn generate_unique_id(name: &str) -> u64 {
     let timestamp = SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .unwrap()
+        .unwrap_or_default()
         .as_nanos();
 
     let mut hasher = DefaultHasher::new();

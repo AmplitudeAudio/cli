@@ -30,18 +30,41 @@ use std::path::PathBuf;
 
 use crate::common::errors::CliError;
 
+/// Auto-generated asset types from SDK FlatBuffer schemas.
+///
+/// Generated at build time by `build.rs` which reads `.bfbs` binary schema files
+/// from `$AM_SDK_PATH/schemas/` and emits serde-compatible Rust types. These types
+/// mirror the SDK's data definitions (enums, tables, structs) and are always in sync
+/// with the installed SDK version.
+///
+/// **Unions:** FlatBuffer union types are skipped (noted with TODO comments in the
+/// generated file) and will be handled in a future story.
+#[allow(non_snake_case, non_camel_case_types, clippy::upper_case_acronyms)]
+pub mod generated {
+    include!(concat!(env!("OUT_DIR"), "/generated_assets.rs"));
+}
+
 // Submodules for each asset type
 mod collection;
 mod effect;
 mod event;
-/// Shared SDK types used across multiple asset types (Spatialization, Scope, RTPC, etc.).
-pub mod shared;
+/// FaderAlgorithm enum and convenience extension methods for generated SDK types.
+pub mod extensions;
 mod sound;
 mod soundbank;
 mod switch;
 mod switch_container;
 /// Cross-asset reference validation infrastructure.
 pub mod validator;
+
+// Re-export generated types used across asset modules.
+#[allow(unused_imports)]
+pub use generated::{
+    CurveDefinition, CurvePartDefinition, CurvePointDefinition, RtpcCompatibleValue, RtpcParameter,
+    Scope, SoundLoopConfig, Spatialization, ValueKind,
+};
+// Re-export hand-written types that have no generated equivalent.
+pub use extensions::FaderAlgorithm;
 
 // Re-export all asset types.
 // Note: Some types are currently unused but are part of the public API for future asset type
@@ -52,11 +75,6 @@ pub use collection::Collection;
 pub use effect::Effect;
 #[allow(unused_imports)]
 pub use event::Event;
-#[allow(unused_imports)]
-pub use shared::{
-    CurveDefinition, CurvePart, CurvePoint, FaderAlgorithm, RtpcCompatibleValue, RtpcReference,
-    Scope, SoundLoopConfig, Spatialization,
-};
 pub use sound::{Sound, SoundBuilder};
 #[allow(unused_imports)]
 pub use soundbank::Soundbank;

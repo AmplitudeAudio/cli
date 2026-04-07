@@ -103,7 +103,7 @@ fn test_p1_create_test_sound_deserializes_to_sound_struct() {
     let sound: Sound = serde_json::from_str(&content).unwrap();
 
     assert_eq!(sound.id, 100);
-    assert_eq!(sound.name, "explosion");
+    assert_eq!(sound.name.as_deref(), Some("explosion"));
 }
 
 // =============================================================================
