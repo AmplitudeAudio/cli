@@ -74,7 +74,7 @@ pub use extensions::{COLLECTION_PLAY_MODE_NAMES, FaderAlgorithm, SOUND_SCHEDULER
 #[allow(unused_imports)]
 pub use collection::{Collection, CollectionBuilder};
 #[allow(unused_imports)]
-pub use effect::Effect;
+pub use effect::{Effect, EffectBuilder};
 #[allow(unused_imports)]
 pub use event::Event;
 pub use sound::{Sound, SoundBuilder};

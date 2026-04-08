@@ -4,9 +4,11 @@
 //! Currently supports Sound assets, with more asset types planned.
 
 mod collection;
+mod effect;
 mod sound;
 
 pub use collection::{CollectionCommands, handler as handle_collection_command};
+pub use effect::{EffectCommands, handler as handle_effect_command};
 pub use sound::{SoundCommands, handler as handle_sound_command};
 
 use anyhow::Result;
@@ -54,6 +56,11 @@ pub enum AssetCommands {
         #[command(subcommand)]
         command: CollectionCommands,
     },
+    /// Effect asset management
+    Effect {
+        #[command(subcommand)]
+        command: EffectCommands,
+    },
 }
 
 /// Handle asset commands by routing to the appropriate subcommand handler.
@@ -69,6 +76,9 @@ pub async fn handler(
         }
         AssetCommands::Collection { command } => {
             handle_collection_command(command, database, input, output).await
+        }
+        AssetCommands::Effect { command } => {
+            handle_effect_command(command, database, input, output).await
         }
     }
 }
