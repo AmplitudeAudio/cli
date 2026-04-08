@@ -28,6 +28,8 @@ use crate::{
     presentation::{Output, OutputMode},
 };
 
+use super::parse_spatialization;
+
 /// The name of the current asset.
 ///
 /// Used in error messages and other outputs.
@@ -177,22 +179,6 @@ pub async fn handler(
             )
             .await
         }
-    }
-}
-
-/// Parse spatialization mode from string.
-fn parse_spatialization(s: &str) -> Result<Spatialization> {
-    match s.to_lowercase().as_str() {
-        "none" => Ok(Spatialization::None),
-        "position" => Ok(Spatialization::Position),
-        "position_orientation" | "positionorientation" => Ok(Spatialization::PositionOrientation),
-        "hrtf" => Ok(Spatialization::HRTF),
-        _ => Err(CliError::new(
-            codes::ERR_VALIDATION_FIELD,
-            format!("Invalid spatialization mode: '{}'", s),
-            "Spatialization must be one of: none, position, position_orientation, hrtf",
-        )
-        .into()),
     }
 }
 
