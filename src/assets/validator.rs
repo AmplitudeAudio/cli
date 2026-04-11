@@ -230,6 +230,28 @@ impl ProjectValidator {
         self.validate_asset_exists(AssetType::Switch, id)
     }
 
+    /// Checks if an asset ID references a playable asset type.
+    ///
+    /// Playable assets are: Sound, Collection, and SwitchContainer.
+    /// These are the asset types that can be targeted by Play and Resume event actions.
+    ///
+    /// Returns `true` if the ID exists and is one of the playable asset types.
+    /// Zero ID returns `false` (not a playable asset).
+    pub fn is_playable_asset(&self, id: u64) -> bool {
+        if id == 0 {
+            return false;
+        }
+
+        if let Some(asset_type) = self.asset_locations.get(&id) {
+            matches!(
+                asset_type,
+                AssetType::Sound | AssetType::Collection | AssetType::SwitchContainer
+            )
+        } else {
+            false
+        }
+    }
+
     /// Validates that a Switch state exists within a given Switch.
     ///
     /// Currently validates only that the parent Switch exists. Full state
@@ -467,11 +489,9 @@ mod tests {
         assert!(validator.validate_collection_exists(0).is_ok());
         assert!(validator.validate_effect_exists(0).is_ok());
         assert!(validator.validate_switch_exists(0).is_ok());
-        assert!(
-            validator
-                .validate_asset_exists(AssetType::Soundbank, 0)
-                .is_ok()
-        );
+        assert!(validator
+            .validate_asset_exists(AssetType::Soundbank, 0)
+            .is_ok());
         assert!(validator.validate_asset_exists(AssetType::Event, 0).is_ok());
     }
 
@@ -610,16 +630,12 @@ mod tests {
         let validator = ProjectValidator::new(dir.path().to_path_buf()).unwrap();
 
         // Correct directory
-        assert!(
-            validator
-                .validate_asset_in_correct_directory(AssetType::Sound, 10)
-                .is_ok()
-        );
-        assert!(
-            validator
-                .validate_asset_in_correct_directory(AssetType::Effect, 20)
-                .is_ok()
-        );
+        assert!(validator
+            .validate_asset_in_correct_directory(AssetType::Sound, 10)
+            .is_ok());
+        assert!(validator
+            .validate_asset_in_correct_directory(AssetType::Effect, 20)
+            .is_ok());
 
         // Wrong directory
         let err = validator
@@ -629,18 +645,14 @@ mod tests {
         assert!(err.what().contains("not a Effect"));
 
         // Zero ID always ok
-        assert!(
-            validator
-                .validate_asset_in_correct_directory(AssetType::Sound, 0)
-                .is_ok()
-        );
+        assert!(validator
+            .validate_asset_in_correct_directory(AssetType::Sound, 0)
+            .is_ok());
 
         // Unknown ID is ok (not found = not a mismatch)
-        assert!(
-            validator
-                .validate_asset_in_correct_directory(AssetType::Sound, 999)
-                .is_ok()
-        );
+        assert!(validator
+            .validate_asset_in_correct_directory(AssetType::Sound, 999)
+            .is_ok());
     }
 
     #[test]
