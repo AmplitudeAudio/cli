@@ -5,7 +5,7 @@
 use crate::input::Input;
 use anyhow::Result;
 use inquire::validator::Validation;
-use inquire::{Confirm, Select, Text};
+use inquire::{Confirm, MultiSelect, Select, Text};
 
 #[derive(Debug, Default, Clone, Copy)]
 pub struct InteractiveInput;
@@ -54,5 +54,26 @@ impl Input for InteractiveInput {
         }
 
         Ok(c.prompt()?)
+    }
+
+    fn prompt_text_with_default(
+        &self,
+        prompt: &str,
+        default: &str,
+        validator: Option<&dyn Fn(&str) -> Result<Validation, inquire::CustomUserError>>,
+    ) -> Result<String> {
+        let mut t = Text::new(prompt).with_default(default);
+
+        if let Some(v) = validator {
+            t = t.with_validator(v);
+        }
+
+        Ok(t.prompt()?)
+    }
+
+    fn multi_select(&self, prompt: &str, options: &[String]) -> Result<Vec<String>> {
+        let ms = MultiSelect::new(prompt, options.to_vec())
+            .with_help_message("Use Space to toggle, Enter to confirm");
+        Ok(ms.prompt()?)
     }
 }

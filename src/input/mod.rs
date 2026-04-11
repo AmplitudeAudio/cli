@@ -66,6 +66,22 @@ pub trait Input: Send + Sync {
 
     /// Prompt the user for confirmation (yes/no).
     fn confirm(&self, prompt: &str, default: Option<bool>) -> Result<bool>;
+
+    /// Prompt the user for text input with a default value pre-filled.
+    ///
+    /// The default value is editable by the user. If they press Enter without
+    /// changes, the default is used.
+    fn prompt_text_with_default(
+        &self,
+        prompt: &str,
+        default: &str,
+        validator: Option<&dyn Fn(&str) -> Result<Validation, inquire::CustomUserError>>,
+    ) -> Result<String>;
+
+    /// Prompt the user to select multiple items from a list.
+    ///
+    /// Returns the selected items' labels.
+    fn multi_select(&self, prompt: &str, options: &[String]) -> Result<Vec<String>>;
 }
 
 /// Create an `Input` implementation based on `InputMode`.

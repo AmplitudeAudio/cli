@@ -21,8 +21,9 @@ impl NonInteractiveInput {
 
     fn blocked(&self, kind: &str, prompt: &str) -> anyhow::Error {
         anyhow::anyhow!(
-            "Interactive {} '{}' blocked: non-interactive mode is enabled. \
-             Please provide the required input via command-line arguments instead.",
+            "Interactive {} '{}' blocked: non-interactive mode is active. \
+             Provide the required value via command-line flags instead. \
+             Use --help on the command to see available flags.",
             kind,
             prompt
         )
@@ -46,5 +47,18 @@ impl Input for NonInteractiveInput {
 
     fn confirm(&self, prompt: &str, _default: Option<bool>) -> Result<bool> {
         Err(self.blocked("confirmation", prompt))
+    }
+
+    fn prompt_text_with_default(
+        &self,
+        prompt: &str,
+        _default: &str,
+        _validator: Option<&dyn Fn(&str) -> Result<Validation, inquire::CustomUserError>>,
+    ) -> Result<String> {
+        Err(self.blocked("prompt", prompt))
+    }
+
+    fn multi_select(&self, prompt: &str, _options: &[String]) -> Result<Vec<String>> {
+        Err(self.blocked("multi-select", prompt))
     }
 }

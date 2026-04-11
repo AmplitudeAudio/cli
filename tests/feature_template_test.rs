@@ -144,6 +144,25 @@ impl Input for MockInput {
     fn confirm(&self, _prompt: &str, _default: Option<bool>) -> anyhow::Result<bool> {
         Ok(self.confirm_response)
     }
+
+    fn prompt_text_with_default(
+        &self,
+        prompt: &str,
+        _default: &str,
+        _validator: Option<&dyn Fn(&str) -> anyhow::Result<Validation, inquire::CustomUserError>>,
+    ) -> anyhow::Result<String> {
+        Err(anyhow::anyhow!(
+            "MockInput: prompt_text_with_default not implemented for '{}'",
+            prompt
+        ))
+    }
+
+    fn multi_select(&self, prompt: &str, _options: &[String]) -> anyhow::Result<Vec<String>> {
+        Err(anyhow::anyhow!(
+            "MockInput: multi_select not implemented for '{}'",
+            prompt
+        ))
+    }
 }
 
 // Safety: MockInput is only used in single-threaded tests

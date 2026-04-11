@@ -147,8 +147,12 @@ async fn async_main() -> anyhow::Result<()> {
     let output = create_output(output_mode);
 
     // Create input handler based on flags.
-    // Rule: --json implies non-interactive input.
-    let input_mode = if cli.json || cli.non_interactive || cli.quiet {
+    // Rule: --json, --quiet, --non-interactive, or non-TTY stdin all imply non-interactive input.
+    let is_tty = std::io::IsTerminal::is_terminal(&std::io::stdin());
+    let input_mode = if cli.json || cli.non_interactive || cli.quiet || !is_tty {
+        if !is_tty && !cli.json && !cli.non_interactive && !cli.quiet {
+            debug!("stdin is not a terminal — using non-interactive mode. Use --non-interactive to suppress this message.");
+        }
         InputMode::NonInteractive
     } else {
         InputMode::Interactive
