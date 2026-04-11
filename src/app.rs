@@ -28,9 +28,13 @@ Copyright (c) 2025-present Sparky Studios. All rights reserved.
 {after-help}
 ")]
 pub struct App {
-    /// Enable verbose logging
-    #[arg(short, long, global = true)]
+    /// Enable verbose logging (debug and trace messages)
+    #[arg(short, long, global = true, conflicts_with = "quiet")]
     pub verbose: bool,
+
+    /// Suppress informational output (errors are always shown)
+    #[arg(short, long, global = true, conflicts_with = "verbose")]
+    pub quiet: bool,
 
     /// Output in JSON format for machine parsing
     #[arg(long, global = true)]

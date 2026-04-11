@@ -98,7 +98,7 @@ async fn async_main() -> anyhow::Result<()> {
     let cli = App::parse();
 
     // Initialize logging system
-    if let Err(e) = init_logger(cli.verbose) {
+    if let Err(e) = init_logger(cli.verbose, cli.quiet) {
         eprintln!("Failed to initialize logger: {}", e);
         std::process::exit(1);
     }
@@ -148,7 +148,7 @@ async fn async_main() -> anyhow::Result<()> {
 
     // Create input handler based on flags.
     // Rule: --json implies non-interactive input.
-    let input_mode = if cli.json || cli.non_interactive {
+    let input_mode = if cli.json || cli.non_interactive || cli.quiet {
         InputMode::NonInteractive
     } else {
         InputMode::Interactive

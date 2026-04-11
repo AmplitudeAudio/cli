@@ -63,6 +63,7 @@ impl LogEntry {
 
 static LOG_BUFFER: Mutex<Option<VecDeque<LogEntry>>> = Mutex::new(None);
 static VERBOSE_MODE: RwLock<bool> = RwLock::new(false);
+static QUIET_MODE: RwLock<bool> = RwLock::new(false);
 
 pub struct Logger;
 
@@ -79,6 +80,16 @@ impl Logger {
 
     pub fn is_verbose() -> bool {
         VERBOSE_MODE.read().map(|v| *v).unwrap_or(false)
+    }
+
+    pub fn set_quiet(quiet: bool) {
+        if let Ok(mut q) = QUIET_MODE.write() {
+            *q = quiet;
+        }
+    }
+
+    pub fn is_quiet() -> bool {
+        QUIET_MODE.read().map(|q| *q).unwrap_or(false)
     }
 
     fn add_to_buffer(entry: LogEntry) {
@@ -113,6 +124,11 @@ impl Logger {
     }
 
     fn should_display(level: Level) -> bool {
+        if Self::is_quiet() {
+            // In quiet mode, only errors and warnings are displayed
+            return matches!(level, Level::Error | Level::Warn);
+        }
+
         match level {
             Level::Debug | Level::Trace => Self::is_verbose(),
             Level::Info | Level::Warn | Level::Error => true,
@@ -125,9 +141,11 @@ impl Logger {
         // Add to buffer for crash logging
         Self::add_to_buffer(entry);
 
-        // Always display SUCCESS messages
-        let formatted_message = Self::format_success_message(message);
-        println!("{}", formatted_message);
+        // Display SUCCESS messages unless in quiet mode
+        if !Self::is_quiet() {
+            let formatted_message = Self::format_success_message(message);
+            println!("{}", formatted_message);
+        }
     }
 
     pub fn write_crash_log() -> Result<PathBuf, Box<dyn std::error::Error>> {
@@ -195,8 +213,9 @@ impl Log for Logger {
     }
 }
 
-pub fn init_logger(verbose: bool) -> Result<(), Box<dyn std::error::Error>> {
+pub fn init_logger(verbose: bool, quiet: bool) -> Result<(), Box<dyn std::error::Error>> {
     Logger::set_verbose(verbose);
+    Logger::set_quiet(quiet);
 
     let logger = Logger::new();
     log::set_boxed_logger(Box::new(logger)).map_err(|e| format!("Failed to set logger: {}", e))?;
