@@ -113,6 +113,21 @@ pub enum ProjectCommands {
         #[arg(long)]
         soundbanks_only: bool,
     },
+
+    /// Build project assets for runtime consumption
+    Build {
+        /// Output directory (defaults to project's build directory)
+        #[arg(short, long)]
+        output: Option<PathBuf>,
+
+        /// Remove existing build output before generating new files
+        #[arg(long)]
+        clean: bool,
+
+        /// Stop on first error instead of continuing
+        #[arg(long)]
+        fail_fast: bool,
+    },
 }
 
 pub async fn handler(
@@ -224,6 +239,11 @@ pub async fn handler(
             );
             handle_validate_project_command(filter, output).await
         }
+        ProjectCommands::Build {
+            output: output_dir,
+            clean,
+            fail_fast,
+        } => handle_build_project_command(output_dir.clone(), *clean, *fail_fast, output).await,
     }
 }
 
@@ -1173,4 +1193,404 @@ fn validate_typed_asset<T: Asset>(
     }
 
     results
+}
+
+// =============================================================================
+// Build Command
+// =============================================================================
+
+/// Build project assets for runtime consumption.
+///
+/// Steps:
+/// 1. Require SDK availability
+/// 2. Validate all assets (fail-fast on errors)
+/// 3. Copy asset JSON files to build output directory
+/// 4. Copy audio data files to build output directory
+/// 5. Report summary
+async fn handle_build_project_command(
+    output_dir: Option<PathBuf>,
+    clean: bool,
+    fail_fast: bool,
+    output: &dyn Output,
+) -> Result<()> {
+    let current_dir = env::current_dir()?;
+    let project_config = read_amproject_file(&current_dir)?;
+
+    output.progress(&format!(
+        "Building project '{}'...",
+        project_config.name
+    ));
+
+    // Step 1: Require SDK
+    let sdk = match discover_sdk() {
+        Ok(sdk) => sdk,
+        Err(e) => {
+            return Err(CliError::new(
+                codes::ERR_SDK_NOT_FOUND,
+                "SDK is required for build operations",
+                e.what,
+            )
+            .with_suggestion(
+                "Set the AM_SDK_PATH environment variable to your SDK installation path",
+            )
+            .into());
+        }
+    };
+
+    output.progress(&format!("SDK found at {}", sdk.root().display()));
+
+    // Step 2: Validate all assets first
+    output.progress("Running validation...");
+
+    let validator = ProjectValidator::new(current_dir.clone())?;
+    let context = ProjectContext::new(current_dir.clone()).with_validator(validator);
+
+    let sources_dir = current_dir.join("sources");
+    let asset_types = vec![
+        AssetType::Sound,
+        AssetType::Collection,
+        AssetType::Effect,
+        AssetType::Switch,
+        AssetType::SwitchContainer,
+        AssetType::Event,
+        AssetType::Soundbank,
+    ];
+
+    let mut validation_errors: Vec<ValidationResult> = Vec::new();
+
+    for asset_type in &asset_types {
+        let dir = sources_dir.join(asset_type.directory_name());
+        if !dir.exists() {
+            continue;
+        }
+
+        let entries = match fs::read_dir(&dir) {
+            Ok(e) => e,
+            Err(_) => continue,
+        };
+
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.extension().is_none_or(|ext| ext != "json") {
+                continue;
+            }
+
+            let filename = path.file_name().unwrap_or_default().to_string_lossy().to_string();
+            let relative_path = format!("sources/{}/{}", asset_type.directory_name(), filename);
+
+            if let Ok(content) = fs::read_to_string(&path) {
+                let errs = validate_asset_file(*asset_type, &content, &relative_path, &context);
+                if !errs.is_empty() {
+                    validation_errors.extend(errs);
+                    if fail_fast {
+                        break;
+                    }
+                }
+            }
+        }
+
+        if fail_fast && !validation_errors.is_empty() {
+            break;
+        }
+    }
+
+    if !validation_errors.is_empty() {
+        // Display validation errors and abort
+        match output.mode() {
+            OutputMode::Interactive => {
+                output.progress(&format!(
+                    "\n{} Validation failed: {} error(s). Build aborted.\n",
+                    "✗".red(),
+                    validation_errors.len()
+                ));
+                for err in &validation_errors {
+                    output.progress(&format!("  {} {}", "Error:".red().bold(), err.error));
+                    output.progress(&format!("    File: {}", err.file));
+                    if let Some(ref field) = err.field {
+                        output.progress(&format!("    Field: {}", field));
+                    }
+                    output.progress(&format!("    Fix:   {}", err.suggestion));
+                    output.progress("");
+                }
+            }
+            OutputMode::Json => {
+                let error_data: Vec<serde_json::Value> = validation_errors
+                    .iter()
+                    .map(|e| {
+                        json!({
+                            "file": e.file,
+                            "error": e.error,
+                            "fix": e.suggestion,
+                        })
+                    })
+                    .collect();
+
+                output.success(
+                    json!({
+                        "built": false,
+                        "validation_errors": error_data,
+                    }),
+                    None,
+                );
+            }
+        }
+
+        return Err(CliError::new(
+            codes::ERR_VALIDATION_SCHEMA,
+            format!(
+                "Build aborted: {} validation error(s)",
+                validation_errors.len()
+            ),
+            "Fix validation errors before building",
+        )
+        .into());
+    }
+
+    output.progress("Validation passed.");
+
+    // Step 3: Determine output directory
+    let build_dir = match output_dir {
+        Some(dir) => dir,
+        None => current_dir.join(&project_config.build_dir),
+    };
+
+    // Step 4: Clean if requested
+    if clean && build_dir.exists() {
+        output.progress(&format!("Cleaning build directory: {}...", build_dir.display()));
+        fs::remove_dir_all(&build_dir)?;
+    }
+
+    fs::create_dir_all(&build_dir)?;
+
+    // Step 5: Copy asset files to build directory
+    output.progress("Copying assets...");
+
+    let mut copied_assets: HashMap<String, usize> = HashMap::new();
+    let mut copy_errors: Vec<(String, String)> = Vec::new();
+    let mut total_size: u64 = 0;
+
+    for asset_type in &asset_types {
+        let src_dir = sources_dir.join(asset_type.directory_name());
+        if !src_dir.exists() {
+            continue;
+        }
+
+        let dest_dir = build_dir.join(asset_type.directory_name());
+        fs::create_dir_all(&dest_dir)?;
+
+        let entries = match fs::read_dir(&src_dir) {
+            Ok(e) => e,
+            Err(_) => continue,
+        };
+
+        let mut type_count: usize = 0;
+
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.extension().is_none_or(|ext| ext != "json") {
+                continue;
+            }
+
+            let filename = path.file_name().unwrap_or_default().to_string_lossy().to_string();
+            let dest_path = dest_dir.join(&filename);
+            let relative = format!("sources/{}/{}", asset_type.directory_name(), filename);
+
+            match fs::copy(&path, &dest_path) {
+                Ok(bytes) => {
+                    total_size += bytes;
+                    type_count += 1;
+                    output.progress(&format!("  Copied {}", relative));
+                }
+                Err(e) => {
+                    let err_msg = format!("Failed to copy {}: {}", relative, e);
+                    copy_errors.push((relative, err_msg.clone()));
+                    output.progress(&format!("  {} {}", "✗".red(), err_msg));
+
+                    if fail_fast {
+                        return Err(CliError::new(
+                            codes::ERR_VALIDATION_FIELD,
+                            format!("Build failed: could not copy {}", filename),
+                            format!("I/O error: {}", e),
+                        )
+                        .into());
+                    }
+                }
+            }
+        }
+
+        if type_count > 0 {
+            copied_assets.insert(asset_type.directory_name().to_string(), type_count);
+        }
+    }
+
+    // Step 6: Copy data files (audio files)
+    let data_dir = current_dir.join(&project_config.data_dir);
+    let mut data_files_copied: usize = 0;
+
+    if data_dir.exists() {
+        let dest_data_dir = build_dir.join("data");
+        fs::create_dir_all(&dest_data_dir)?;
+
+        output.progress("Copying data files...");
+        match copy_dir_recursive(&data_dir, &dest_data_dir, fail_fast) {
+            Ok((count, bytes, errors)) => {
+                data_files_copied = count;
+                total_size += bytes;
+                for (file, err) in &errors {
+                    copy_errors.push((file.clone(), err.clone()));
+                    output.progress(&format!("  {} {}", "✗".red(), err));
+                }
+            }
+            Err(e) => {
+                return Err(CliError::new(
+                    codes::ERR_VALIDATION_FIELD,
+                    "Failed to copy data directory",
+                    format!("I/O error: {}", e),
+                )
+                .into());
+            }
+        }
+    }
+
+    // Step 7: Copy config files (*.config.json, *.buses.json) from sources root
+    let config_patterns = ["config.json", "buses.json"];
+    if let Ok(entries) = fs::read_dir(&sources_dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_file() {
+                let filename = path.file_name().unwrap_or_default().to_string_lossy().to_string();
+                if config_patterns.iter().any(|pat| filename.ends_with(pat)) {
+                    let dest = build_dir.join(&filename);
+                    match fs::copy(&path, &dest) {
+                        Ok(bytes) => {
+                            total_size += bytes;
+                            output.progress(&format!("  Copied {}", filename));
+                        }
+                        Err(e) => {
+                            copy_errors.push((filename.clone(), format!("Failed to copy {}: {}", filename, e)));
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Step 8: Report results
+    let total_assets: usize = copied_assets.values().sum();
+    let has_errors = !copy_errors.is_empty();
+
+    match output.mode() {
+        OutputMode::Json => {
+            output.success(
+                json!({
+                    "built": !has_errors,
+                    "output_path": build_dir.to_string_lossy(),
+                    "assets": copied_assets,
+                    "data_files": data_files_copied,
+                    "total_assets": total_assets,
+                    "size_bytes": total_size,
+                    "errors": copy_errors.iter().map(|(f, e)| json!({"file": f, "error": e})).collect::<Vec<_>>(),
+                }),
+                None,
+            );
+        }
+        OutputMode::Interactive => {
+            output.progress("");
+
+            if has_errors {
+                output.progress(&format!(
+                    "{} Build completed with {} error(s):\n",
+                    "⚠".yellow(),
+                    copy_errors.len()
+                ));
+                for (_file, err) in &copy_errors {
+                    output.progress(&format!("  {} {}", "✗".red(), err));
+                }
+                output.progress("");
+            }
+
+            output.success(
+                json!(format!(
+                    "Build complete: {} asset(s), {} data file(s) -> {}",
+                    total_assets,
+                    data_files_copied,
+                    build_dir.display()
+                )),
+                None,
+            );
+
+            output.progress("");
+            output.progress("Summary:");
+            for (type_name, count) in &copied_assets {
+                output.progress(&format!("  {}: {}", type_name, count));
+            }
+            if data_files_copied > 0 {
+                output.progress(&format!("  data files: {}", data_files_copied));
+            }
+            output.progress(&format!("  Total size: {} bytes", total_size));
+        }
+    }
+
+    if has_errors {
+        return Err(CliError::new(
+            codes::ERR_VALIDATION_FIELD,
+            format!("Build completed with {} error(s)", copy_errors.len()),
+            "Some files failed to copy",
+        )
+        .with_suggestion("Check file permissions and disk space")
+        .into());
+    }
+
+    Ok(())
+}
+
+/// Recursively copy a directory's contents.
+/// Returns (files_copied, total_bytes, errors).
+fn copy_dir_recursive(
+    src: &std::path::Path,
+    dest: &std::path::Path,
+    fail_fast: bool,
+) -> Result<(usize, u64, Vec<(String, String)>)> {
+    let mut count = 0;
+    let mut bytes = 0u64;
+    let mut errors = Vec::new();
+
+    let entries = fs::read_dir(src)?;
+
+    for entry in entries {
+        let entry = entry?;
+        let path = entry.path();
+        let filename = path.file_name().unwrap_or_default();
+        let dest_path = dest.join(filename);
+
+        if path.is_dir() {
+            fs::create_dir_all(&dest_path)?;
+            let (sub_count, sub_bytes, sub_errors) =
+                copy_dir_recursive(&path, &dest_path, fail_fast)?;
+            count += sub_count;
+            bytes += sub_bytes;
+            errors.extend(sub_errors);
+
+            if fail_fast && !errors.is_empty() {
+                return Ok((count, bytes, errors));
+            }
+        } else {
+            match fs::copy(&path, &dest_path) {
+                Ok(b) => {
+                    count += 1;
+                    bytes += b;
+                }
+                Err(e) => {
+                    let rel = path.to_string_lossy().to_string();
+                    errors.push((rel.clone(), format!("Failed to copy {}: {}", rel, e)));
+
+                    if fail_fast {
+                        return Ok((count, bytes, errors));
+                    }
+                }
+            }
+        }
+    }
+
+    Ok((count, bytes, errors))
 }
