@@ -81,7 +81,7 @@ pub use sound::{Sound, SoundBuilder};
 #[allow(unused_imports)]
 pub use soundbank::Soundbank;
 #[allow(unused_imports)]
-pub use switch::Switch;
+pub use switch::{Switch, SwitchBuilder};
 #[allow(unused_imports)]
 pub use switch_container::SwitchContainer;
 pub use validator::ProjectValidator;
