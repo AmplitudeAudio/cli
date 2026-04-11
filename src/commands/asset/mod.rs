@@ -7,11 +7,13 @@ mod collection;
 mod effect;
 mod sound;
 mod switch;
+mod switch_container;
 
 pub use collection::{CollectionCommands, handler as handle_collection_command};
 pub use effect::{EffectCommands, handler as handle_effect_command};
 pub use sound::{SoundCommands, handler as handle_sound_command};
 pub use switch::{SwitchCommands, handler as handle_switch_command};
+pub use switch_container::{SwitchContainerCommands, handler as handle_switch_container_command};
 
 use anyhow::Result;
 use clap::Subcommand;
@@ -68,6 +70,11 @@ pub enum AssetCommands {
         #[command(subcommand)]
         command: SwitchCommands,
     },
+    /// Switch container asset management
+    SwitchContainer {
+        #[command(subcommand)]
+        command: SwitchContainerCommands,
+    },
 }
 
 /// Handle asset commands by routing to the appropriate subcommand handler.
@@ -89,6 +96,9 @@ pub async fn handler(
         }
         AssetCommands::Switch { command } => {
             handle_switch_command(command, database, input, output).await
+        }
+        AssetCommands::SwitchContainer { command } => {
+            handle_switch_container_command(command, database, input, output).await
         }
     }
 }
