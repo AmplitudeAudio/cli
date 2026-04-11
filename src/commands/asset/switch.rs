@@ -37,6 +37,7 @@ const MAX_ID_RETRIES: u32 = 3;
 #[derive(Subcommand, Debug)]
 pub enum SwitchCommands {
     /// Create a new switch asset
+    #[command(after_help = "Examples:\n  am asset switch create surface_type\n  am asset switch create surface_type --states wood,stone,metal\n")]
     Create {
         /// Name of the switch asset
         name: String,
@@ -47,9 +48,11 @@ pub enum SwitchCommands {
     },
 
     /// List all switch assets in the project
+    #[command(after_help = "Examples:\n  am asset switch list\n")]
     List {},
 
     /// Update an existing switch asset
+    #[command(after_help = "Examples:\n  am asset switch update surface_type\n  am asset switch update surface_type --states wood,stone,grass\n")]
     Update {
         /// Name of the switch asset to update
         name: String,
@@ -60,6 +63,7 @@ pub enum SwitchCommands {
     },
 
     /// Delete a switch asset
+    #[command(after_help = "Examples:\n  am asset switch delete surface_type\n  am asset switch delete surface_type --force\n")]
     Delete {
         /// Name of the switch asset to delete
         name: String,

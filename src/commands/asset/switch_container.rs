@@ -41,6 +41,7 @@ const NO_REFERENCE: u64 = 0;
 #[derive(Subcommand, Debug)]
 pub enum SwitchContainerCommands {
     /// Create a new switch container asset
+    #[command(after_help = "Examples:\n  am asset switch-container create footsteps\n  am asset switch-container create footsteps --switch surface_type --map wood=wood_step\n")]
     Create {
         /// Name of the switch container asset
         name: String,
@@ -55,9 +56,11 @@ pub enum SwitchContainerCommands {
     },
 
     /// List all switch container assets in the project
+    #[command(after_help = "Examples:\n  am asset switch-container list\n  am asset switch-container list --json\n")]
     List {},
 
     /// Update an existing switch container asset
+    #[command(after_help = "Examples:\n  am asset switch-container update footsteps\n  am asset switch-container update footsteps --map stone=stone_step\n")]
     Update {
         /// Name of the switch container asset to update
         name: String,
@@ -68,6 +71,7 @@ pub enum SwitchContainerCommands {
     },
 
     /// Delete a switch container asset
+    #[command(after_help = "Examples:\n  am asset switch-container delete footsteps\n  am asset switch-container delete footsteps --force\n")]
     Delete {
         /// Name of the switch container asset to delete
         name: String,

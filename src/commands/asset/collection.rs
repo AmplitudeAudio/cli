@@ -40,6 +40,10 @@ const MAX_ID_RETRIES: u32 = 3;
 #[derive(Subcommand, Debug)]
 pub enum CollectionCommands {
     /// Create a new collection asset
+    #[command(after_help = "Examples:
+  am asset collection create footsteps
+  am asset collection create ambience --play-mode PlayAll --gain 0.7
+")]
     Create {
         /// Name of the collection asset
         name: String,
@@ -70,9 +74,17 @@ pub enum CollectionCommands {
     },
 
     /// List all collection assets in the project
+    #[command(after_help = "Examples:
+  am asset collection list
+  am asset collection list --json
+")]
     List {},
 
     /// Update an existing collection asset
+    #[command(after_help = "Examples:
+  am asset collection update footsteps --play-mode PlayAll
+  am asset collection update ambience --gain 0.5
+")]
     Update {
         /// Name of the collection asset to update
         name: String,
@@ -103,6 +115,10 @@ pub enum CollectionCommands {
     },
 
     /// Delete a collection asset
+    #[command(after_help = "Examples:
+  am asset collection delete footsteps
+  am asset collection delete footsteps --force
+")]
     Delete {
         /// Name of the collection asset to delete
         name: String,

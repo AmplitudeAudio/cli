@@ -32,6 +32,7 @@ const ASSET_NAME: &str = "Soundbank";
 #[derive(Subcommand, Debug)]
 pub enum SoundbankCommands {
     /// Create a new soundbank asset
+    #[command(after_help = "Examples:\n  am asset soundbank create main_bank\n  am asset soundbank create main_bank --include sound:explosion,footstep\n")]
     Create {
         /// Name of the soundbank asset
         name: String,
@@ -43,9 +44,11 @@ pub enum SoundbankCommands {
     },
 
     /// List all soundbank assets in the project
+    #[command(after_help = "Examples:\n  am asset soundbank list\n")]
     List {},
 
     /// Update an existing soundbank asset
+    #[command(after_help = "Examples:\n  am asset soundbank update main_bank\n  am asset soundbank update main_bank --add sound:newsfx\n")]
     Update {
         /// Name of the soundbank asset to update
         name: String,
@@ -60,6 +63,7 @@ pub enum SoundbankCommands {
     },
 
     /// Delete a soundbank asset
+    #[command(after_help = "Examples:\n  am asset soundbank delete main_bank\n  am asset soundbank delete main_bank --yes\n")]
     Delete {
         /// Name of the soundbank asset to delete
         name: String,

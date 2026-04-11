@@ -13,6 +13,7 @@ use serde_json::json;
 #[derive(Subcommand, Debug)]
 pub enum SudoCommands {
     /// Database management operations
+    #[command(after_help = "Examples:\n  am sudo database reset\n")]
     Database {
         #[command(subcommand)]
         command: DatabaseCommands,
@@ -22,6 +23,7 @@ pub enum SudoCommands {
 #[derive(Subcommand, Debug)]
 pub enum DatabaseCommands {
     /// Reset the database (destructive operation)
+    #[command(after_help = "Examples:\n  am sudo database reset\n")]
     Reset {
         /// Skip confirmation prompt
         #[arg(short = 'y', long = "yes")]

@@ -36,6 +36,7 @@ const ASSET_NAME: &str = "Event";
 #[derive(Subcommand, Debug)]
 pub enum EventCommands {
     /// Create a new event asset
+    #[command(after_help = "Examples:\n  am asset event create play_music\n  am asset event create play_music --action play:12345\n")]
     Create {
         /// Name of the event asset
         name: String,
@@ -54,9 +55,11 @@ pub enum EventCommands {
     },
 
     /// List all event assets in the project
+    #[command(after_help = "Examples:\n  am asset event list\n")]
     List {},
 
     /// Update an existing event asset
+    #[command(after_help = "Examples:\n  am asset event update play_music\n  am asset event update play_music --run-mode sequential\n")]
     Update {
         /// Name of the event asset to update
         name: String,
@@ -79,6 +82,7 @@ pub enum EventCommands {
     },
 
     /// Delete an event asset
+    #[command(after_help = "Examples:\n  am asset event delete play_music --yes\n  am asset event delete play_music --yes --force\n")]
     Delete {
         /// Name of the event asset to delete
         name: String,

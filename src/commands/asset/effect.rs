@@ -35,6 +35,10 @@ const MAX_ID_RETRIES: u32 = 3;
 #[derive(Subcommand, Debug)]
 pub enum EffectCommands {
     /// Create a new effect asset
+    #[command(after_help = "Examples:
+  am asset effect create reverb
+  am asset effect create eq --effect-type equalizer
+")]
     Create {
         /// Name of the effect asset
         name: String,
@@ -49,9 +53,16 @@ pub enum EffectCommands {
     },
 
     /// List all effect assets in the project
+    #[command(after_help = "Examples:
+  am asset effect list
+  am asset effect list --json
+")]
     List {},
 
     /// Update an existing effect asset
+    #[command(after_help = "Examples:
+  am asset effect update reverb --effect-type hall_reverb
+")]
     Update {
         /// Name of the effect asset to update
         name: String,
@@ -66,6 +77,10 @@ pub enum EffectCommands {
     },
 
     /// Delete an effect asset
+    #[command(after_help = "Examples:
+  am asset effect delete reverb
+  am asset effect delete reverb --force
+")]
     Delete {
         /// Name of the effect asset to delete
         name: String,

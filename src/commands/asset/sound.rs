@@ -39,6 +39,11 @@ const ASSET_NAME: &str = "Sound";
 #[derive(Subcommand, Debug)]
 pub enum SoundCommands {
     /// Create a new sound asset
+    #[command(after_help = "Examples:
+  am asset sound create explosion --file audio/explosion.wav
+  am asset sound create footstep --file audio/step.wav --gain 0.8 --loop
+  am asset sound create ambient --stream --spatialization position
+")]
     Create {
         /// Name of the sound asset
         name: String,
@@ -77,9 +82,17 @@ pub enum SoundCommands {
     },
 
     /// List all sound assets in the project
+    #[command(after_help = "Examples:
+  am asset sound list
+  am asset sound list --json
+")]
     List {},
 
     /// Update an existing sound asset
+    #[command(after_help = "Examples:
+  am asset sound update explosion --gain 0.5
+  am asset sound update ambient --file audio/new_ambient.wav --stream
+")]
     Update {
         /// Name of the sound asset to update
         name: String,

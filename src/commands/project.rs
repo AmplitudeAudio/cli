@@ -45,6 +45,7 @@ const PROJECT_INFO_SEPARATOR_WIDTH: usize = 40;
 #[derive(Subcommand, Debug)]
 pub enum ProjectCommands {
     /// Create a new project
+    #[command(after_help = "Examples:\n  am project init my_game\n  am project init my_game --template o3de\n")]
     Init {
         /// The name of the project to create
         name: Option<String>,
@@ -59,12 +60,14 @@ pub enum ProjectCommands {
     },
 
     /// Register an existing project
+    #[command(after_help = "Examples:\n  am project register /path/to/project\n")]
     Register {
         #[arg(value_parser = value_parser!(PathBuf))]
         path: Option<PathBuf>,
     },
 
     /// Unregister a project
+    #[command(after_help = "Examples:\n  am project unregister my_game\n  am project unregister my_game --delete-files\n")]
     Unregister {
         /// The name of the project to unregister
         name: String,
@@ -75,15 +78,18 @@ pub enum ProjectCommands {
     },
 
     /// List all registered projects
+    #[command(after_help = "Examples:\n  am project list\n  am project list --json\n")]
     List {},
 
     /// Show details of a project
+    #[command(after_help = "Examples:\n  am project info\n  am project info my_game\n")]
     Info {
         /// The name of the project (uses current directory if not provided)
         name: Option<String>,
     },
 
     /// Validate all assets in a project
+    #[command(after_help = "Examples:\n  am project validate\n  am project validate --sounds-only\n  am project validate --json\n")]
     Validate {
         /// Validate only sounds
         #[arg(long)]
@@ -115,6 +121,7 @@ pub enum ProjectCommands {
     },
 
     /// Build project assets for runtime consumption
+    #[command(after_help = "Examples:\n  am project build\n  am project build --output dist/\n  am project build --clean\n")]
     Build {
         /// Output directory (defaults to project's build directory)
         #[arg(short, long)]
