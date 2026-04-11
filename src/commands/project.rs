@@ -10,6 +10,10 @@ use std::sync::Arc;
 
 use crate::{
     app::Resource,
+    assets::{
+        Asset, AssetType, Collection, Effect, Event, ProjectContext, ProjectValidator, Sound,
+        Soundbank, Switch, SwitchContainer,
+    },
     common::{
         errors::{CliError, codes, project_already_exists, project_not_initialized},
         utils::{
@@ -19,13 +23,15 @@ use crate::{
             read_amproject_file, validate_project_name,
         },
     },
+    config::sdk::discover_sdk,
     database::{
         Database, db_create_project, db_forget_project, db_get_all_projects,
         db_get_project_by_name, db_get_project_by_path, db_get_template_by_name, db_get_templates,
         entities::{ProjectConfiguration, Template},
     },
     input::Input,
-    presentation::Output,
+    presentation::{Output, OutputMode},
+    schema::loader::load_schemas,
 };
 use clap::{Subcommand, value_parser};
 use inquire::{CustomUserError, validator::Validation};
@@ -75,6 +81,37 @@ pub enum ProjectCommands {
     Info {
         /// The name of the project (uses current directory if not provided)
         name: Option<String>,
+    },
+
+    /// Validate all assets in a project
+    Validate {
+        /// Validate only sounds
+        #[arg(long)]
+        sounds_only: bool,
+
+        /// Validate only collections
+        #[arg(long)]
+        collections_only: bool,
+
+        /// Validate only effects
+        #[arg(long)]
+        effects_only: bool,
+
+        /// Validate only switches
+        #[arg(long)]
+        switches_only: bool,
+
+        /// Validate only switch containers
+        #[arg(long)]
+        switch_containers_only: bool,
+
+        /// Validate only events
+        #[arg(long)]
+        events_only: bool,
+
+        /// Validate only soundbanks
+        #[arg(long)]
+        soundbanks_only: bool,
     },
 }
 
@@ -166,6 +203,26 @@ pub async fn handler(
         ProjectCommands::List {} => handle_list_projects_command(database, output).await,
         ProjectCommands::Info { name } => {
             handle_info_project_command(name.clone(), database, input, output).await
+        }
+        ProjectCommands::Validate {
+            sounds_only,
+            collections_only,
+            effects_only,
+            switches_only,
+            switch_containers_only,
+            events_only,
+            soundbanks_only,
+        } => {
+            let filter = resolve_type_filter(
+                *sounds_only,
+                *collections_only,
+                *effects_only,
+                *switches_only,
+                *switch_containers_only,
+                *events_only,
+                *soundbanks_only,
+            );
+            handle_validate_project_command(filter, output).await
         }
     }
 }
@@ -743,4 +800,377 @@ fn register_project(
     info!("Registering project {}...", config.name.cyan());
 
     db_create_project(&config.to_project(path.to_str().unwrap()), database.clone())
+}
+
+// =============================================================================
+// Validate Command
+// =============================================================================
+
+/// Resolve which asset types to validate based on filter flags.
+/// If no flags are set, returns None (validate all types).
+fn resolve_type_filter(
+    sounds_only: bool,
+    collections_only: bool,
+    effects_only: bool,
+    switches_only: bool,
+    switch_containers_only: bool,
+    events_only: bool,
+    soundbanks_only: bool,
+) -> Option<Vec<AssetType>> {
+    let mut types = Vec::new();
+
+    if sounds_only {
+        types.push(AssetType::Sound);
+    }
+    if collections_only {
+        types.push(AssetType::Collection);
+    }
+    if effects_only {
+        types.push(AssetType::Effect);
+    }
+    if switches_only {
+        types.push(AssetType::Switch);
+    }
+    if switch_containers_only {
+        types.push(AssetType::SwitchContainer);
+    }
+    if events_only {
+        types.push(AssetType::Event);
+    }
+    if soundbanks_only {
+        types.push(AssetType::Soundbank);
+    }
+
+    if types.is_empty() { None } else { Some(types) }
+}
+
+/// A single validation error with file context.
+#[derive(Debug)]
+struct ValidationResult {
+    file: String,
+    asset_type: AssetType,
+    error: String,
+    why: String,
+    suggestion: String,
+    field: Option<String>,
+}
+
+/// Validate all assets in the current project.
+async fn handle_validate_project_command(
+    type_filter: Option<Vec<AssetType>>,
+    output: &dyn Output,
+) -> Result<()> {
+    let current_dir = env::current_dir()?;
+    let project_config = read_amproject_file(&current_dir)?;
+
+    output.progress(&format!(
+        "Validating project '{}'...",
+        project_config.name
+    ));
+
+    // Try to discover SDK for schema validation
+    let sdk_available = match discover_sdk() {
+        Ok(sdk) => {
+            match load_schemas(&sdk) {
+                Ok(registry) => {
+                    output.progress(&format!(
+                        "SDK found: loaded {} schema(s) from {}",
+                        registry.schema_count(),
+                        sdk.schemas_dir().display()
+                    ));
+                    for (path, err) in registry.failed_files() {
+                        output.progress(&format!(
+                            "{} Failed to load schema {}: {}",
+                            "⚠".yellow(),
+                            path.display(),
+                            err
+                        ));
+                    }
+                    true
+                }
+                Err(e) => {
+                    output.progress(&format!(
+                        "{} Schema loading failed: {}. Schema validation will be skipped.",
+                        "⚠".yellow(),
+                        e.what
+                    ));
+                    false
+                }
+            }
+        }
+        Err(_) => {
+            output.progress(&format!(
+                "{} SDK not found. Schema validation will be skipped.",
+                "⚠".yellow()
+            ));
+            output.progress("  Set AM_SDK_PATH for full validation.");
+            false
+        }
+    };
+
+    // Build project context with validator for cross-reference checking
+    let validator = ProjectValidator::new(current_dir.clone())?;
+    let context = ProjectContext::new(current_dir.clone()).with_validator(validator);
+
+    // Determine which types to validate
+    let types_to_validate: Vec<AssetType> = type_filter.unwrap_or_else(|| {
+        vec![
+            AssetType::Sound,
+            AssetType::Collection,
+            AssetType::Effect,
+            AssetType::Switch,
+            AssetType::SwitchContainer,
+            AssetType::Event,
+            AssetType::Soundbank,
+        ]
+    });
+
+    let sources_dir = current_dir.join("sources");
+    let mut errors: Vec<ValidationResult> = Vec::new();
+    let mut warnings: Vec<String> = Vec::new();
+    let mut asset_summary: HashMap<String, usize> = HashMap::new();
+    let mut total_validated: usize = 0;
+
+    for asset_type in &types_to_validate {
+        let dir = sources_dir.join(asset_type.directory_name());
+        if !dir.exists() {
+            continue;
+        }
+
+        let entries = match fs::read_dir(&dir) {
+            Ok(e) => e,
+            Err(e) => {
+                warnings.push(format!(
+                    "Cannot read {} directory: {}",
+                    asset_type.directory_name(),
+                    e
+                ));
+                continue;
+            }
+        };
+
+        let mut type_count: usize = 0;
+
+        for entry in entries {
+            let entry = match entry {
+                Ok(e) => e,
+                Err(_) => continue,
+            };
+
+            let path = entry.path();
+            if path.extension().is_none_or(|ext| ext != "json") {
+                continue;
+            }
+
+            let filename = path
+                .file_name()
+                .unwrap_or_default()
+                .to_string_lossy()
+                .to_string();
+
+            let relative_path = format!("sources/{}/{}", asset_type.directory_name(), filename);
+
+            output.progress(&format!("  Validating {}...", relative_path));
+
+            // Read and parse the file
+            let content = match fs::read_to_string(&path) {
+                Ok(c) => c,
+                Err(e) => {
+                    errors.push(ValidationResult {
+                        file: relative_path,
+                        asset_type: *asset_type,
+                        error: format!("Failed to read file: {}", e),
+                        why: "The file could not be read".to_string(),
+                        suggestion: "Check file permissions".to_string(),
+                        field: None,
+                    });
+                    continue;
+                }
+            };
+
+            type_count += 1;
+
+            // Validate based on asset type
+            let validation_errors =
+                validate_asset_file(*asset_type, &content, &relative_path, &context);
+            errors.extend(validation_errors);
+        }
+
+        asset_summary.insert(asset_type.directory_name().to_string(), type_count);
+        total_validated += type_count;
+    }
+
+    // Output results
+    let is_valid = errors.is_empty();
+
+    match output.mode() {
+        OutputMode::Json => {
+            let error_data: Vec<serde_json::Value> = errors
+                .iter()
+                .map(|e| {
+                    let mut obj = json!({
+                        "file": e.file,
+                        "type": format!("{}", e.asset_type),
+                        "error": e.error,
+                        "why": e.why,
+                        "fix": e.suggestion,
+                    });
+                    if let Some(ref field) = e.field {
+                        obj["field"] = json!(field);
+                    }
+                    obj
+                })
+                .collect();
+
+            let result = json!({
+                "valid": is_valid,
+                "errors": error_data,
+                "warnings": warnings,
+                "summary": asset_summary,
+                "total_validated": total_validated,
+                "sdk_available": sdk_available,
+            });
+
+            // In JSON mode, always output the structured result
+            output.success(result, None);
+        }
+        OutputMode::Interactive => {
+            if !warnings.is_empty() {
+                for w in &warnings {
+                    output.progress(&format!("{} {}", "⚠".yellow(), w));
+                }
+                output.progress("");
+            }
+
+            if is_valid {
+                output.progress("");
+                output.success(
+                    json!(format!(
+                        "All {} asset(s) validated successfully!",
+                        total_validated
+                    )),
+                    None,
+                );
+
+                // Print summary
+                output.progress("");
+                output.progress("Summary:");
+                for (type_name, count) in &asset_summary {
+                    if *count > 0 {
+                        output.progress(&format!("  {}: {} {}", type_name, count, "✓".green()));
+                    }
+                }
+                if !sdk_available {
+                    output.progress(&format!(
+                        "\n{} Schema validation was skipped (SDK not available)",
+                        "ℹ".blue()
+                    ));
+                }
+            } else {
+                output.progress("");
+                output.progress(&format!(
+                    "{} Validation failed: {} error(s) found\n",
+                    "✗".red(),
+                    errors.len()
+                ));
+
+                for err in &errors {
+                    output.progress(&format!("  {} {}", "Error:".red().bold(), err.error));
+                    output.progress(&format!("    File:  {}", err.file));
+                    if let Some(ref field) = err.field {
+                        output.progress(&format!("    Field: {}", field));
+                    }
+                    output.progress(&format!("    Why:   {}", err.why));
+                    output.progress(&format!("    Fix:   {}", err.suggestion));
+                    output.progress("");
+                }
+            }
+        }
+    }
+
+    if !is_valid {
+        return Err(CliError::new(
+            codes::ERR_VALIDATION_SCHEMA,
+            format!(
+                "Project validation failed: {} error(s) in {} asset(s)",
+                errors.len(),
+                total_validated
+            ),
+            "Fix the reported errors and run validation again",
+        )
+        .into());
+    }
+
+    Ok(())
+}
+
+/// Validate a single asset file by deserializing and running type rules.
+fn validate_asset_file(
+    asset_type: AssetType,
+    content: &str,
+    file_path: &str,
+    context: &ProjectContext,
+) -> Vec<ValidationResult> {
+    match asset_type {
+        AssetType::Sound => validate_typed_asset::<Sound>(asset_type, content, file_path, context),
+        AssetType::Collection => {
+            validate_typed_asset::<Collection>(asset_type, content, file_path, context)
+        }
+        AssetType::Effect => {
+            validate_typed_asset::<Effect>(asset_type, content, file_path, context)
+        }
+        AssetType::Switch => {
+            validate_typed_asset::<Switch>(asset_type, content, file_path, context)
+        }
+        AssetType::SwitchContainer => {
+            validate_typed_asset::<SwitchContainer>(asset_type, content, file_path, context)
+        }
+        AssetType::Event => {
+            validate_typed_asset::<Event>(asset_type, content, file_path, context)
+        }
+        AssetType::Soundbank => {
+            validate_typed_asset::<Soundbank>(asset_type, content, file_path, context)
+        }
+    }
+}
+
+/// Generic validation for any Asset type.
+fn validate_typed_asset<T: Asset>(
+    asset_type: AssetType,
+    content: &str,
+    file_path: &str,
+    context: &ProjectContext,
+) -> Vec<ValidationResult> {
+    let mut results = Vec::new();
+
+    // Step 1: Deserialize
+    let asset: T = match serde_json::from_str(content) {
+        Ok(a) => a,
+        Err(e) => {
+            results.push(ValidationResult {
+                file: file_path.to_string(),
+                asset_type,
+                error: format!("Invalid JSON structure: {}", e),
+                why: "The file does not match the expected schema for this asset type".to_string(),
+                suggestion: "Check JSON syntax and ensure all required fields are present"
+                    .to_string(),
+                field: None,
+            });
+            return results;
+        }
+    };
+
+    // Step 2: Validate business rules
+    if let Err(validation_err) = asset.validate_rules(context) {
+        results.push(ValidationResult {
+            file: file_path.to_string(),
+            asset_type,
+            error: validation_err.what().to_string(),
+            why: validation_err.why().to_string(),
+            suggestion: validation_err.suggestion().to_string(),
+            field: validation_err.field.clone(),
+        });
+    }
+
+    results
 }

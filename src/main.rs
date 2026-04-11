@@ -2,9 +2,11 @@ mod app;
 mod assets;
 mod commands;
 mod common;
+mod config;
 mod database;
 mod input;
 mod presentation;
+mod schema;
 
 use crate::{
     app::{App, Commands},
