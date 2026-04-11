@@ -20,7 +20,8 @@ use crate::{
     input::{Input, InputMode, create_input},
     presentation::{Output, OutputMode, create_output},
 };
-use clap::Parser;
+use clap::{CommandFactory, Parser};
+use clap_complete::generate;
 use log::{debug, error, warn};
 use std::{panic, sync::Arc};
 use tokio::signal;
@@ -181,6 +182,11 @@ async fn run_command(
         Commands::Sudo { command } => handle_sudo_command(command, database, input, output).await,
         Commands::Template { command } => {
             handle_template_command(command, database, input, output).await
+        }
+        Commands::Completions { shell } => {
+            let mut cmd = App::command();
+            generate(*shell, &mut cmd, "am", &mut std::io::stdout());
+            Ok(())
         }
     }
 }

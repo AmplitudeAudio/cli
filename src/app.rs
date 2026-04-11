@@ -1,4 +1,5 @@
 use clap::{Parser, Subcommand};
+use clap_complete::Shell;
 use rust_embed::RustEmbed;
 
 use crate::commands::{
@@ -67,5 +68,22 @@ pub enum Commands {
     Template {
         #[command(subcommand)]
         command: TemplateCommands,
+    },
+
+    /// Generate shell completion scripts
+    ///
+    /// Outputs a completion script for the specified shell.
+    /// Pipe to a file or source directly for tab-completion support.
+    ///
+    /// Installation:
+    ///   bash:  am completions bash > ~/.local/share/bash-completion/completions/am
+    ///   zsh:   am completions zsh > ~/.zfunc/_am
+    ///   fish:  am completions fish > ~/.config/fish/completions/am.fish
+    ///
+    /// Note: Asset names and project names require manual typing;
+    /// completions cover commands, subcommands, and flags.
+    Completions {
+        /// Shell to generate completions for (bash, zsh, fish)
+        shell: Shell,
     },
 }
