@@ -61,6 +61,7 @@ pub mod validator;
 #[allow(unused_imports)]
 pub use generated::{
     CollectionPlayMode, CurveDefinition, CurvePartDefinition, CurvePointDefinition,
+    EventActionDefinition, EventActionRunningMode, EventActionType,
     RtpcCompatibleValue, RtpcParameter, Scope, SoundLoopConfig, SoundSchedulerMode,
     SoundSchedulerSettings, Spatialization, ValueKind,
 };
@@ -77,8 +78,7 @@ pub use collection::{Collection, CollectionBuilder};
 pub use effect::{Effect, EffectBuilder};
 pub use event::{Event, EventBuilder};
 pub use sound::{Sound, SoundBuilder};
-#[allow(unused_imports)]
-pub use soundbank::Soundbank;
+pub use soundbank::{Soundbank, SoundbankBuilder};
 #[allow(unused_imports)]
 pub use switch::{Switch, SwitchBuilder};
 #[allow(unused_imports)]

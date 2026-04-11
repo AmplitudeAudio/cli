@@ -52,6 +52,9 @@ pub struct ProjectValidator {
     pub(crate) asset_names: HashMap<AssetType, HashSet<String>>,
     /// Maps each asset ID to the asset type directory it was found in.
     asset_locations: HashMap<u64, AssetType>,
+    /// All known asset file paths relative to the project sources directory.
+    /// Used for path-based reference validation (e.g., soundbank asset references).
+    asset_paths: HashSet<String>,
 }
 
 // ValidationError is the project-wide error type for all validation methods.
@@ -81,6 +84,7 @@ impl ProjectValidator {
             asset_ids: HashMap::new(),
             asset_names: HashMap::new(),
             asset_locations: HashMap::new(),
+            asset_paths: HashSet::new(),
         };
 
         // Scan all asset types
@@ -110,6 +114,7 @@ impl ProjectValidator {
             asset_ids: HashMap::new(),
             asset_names: HashMap::new(),
             asset_locations: HashMap::new(),
+            asset_paths: HashSet::new(),
         }
     }
 
@@ -268,6 +273,14 @@ impl ProjectValidator {
         self.validate_switch_exists(switch_id)
     }
 
+    /// Checks if an asset exists at the given path relative to the sources directory.
+    ///
+    /// Path strings are compared as-is against tracked file paths from scanning.
+    /// The path should be relative to the `sources/` directory (e.g., `sounds/footstep.json`).
+    pub fn asset_exists_by_path(&self, path: &str) -> bool {
+        self.asset_paths.contains(path)
+    }
+
     /// Returns the project root path.
     pub fn project_root(&self) -> &Path {
         &self.project_root
@@ -342,6 +355,12 @@ impl ProjectValidator {
                     .entry(asset_type)
                     .or_default()
                     .insert(name.to_string());
+            }
+
+            // Track the relative path from sources/ for path-based lookups
+            let sources_dir = self.project_root.join("sources");
+            if let Ok(relative) = path.strip_prefix(&sources_dir) {
+                self.asset_paths.insert(relative.to_string_lossy().into_owned());
             }
         }
 
