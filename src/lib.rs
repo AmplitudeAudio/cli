@@ -5,9 +5,11 @@
 pub mod app;
 pub mod assets;
 pub mod common;
+pub mod config;
 pub mod database;
 pub mod input;
 pub mod presentation;
+pub mod schema;
 
 // Re-export commands for testing
 pub mod commands {

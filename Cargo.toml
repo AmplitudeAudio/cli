@@ -21,6 +21,9 @@ string_template = "0.2.1"
 colored = "3.0.0"
 chrono = "0.4"
 
+flatbuffers = "25.12.19"
+flatbuffers-reflection = "0.1.0"
+
 [build-dependencies]
 flatbuffers = "25.12.19"
 flatbuffers-reflection = "0.1.0"
