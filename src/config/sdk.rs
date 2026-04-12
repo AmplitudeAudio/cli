@@ -166,10 +166,18 @@ fn common_sdk_paths() -> Vec<PathBuf> {
     #[cfg(target_os = "windows")]
     {
         if let Ok(program_files) = env::var("ProgramFiles") {
-            paths.push(PathBuf::from(&program_files).join("AmplitudeAudio").join("sdk"));
+            paths.push(
+                PathBuf::from(&program_files)
+                    .join("AmplitudeAudio")
+                    .join("sdk"),
+            );
         }
         if let Ok(local_app_data) = env::var("LOCALAPPDATA") {
-            paths.push(PathBuf::from(&local_app_data).join("AmplitudeAudio").join("sdk"));
+            paths.push(
+                PathBuf::from(&local_app_data)
+                    .join("AmplitudeAudio")
+                    .join("sdk"),
+            );
         }
     }
 

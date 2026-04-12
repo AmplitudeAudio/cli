@@ -719,10 +719,7 @@ fn apply_flag_updates(
                 "Invalid scheduler mode value",
             )
         })?;
-        collection.scheduler = Some(crate::assets::SoundSchedulerSettings {
-            mode,
-            config: None,
-        });
+        collection.scheduler = Some(crate::assets::SoundSchedulerSettings { mode, config: None });
         updated_fields.push("scheduler_mode".to_string());
     }
 

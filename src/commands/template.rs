@@ -90,7 +90,9 @@ pub enum TemplateCommands {
     },
 
     /// Register a custom template from a directory
-    #[command(after_help = "Examples:\n  am template register /path/to/template --name my_template\n")]
+    #[command(
+        after_help = "Examples:\n  am template register /path/to/template --name my_template\n"
+    )]
     Register {
         /// Path to the template directory
         path: String,

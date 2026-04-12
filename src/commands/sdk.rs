@@ -35,7 +35,7 @@ pub async fn handler(
     match command {
         SdkCommands::Check => {
             let location = discover_sdk()?;
-            
+
             output.success(
                 json!({
                     "message": "SDK is properly configured",

@@ -59,7 +59,9 @@ const PROJECT_INFO_SEPARATOR_WIDTH: usize = 40;
 #[derive(Subcommand, Debug)]
 pub enum ProjectCommands {
     /// Create a new project
-    #[command(after_help = "Examples:\n  am project init my_game\n  am project init my_game --template o3de\n")]
+    #[command(
+        after_help = "Examples:\n  am project init my_game\n  am project init my_game --template o3de\n"
+    )]
     Init {
         /// The name of the project to create
         name: Option<String>,
@@ -81,7 +83,9 @@ pub enum ProjectCommands {
     },
 
     /// Unregister a project
-    #[command(after_help = "Examples:\n  am project unregister my_game\n  am project unregister my_game --delete-files\n")]
+    #[command(
+        after_help = "Examples:\n  am project unregister my_game\n  am project unregister my_game --delete-files\n"
+    )]
     Unregister {
         /// The name of the project to unregister
         name: String,
@@ -103,7 +107,9 @@ pub enum ProjectCommands {
     },
 
     /// Validate all assets in a project
-    #[command(after_help = "Examples:\n  am project validate\n  am project validate --sounds-only\n  am project validate --json\n")]
+    #[command(
+        after_help = "Examples:\n  am project validate\n  am project validate --sounds-only\n  am project validate --json\n"
+    )]
     Validate {
         /// Validate only sounds
         #[arg(long)]
@@ -135,7 +141,9 @@ pub enum ProjectCommands {
     },
 
     /// Build project assets for runtime consumption
-    #[command(after_help = "Examples:\n  am project build\n  am project build --output dist/\n  am project build --clean\n")]
+    #[command(
+        after_help = "Examples:\n  am project build\n  am project build --output dist/\n  am project build --clean\n"
+    )]
     Build {
         /// Output directory (defaults to project's build directory)
         #[arg(short, long)]
@@ -904,41 +912,36 @@ async fn handle_validate_project_command(
     let current_dir = env::current_dir()?;
     let project_config = read_amproject_file(&current_dir)?;
 
-    output.progress(&format!(
-        "Validating project '{}'...",
-        project_config.name
-    ));
+    output.progress(&format!("Validating project '{}'...", project_config.name));
 
     // Try to discover SDK for schema validation
     let sdk_available = match discover_sdk() {
-        Ok(sdk) => {
-            match load_schemas(&sdk) {
-                Ok(registry) => {
+        Ok(sdk) => match load_schemas(&sdk) {
+            Ok(registry) => {
+                output.progress(&format!(
+                    "SDK found: loaded {} schema(s) from {}",
+                    registry.schema_count(),
+                    sdk.schemas_dir().display()
+                ));
+                for (path, err) in registry.failed_files() {
                     output.progress(&format!(
-                        "SDK found: loaded {} schema(s) from {}",
-                        registry.schema_count(),
-                        sdk.schemas_dir().display()
-                    ));
-                    for (path, err) in registry.failed_files() {
-                        output.progress(&format!(
-                            "{} Failed to load schema {}: {}",
-                            "⚠".yellow(),
-                            path.display(),
-                            err
-                        ));
-                    }
-                    true
-                }
-                Err(e) => {
-                    output.progress(&format!(
-                        "{} Schema loading failed: {}. Schema validation will be skipped.",
+                        "{} Failed to load schema {}: {}",
                         "⚠".yellow(),
-                        e.what
+                        path.display(),
+                        err
                     ));
-                    false
                 }
+                true
             }
-        }
+            Err(e) => {
+                output.progress(&format!(
+                    "{} Schema loading failed: {}. Schema validation will be skipped.",
+                    "⚠".yellow(),
+                    e.what
+                ));
+                false
+            }
+        },
         Err(_) => {
             output.progress(&format!(
                 "{} SDK not found. Schema validation will be skipped.",
@@ -1166,9 +1169,7 @@ fn validate_asset_file(
         AssetType::SwitchContainer => {
             validate_typed_asset::<SwitchContainer>(asset_type, content, file_path, context)
         }
-        AssetType::Event => {
-            validate_typed_asset::<Event>(asset_type, content, file_path, context)
-        }
+        AssetType::Event => validate_typed_asset::<Event>(asset_type, content, file_path, context),
         AssetType::Soundbank => {
             validate_typed_asset::<Soundbank>(asset_type, content, file_path, context)
         }
@@ -1237,10 +1238,7 @@ async fn handle_build_project_command(
     let current_dir = env::current_dir()?;
     let project_config = read_amproject_file(&current_dir)?;
 
-    output.progress(&format!(
-        "Building project '{}'...",
-        project_config.name
-    ));
+    output.progress(&format!("Building project '{}'...", project_config.name));
 
     // Step 1: Require SDK
     let sdk = match discover_sdk() {
@@ -1296,7 +1294,11 @@ async fn handle_build_project_command(
                 continue;
             }
 
-            let filename = path.file_name().unwrap_or_default().to_string_lossy().to_string();
+            let filename = path
+                .file_name()
+                .unwrap_or_default()
+                .to_string_lossy()
+                .to_string();
             let relative_path = format!("sources/{}/{}", asset_type.directory_name(), filename);
 
             if let Ok(content) = fs::read_to_string(&path) {
@@ -1377,7 +1379,10 @@ async fn handle_build_project_command(
 
     // Step 4: Clean if requested
     if clean && build_dir.exists() {
-        output.progress(&format!("Cleaning build directory: {}...", build_dir.display()));
+        output.progress(&format!(
+            "Cleaning build directory: {}...",
+            build_dir.display()
+        ));
         fs::remove_dir_all(&build_dir)?;
     }
 
@@ -1412,7 +1417,11 @@ async fn handle_build_project_command(
                 continue;
             }
 
-            let filename = path.file_name().unwrap_or_default().to_string_lossy().to_string();
+            let filename = path
+                .file_name()
+                .unwrap_or_default()
+                .to_string_lossy()
+                .to_string();
             let dest_path = dest_dir.join(&filename);
             let relative = format!("sources/{}/{}", asset_type.directory_name(), filename);
 
@@ -1479,7 +1488,11 @@ async fn handle_build_project_command(
         for entry in entries.flatten() {
             let path = entry.path();
             if path.is_file() {
-                let filename = path.file_name().unwrap_or_default().to_string_lossy().to_string();
+                let filename = path
+                    .file_name()
+                    .unwrap_or_default()
+                    .to_string_lossy()
+                    .to_string();
                 if config_patterns.iter().any(|pat| filename.ends_with(pat)) {
                     let dest = build_dir.join(&filename);
                     match fs::copy(&path, &dest) {
@@ -1488,7 +1501,10 @@ async fn handle_build_project_command(
                             output.progress(&format!("  Copied {}", filename));
                         }
                         Err(e) => {
-                            copy_errors.push((filename.clone(), format!("Failed to copy {}: {}", filename, e)));
+                            copy_errors.push((
+                                filename.clone(),
+                                format!("Failed to copy {}: {}", filename, e),
+                            ));
                         }
                     }
                 }

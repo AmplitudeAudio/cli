@@ -30,8 +30,8 @@ use serde_json::json;
 use crate::common::utils::generate_unique_id;
 use crate::{
     assets::{
-        generated::{EventActionDefinition, EventActionRunningMode, EventActionType},
         Asset, AssetType, Event, ProjectContext, ProjectValidator, Scope,
+        generated::{EventActionDefinition, EventActionRunningMode, EventActionType},
     },
     common::{
         errors::{CliError, asset_already_exists, asset_not_found, codes},
@@ -50,7 +50,9 @@ const ASSET_NAME: &str = "Event";
 #[derive(Subcommand, Debug)]
 pub enum EventCommands {
     /// Create a new event asset
-    #[command(after_help = "Examples:\n  am asset event create play_music\n  am asset event create play_music --action play:12345\n")]
+    #[command(
+        after_help = "Examples:\n  am asset event create play_music\n  am asset event create play_music --action play:12345\n"
+    )]
     Create {
         /// Name of the event asset
         name: String,
@@ -73,7 +75,9 @@ pub enum EventCommands {
     List {},
 
     /// Update an existing event asset
-    #[command(after_help = "Examples:\n  am asset event update play_music\n  am asset event update play_music --run-mode sequential\n")]
+    #[command(
+        after_help = "Examples:\n  am asset event update play_music\n  am asset event update play_music --run-mode sequential\n"
+    )]
     Update {
         /// Name of the event asset to update
         name: String,
@@ -96,7 +100,9 @@ pub enum EventCommands {
     },
 
     /// Delete an event asset
-    #[command(after_help = "Examples:\n  am asset event delete play_music --yes\n  am asset event delete play_music --yes --force\n")]
+    #[command(
+        after_help = "Examples:\n  am asset event delete play_music --yes\n  am asset event delete play_music --yes --force\n"
+    )]
     Delete {
         /// Name of the event asset to delete
         name: String,
@@ -124,17 +130,7 @@ pub async fn handler(
             run_mode,
             action,
             fade,
-        } => {
-            create_event(
-                name,
-                run_mode.clone(),
-                action.clone(),
-                *fade,
-                input,
-                output,
-            )
-            .await
-        }
+        } => create_event(name, run_mode.clone(), action.clone(), *fade, input, output).await,
         EventCommands::List {} => list_events(output).await,
         EventCommands::Update {
             name,
@@ -332,9 +328,7 @@ async fn create_event(
     }
 
     // Step 6: Build the Event asset
-    let mut event = Event::builder(id, name)
-        .run_mode(run_mode_value)
-        .build();
+    let mut event = Event::builder(id, name).run_mode(run_mode_value).build();
 
     // Add actions to the event
     event.actions = Some(actions_list);
@@ -401,7 +395,10 @@ fn parse_actions_from_flags(
                     return Err(CliError::new(
                         codes::ERR_VALIDATION_FIELD,
                         format!("{} action has no targets", format_action_type(&action_type)),
-                        format!("{:?} actions must have at least one target asset", action_type),
+                        format!(
+                            "{:?} actions must have at least one target asset",
+                            action_type
+                        ),
                     )
                     .into());
                 }
@@ -426,7 +423,9 @@ fn parse_actions_from_flags(
                             }
                         } else {
                             // For other action types, just verify the asset exists
-                            let exists = validator.asset_ids.values()
+                            let exists = validator
+                                .asset_ids
+                                .values()
                                 .any(|ids| ids.contains(target_id));
                             if !exists && *target_id != 0 {
                                 return Err(CliError::new(
@@ -490,9 +489,19 @@ fn prompt_actions_interactive(
                 let targets = action
                     .targets
                     .as_ref()
-                    .map(|t| t.iter().map(|id| id.to_string()).collect::<Vec<_>>().join(", "))
+                    .map(|t| {
+                        t.iter()
+                            .map(|id| id.to_string())
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    })
                     .unwrap_or_else(|| "none".to_string());
-                output_simple(&format!("  {}. {} -> {}", idx + 1, format_action_type(&action.type_), targets));
+                output_simple(&format!(
+                    "  {}. {} -> {}",
+                    idx + 1,
+                    format_action_type(&action.type_),
+                    targets
+                ));
             }
             output_simple("");
         }
@@ -507,7 +516,14 @@ fn prompt_actions_interactive(
         }
 
         // Select action type
-        let type_idx = match select_index(input, "Action type:", &action_types.iter().map(|s| s.to_string()).collect::<Vec<_>>()) {
+        let type_idx = match select_index(
+            input,
+            "Action type:",
+            &action_types
+                .iter()
+                .map(|s| s.to_string())
+                .collect::<Vec<_>>(),
+        ) {
             Ok(idx) => idx,
             Err(_) => break,
         };
@@ -527,11 +543,15 @@ fn prompt_actions_interactive(
             None,
             Some(&|value: &str| {
                 if value.trim().is_empty() {
-                    return Ok(Validation::Invalid("At least one target ID is required".into()));
+                    return Ok(Validation::Invalid(
+                        "At least one target ID is required".into(),
+                    ));
                 }
                 for part in value.split(',') {
                     if part.trim().parse::<u64>().is_err() {
-                        return Ok(Validation::Invalid(format!("'{}' is not a valid ID", part).into()));
+                        return Ok(Validation::Invalid(
+                            format!("'{}' is not a valid ID", part).into(),
+                        ));
                     }
                 }
                 Ok(Validation::Valid)
@@ -738,11 +758,8 @@ async fn list_events(output: &dyn Output) -> Result<()> {
                 .iter()
                 .map(|e| {
                     let action_count = e.actions.as_ref().map(|a| a.len()).unwrap_or(0);
-                    let primary_action = e
-                        .actions
-                        .as_ref()
-                        .and_then(|a| a.first());
-                    
+                    let primary_action = e.actions.as_ref().and_then(|a| a.first());
+
                     let primary_target_str = primary_action
                         .and_then(|a| {
                             let target_count = a.targets.as_ref()?.len();
@@ -829,7 +846,10 @@ async fn update_event(
     let mut actions = event.actions.take().unwrap_or_default();
 
     // Interactive mode: prompt for additional modifications if no flags provided
-    let has_any_flag = run_mode.is_some() || !add_actions.is_empty() || !remove_actions.is_empty() || clear_actions;
+    let has_any_flag = run_mode.is_some()
+        || !add_actions.is_empty()
+        || !remove_actions.is_empty()
+        || clear_actions;
 
     // Apply run mode update if provided
     if let Some(rm) = run_mode {
@@ -839,7 +859,7 @@ async fn update_event(
             updated_fields.push("run_mode".to_string());
         }
     }
-    
+
     if !has_any_flag {
         // Interactive mode - prompt for changes
         if let Some(new_mode) = prompt_update_run_mode(input, &event.run_mode)? {
@@ -849,9 +869,12 @@ async fn update_event(
 
         // Prompt to modify actions
         let modified_actions = prompt_modify_actions(input, &actions, &context)?;
-        if modified_actions.len() != actions.len() || 
-           modified_actions.iter().zip(actions.iter()).any(|(a, b)| 
-               a.type_ != b.type_ || a.targets != b.targets) {
+        if modified_actions.len() != actions.len()
+            || modified_actions
+                .iter()
+                .zip(actions.iter())
+                .any(|(a, b)| a.type_ != b.type_ || a.targets != b.targets)
+        {
             updated_fields.push("actions".to_string());
         }
         actions = modified_actions;
@@ -951,7 +974,12 @@ fn prompt_modify_actions(
                 let targets = action
                     .targets
                     .as_ref()
-                    .map(|t| t.iter().map(|id| id.to_string()).collect::<Vec<_>>().join(", "))
+                    .map(|t| {
+                        t.iter()
+                            .map(|id| id.to_string())
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    })
                     .unwrap_or_else(|| "none".to_string());
                 output_simple(&format!(
                     "  {}. {} -> {}",
@@ -977,11 +1005,18 @@ fn prompt_modify_actions(
             0 => {
                 // Add new action
                 let action_types = vec!["Play", "Stop", "Pause", "Resume", "Seek"];
-                let type_idx = match select_index(input, "Action type:", &action_types.iter().map(|s| s.to_string()).collect::<Vec<_>>()) {
+                let type_idx = match select_index(
+                    input,
+                    "Action type:",
+                    &action_types
+                        .iter()
+                        .map(|s| s.to_string())
+                        .collect::<Vec<_>>(),
+                ) {
                     Ok(idx) => idx,
                     Err(_) => continue,
                 };
-                
+
                 let action_type = match action_types[type_idx] {
                     "Play" => EventActionType::Play,
                     "Stop" => EventActionType::Stop,
@@ -997,11 +1032,15 @@ fn prompt_modify_actions(
                     None,
                     Some(&|value: &str| {
                         if value.trim().is_empty() {
-                            return Ok(Validation::Invalid("At least one target ID is required".into()));
+                            return Ok(Validation::Invalid(
+                                "At least one target ID is required".into(),
+                            ));
                         }
                         for part in value.split(',') {
                             if part.trim().parse::<u64>().is_err() {
-                                return Ok(Validation::Invalid(format!("'{}' is not a valid ID", part).into()));
+                                return Ok(Validation::Invalid(
+                                    format!("'{}' is not a valid ID", part).into(),
+                                ));
                             }
                         }
                         Ok(Validation::Valid)
@@ -1038,7 +1077,12 @@ fn prompt_modify_actions(
                         let targets = a
                             .targets
                             .as_ref()
-                            .map(|t| t.iter().map(|id| id.to_string()).collect::<Vec<_>>().join(", "))
+                            .map(|t| {
+                                t.iter()
+                                    .map(|id| id.to_string())
+                                    .collect::<Vec<_>>()
+                                    .join(", ")
+                            })
                             .unwrap_or_else(|| "none".to_string());
                         format!("{}: {} -> {}", idx, format_action_type(&a.type_), targets)
                     })
@@ -1089,11 +1133,7 @@ async fn delete_event(
     let dependent_soundbanks: Vec<String> = validator
         .asset_ids
         .get(&AssetType::Soundbank)
-        .map(|ids| {
-            ids.iter()
-                .map(|id| id.to_string())
-                .collect()
-        })
+        .map(|ids| ids.iter().map(|id| id.to_string()).collect())
         .unwrap_or_default();
 
     // Step 5: Confirmation prompt
@@ -1119,18 +1159,19 @@ async fn delete_event(
             output_simple("  Use --force to delete anyway.\n");
         }
 
-        let confirmed = match input.confirm("Are you sure you want to delete this event?", Some(false)) {
-            Ok(val) => val,
-            Err(_) => {
-                return Err(CliError::new(
-                    codes::ERR_VALIDATION_FIELD,
-                    "Deletion requires confirmation",
-                    "The --yes flag is required in non-interactive mode",
-                )
-                .with_suggestion("Use --yes to confirm deletion")
-                .into());
-            }
-        };
+        let confirmed =
+            match input.confirm("Are you sure you want to delete this event?", Some(false)) {
+                Ok(val) => val,
+                Err(_) => {
+                    return Err(CliError::new(
+                        codes::ERR_VALIDATION_FIELD,
+                        "Deletion requires confirmation",
+                        "The --yes flag is required in non-interactive mode",
+                    )
+                    .with_suggestion("Use --yes to confirm deletion")
+                    .into());
+                }
+            };
 
         if !confirmed {
             output.progress("Deletion cancelled.");

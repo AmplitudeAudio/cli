@@ -374,7 +374,8 @@ impl ProjectValidator {
             // Track the relative path from sources/ for path-based lookups
             let sources_dir = self.project_root.join("sources");
             if let Ok(relative) = path.strip_prefix(&sources_dir) {
-                self.asset_paths.insert(relative.to_string_lossy().into_owned());
+                self.asset_paths
+                    .insert(relative.to_string_lossy().into_owned());
             }
         }
 
@@ -522,9 +523,11 @@ mod tests {
         assert!(validator.validate_collection_exists(0).is_ok());
         assert!(validator.validate_effect_exists(0).is_ok());
         assert!(validator.validate_switch_exists(0).is_ok());
-        assert!(validator
-            .validate_asset_exists(AssetType::Soundbank, 0)
-            .is_ok());
+        assert!(
+            validator
+                .validate_asset_exists(AssetType::Soundbank, 0)
+                .is_ok()
+        );
         assert!(validator.validate_asset_exists(AssetType::Event, 0).is_ok());
     }
 
@@ -663,12 +666,16 @@ mod tests {
         let validator = ProjectValidator::new(dir.path().to_path_buf()).unwrap();
 
         // Correct directory
-        assert!(validator
-            .validate_asset_in_correct_directory(AssetType::Sound, 10)
-            .is_ok());
-        assert!(validator
-            .validate_asset_in_correct_directory(AssetType::Effect, 20)
-            .is_ok());
+        assert!(
+            validator
+                .validate_asset_in_correct_directory(AssetType::Sound, 10)
+                .is_ok()
+        );
+        assert!(
+            validator
+                .validate_asset_in_correct_directory(AssetType::Effect, 20)
+                .is_ok()
+        );
 
         // Wrong directory
         let err = validator
@@ -678,14 +685,18 @@ mod tests {
         assert!(err.what().contains("not a Effect"));
 
         // Zero ID always ok
-        assert!(validator
-            .validate_asset_in_correct_directory(AssetType::Sound, 0)
-            .is_ok());
+        assert!(
+            validator
+                .validate_asset_in_correct_directory(AssetType::Sound, 0)
+                .is_ok()
+        );
 
         // Unknown ID is ok (not found = not a mismatch)
-        assert!(validator
-            .validate_asset_in_correct_directory(AssetType::Sound, 999)
-            .is_ok());
+        assert!(
+            validator
+                .validate_asset_in_correct_directory(AssetType::Sound, 999)
+                .is_ok()
+        );
     }
 
     #[test]

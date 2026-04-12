@@ -29,7 +29,8 @@ use serde_json::json;
 use crate::common::utils::generate_unique_id;
 use crate::{
     assets::{
-        generated::SwitchStateDefinition, Asset, AssetType, ProjectContext, ProjectValidator, Switch,
+        Asset, AssetType, ProjectContext, ProjectValidator, Switch,
+        generated::SwitchStateDefinition,
     },
     common::{
         errors::{CliError, asset_already_exists, asset_not_found, codes},
@@ -51,7 +52,9 @@ const MAX_ID_RETRIES: u32 = 3;
 #[derive(Subcommand, Debug)]
 pub enum SwitchCommands {
     /// Create a new switch asset
-    #[command(after_help = "Examples:\n  am asset switch create surface_type\n  am asset switch create surface_type --states wood,stone,metal\n")]
+    #[command(
+        after_help = "Examples:\n  am asset switch create surface_type\n  am asset switch create surface_type --states wood,stone,metal\n"
+    )]
     Create {
         /// Name of the switch asset
         name: String,
@@ -66,7 +69,9 @@ pub enum SwitchCommands {
     List {},
 
     /// Update an existing switch asset
-    #[command(after_help = "Examples:\n  am asset switch update surface_type\n  am asset switch update surface_type --states wood,stone,grass\n")]
+    #[command(
+        after_help = "Examples:\n  am asset switch update surface_type\n  am asset switch update surface_type --states wood,stone,grass\n"
+    )]
     Update {
         /// Name of the switch asset to update
         name: String,
@@ -77,7 +82,9 @@ pub enum SwitchCommands {
     },
 
     /// Delete a switch asset
-    #[command(after_help = "Examples:\n  am asset switch delete surface_type\n  am asset switch delete surface_type --force\n")]
+    #[command(
+        after_help = "Examples:\n  am asset switch delete surface_type\n  am asset switch delete surface_type --force\n"
+    )]
     Delete {
         /// Name of the switch asset to delete
         name: String,
@@ -103,9 +110,7 @@ pub async fn handler(
         SwitchCommands::Update { name, states } => {
             update_switch(name, states.clone(), input, output).await
         }
-        SwitchCommands::Delete { name, force } => {
-            delete_switch(name, *force, input, output).await
-        }
+        SwitchCommands::Delete { name, force } => delete_switch(name, *force, input, output).await,
     }
 }
 
@@ -223,7 +228,10 @@ async fn create_switch(
     for state_name in &state_list {
         let mut state_id = generate_unique_id(&format!("{}_{}", name, state_name));
         let mut retries = 0;
-        while (context.has_id(state_id) || state_definitions.iter().any(|s: &SwitchStateDefinition| s.id == state_id))
+        while (context.has_id(state_id)
+            || state_definitions
+                .iter()
+                .any(|s: &SwitchStateDefinition| s.id == state_id))
             && retries < MAX_ID_RETRIES
         {
             state_id = generate_unique_id(&format!("{}_{}_{}", name, state_name, retries));
@@ -244,8 +252,8 @@ async fn create_switch(
     switch.validate_rules(&context)?;
 
     // Step 9: Serialize to JSON
-    let json_content = serde_json::to_string_pretty(&switch)
-        .context("Failed to serialize switch to JSON")?;
+    let json_content =
+        serde_json::to_string_pretty(&switch).context("Failed to serialize switch to JSON")?;
 
     // Step 10: Ensure directory exists and write atomically
     fs::create_dir_all(&switches_dir)?;
@@ -299,10 +307,7 @@ fn prompt_states(input: &dyn Input) -> Result<Vec<String>> {
         let prompt = if states.is_empty() {
             "Enter state name (e.g., 'wood', 'stone'):".to_string()
         } else {
-            format!(
-                "Enter state name (current: {}):",
-                states.join(", ")
-            )
+            format!("Enter state name (current: {}):", states.join(", "))
         };
 
         let state_name = input.prompt_text(
@@ -432,11 +437,7 @@ async fn list_switches(output: &dyn Output) -> Result<()> {
                     }
                 }
                 Err(e) => {
-                    log::warn!(
-                        "Skipping broken symlink: {} (error: {})",
-                        path.display(),
-                        e
-                    );
+                    log::warn!("Skipping broken symlink: {} (error: {})", path.display(), e);
                     continue;
                 }
             }
@@ -603,7 +604,7 @@ async fn update_switch(
     // Step 5: Apply updates
     let validator = ProjectValidator::new(current_dir.clone())?;
     let context = ProjectContext::new(current_dir.clone()).with_validator(validator);
-    
+
     let updated_fields: Vec<String> = if has_any_flag {
         // Non-interactive mode: only update fields provided via flags
         apply_flag_updates(&mut switch, states, &context)?
@@ -616,8 +617,8 @@ async fn update_switch(
     switch.validate_rules(&context)?;
 
     // Step 7: Serialize and write atomically
-    let json_content = serde_json::to_string_pretty(&switch)
-        .context("Failed to serialize switch to JSON")?;
+    let json_content =
+        serde_json::to_string_pretty(&switch).context("Failed to serialize switch to JSON")?;
     atomic_write(&switch_file_path, json_content.as_bytes())?;
 
     // Step 8: Output success
@@ -689,14 +690,20 @@ fn apply_flag_updates(
         for state_name in &state_list {
             let mut state_id = generate_unique_id(&format!("{}_{}", switch.name(), state_name));
             let mut retries = 0;
-            while (used_ids.contains(&state_id) || context.has_id(state_id)) && retries < MAX_ID_RETRIES {
-                state_id = generate_unique_id(&format!("{}_{}_{}", switch.name(), state_name, retries));
+            while (used_ids.contains(&state_id) || context.has_id(state_id))
+                && retries < MAX_ID_RETRIES
+            {
+                state_id =
+                    generate_unique_id(&format!("{}_{}_{}", switch.name(), state_name, retries));
                 retries += 1;
             }
             if used_ids.contains(&state_id) || context.has_id(state_id) {
                 return Err(CliError::new(
                     codes::ERR_ASSET_ALREADY_EXISTS,
-                    format!("Generated state ID {} collides with existing asset", state_id),
+                    format!(
+                        "Generated state ID {} collides with existing asset",
+                        state_id
+                    ),
                     "All generated ID attempts collided with existing assets",
                 )
                 .with_suggestion("Try a different state name or wait and retry")
@@ -732,37 +739,46 @@ fn prompt_switch_updates(switch: &mut Switch, input: &dyn Input) -> Result<Vec<S
         &format!("Modify states? (current: {})", current_states.join(", ")),
         Some(false),
     ) {
-            Ok(true) => {
-                let new_states = prompt_states_for_update(input, &current_states)?;
-                if !new_states.is_empty() && new_states != current_states {
-                    // Generate new state definitions with collision check
-                    let mut state_definitions = Vec::new();
-                    let mut used_ids = std::collections::HashSet::new();
-                    for state_name in &new_states {
-                        let mut state_id = generate_unique_id(&format!("{}_{}", switch.name(), state_name));
-                        let mut retries = 0;
-                        while used_ids.contains(&state_id) && retries < MAX_ID_RETRIES {
-                            state_id = generate_unique_id(&format!("{}_{}_{}", switch.name(), state_name, retries));
-                            retries += 1;
-                        }
-                        if used_ids.contains(&state_id) {
-                            return Err(CliError::new(
-                                codes::ERR_ASSET_ALREADY_EXISTS,
-                                format!("Generated state ID {} collides within this switch", state_id),
-                                "Duplicate state ID generated",
-                            )
-                            .into());
-                        }
-                        used_ids.insert(state_id);
-                        state_definitions.push(SwitchStateDefinition {
-                            id: state_id,
-                            name: Some(state_name.clone()),
-                        });
+        Ok(true) => {
+            let new_states = prompt_states_for_update(input, &current_states)?;
+            if !new_states.is_empty() && new_states != current_states {
+                // Generate new state definitions with collision check
+                let mut state_definitions = Vec::new();
+                let mut used_ids = std::collections::HashSet::new();
+                for state_name in &new_states {
+                    let mut state_id =
+                        generate_unique_id(&format!("{}_{}", switch.name(), state_name));
+                    let mut retries = 0;
+                    while used_ids.contains(&state_id) && retries < MAX_ID_RETRIES {
+                        state_id = generate_unique_id(&format!(
+                            "{}_{}_{}",
+                            switch.name(),
+                            state_name,
+                            retries
+                        ));
+                        retries += 1;
                     }
-                    switch.states = Some(state_definitions);
-                    updated_fields.push("states".to_string());
+                    if used_ids.contains(&state_id) {
+                        return Err(CliError::new(
+                            codes::ERR_ASSET_ALREADY_EXISTS,
+                            format!(
+                                "Generated state ID {} collides within this switch",
+                                state_id
+                            ),
+                            "Duplicate state ID generated",
+                        )
+                        .into());
+                    }
+                    used_ids.insert(state_id);
+                    state_definitions.push(SwitchStateDefinition {
+                        id: state_id,
+                        name: Some(state_name.clone()),
+                    });
                 }
+                switch.states = Some(state_definitions);
+                updated_fields.push("states".to_string());
             }
+        }
         _ => {}
     }
 
@@ -785,10 +801,14 @@ fn prompt_states_for_update(input: &dyn Input, current_states: &[String]) -> Res
             None,
             Some(&|value: &str| {
                 let trimmed = value.trim().to_lowercase();
-                if trimmed.is_empty() || ["a", "add", "r", "remove", "d", "done"].contains(&trimmed.as_str()) {
+                if trimmed.is_empty()
+                    || ["a", "add", "r", "remove", "d", "done"].contains(&trimmed.as_str())
+                {
                     Ok(Validation::Valid)
                 } else {
-                    Ok(Validation::Invalid("Enter 'a' to add, 'r' to remove, or 'd' to done".into()))
+                    Ok(Validation::Invalid(
+                        "Enter 'a' to add, 'r' to remove, or 'd' to done".into(),
+                    ))
                 }
             }),
         )?;

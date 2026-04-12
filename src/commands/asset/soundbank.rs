@@ -46,7 +46,9 @@ const ASSET_NAME: &str = "Soundbank";
 #[derive(Subcommand, Debug)]
 pub enum SoundbankCommands {
     /// Create a new soundbank asset
-    #[command(after_help = "Examples:\n  am asset soundbank create main_bank\n  am asset soundbank create main_bank --include sound:explosion,footstep\n")]
+    #[command(
+        after_help = "Examples:\n  am asset soundbank create main_bank\n  am asset soundbank create main_bank --include sound:explosion,footstep\n"
+    )]
     Create {
         /// Name of the soundbank asset
         name: String,
@@ -62,7 +64,9 @@ pub enum SoundbankCommands {
     List {},
 
     /// Update an existing soundbank asset
-    #[command(after_help = "Examples:\n  am asset soundbank update main_bank\n  am asset soundbank update main_bank --add sound:newsfx\n")]
+    #[command(
+        after_help = "Examples:\n  am asset soundbank update main_bank\n  am asset soundbank update main_bank --add sound:newsfx\n"
+    )]
     Update {
         /// Name of the soundbank asset to update
         name: String,
@@ -77,7 +81,9 @@ pub enum SoundbankCommands {
     },
 
     /// Delete a soundbank asset
-    #[command(after_help = "Examples:\n  am asset soundbank delete main_bank\n  am asset soundbank delete main_bank --yes\n")]
+    #[command(
+        after_help = "Examples:\n  am asset soundbank delete main_bank\n  am asset soundbank delete main_bank --yes\n"
+    )]
     Delete {
         /// Name of the soundbank asset to delete
         name: String,
@@ -162,10 +168,7 @@ fn parse_include_spec(spec: &str, sources_dir: &std::path::Path) -> Result<Vec<(
             return Err(CliError::new(
                 codes::ERR_VALIDATION_REFERENCE,
                 format!("{} '{}' not found", type_key, name),
-                format!(
-                    "Expected file at {}",
-                    full_path.display()
-                ),
+                format!("Expected file at {}", full_path.display()),
             )
             .with_suggestion(format!(
                 "Create the {} first with 'am asset {} create {}'",
@@ -181,9 +184,7 @@ fn parse_include_spec(spec: &str, sources_dir: &std::path::Path) -> Result<Vec<(
 }
 
 /// Collect all available assets from project sources directory, grouped by type.
-fn collect_available_assets(
-    sources_dir: &std::path::Path,
-) -> Vec<(String, String, String)> {
+fn collect_available_assets(sources_dir: &std::path::Path) -> Vec<(String, String, String)> {
     // Returns (type_label, asset_name, relative_path)
     let type_dirs = [
         ("sound", "sounds"),
@@ -221,7 +222,11 @@ fn collect_available_assets(
 }
 
 /// Add an asset path to the appropriate soundbank field.
-fn add_asset_to_builder(builder: SoundbankBuilder, type_key: &str, path: String) -> SoundbankBuilder {
+fn add_asset_to_builder(
+    builder: SoundbankBuilder,
+    type_key: &str,
+    path: String,
+) -> SoundbankBuilder {
     match type_key {
         "sound" => builder.sound(path),
         "collection" => builder.collection(path),
@@ -239,10 +244,7 @@ fn add_asset_to_builder(builder: SoundbankBuilder, type_key: &str, path: String)
 fn add_asset_to_soundbank(soundbank: &mut Soundbank, type_key: &str, path: String) {
     match type_key {
         "sound" => {
-            soundbank
-                .sounds
-                .get_or_insert_with(Vec::new)
-                .push(path);
+            soundbank.sounds.get_or_insert_with(Vec::new).push(path);
         }
         "collection" => {
             soundbank
@@ -251,16 +253,10 @@ fn add_asset_to_soundbank(soundbank: &mut Soundbank, type_key: &str, path: Strin
                 .push(path);
         }
         "event" => {
-            soundbank
-                .events
-                .get_or_insert_with(Vec::new)
-                .push(path);
+            soundbank.events.get_or_insert_with(Vec::new).push(path);
         }
         "switch" => {
-            soundbank
-                .switches
-                .get_or_insert_with(Vec::new)
-                .push(path);
+            soundbank.switches.get_or_insert_with(Vec::new).push(path);
         }
         "switch_container" => {
             soundbank
@@ -269,10 +265,7 @@ fn add_asset_to_soundbank(soundbank: &mut Soundbank, type_key: &str, path: Strin
                 .push(path);
         }
         "effect" => {
-            soundbank
-                .effects
-                .get_or_insert_with(Vec::new)
-                .push(path);
+            soundbank.effects.get_or_insert_with(Vec::new).push(path);
         }
         "attenuator" => {
             soundbank
@@ -470,9 +463,7 @@ async fn create_soundbank(
             "Soundbank has no assets",
             "Soundbanks must contain at least one asset",
         )
-        .with_suggestion(
-            "Add at least one asset using --include flag or in interactive mode",
-        )
+        .with_suggestion("Add at least one asset using --include flag or in interactive mode")
         .into());
     }
 

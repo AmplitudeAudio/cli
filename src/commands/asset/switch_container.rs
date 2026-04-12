@@ -29,8 +29,8 @@ use serde_json::json;
 use crate::common::utils::generate_unique_id;
 use crate::{
     assets::{
-        generated::SwitchContainerEntry, Asset, AssetType, ProjectContext, ProjectValidator,
-        SwitchContainer,
+        Asset, AssetType, ProjectContext, ProjectValidator, SwitchContainer,
+        generated::SwitchContainerEntry,
     },
     common::{
         errors::{CliError, asset_already_exists, asset_not_found, codes},
@@ -55,7 +55,9 @@ const NO_REFERENCE: u64 = 0;
 #[derive(Subcommand, Debug)]
 pub enum SwitchContainerCommands {
     /// Create a new switch container asset
-    #[command(after_help = "Examples:\n  am asset switch-container create footsteps\n  am asset switch-container create footsteps --switch surface_type --map wood=wood_step\n")]
+    #[command(
+        after_help = "Examples:\n  am asset switch-container create footsteps\n  am asset switch-container create footsteps --switch surface_type --map wood=wood_step\n"
+    )]
     Create {
         /// Name of the switch container asset
         name: String,
@@ -70,11 +72,15 @@ pub enum SwitchContainerCommands {
     },
 
     /// List all switch container assets in the project
-    #[command(after_help = "Examples:\n  am asset switch-container list\n  am asset switch-container list --json\n")]
+    #[command(
+        after_help = "Examples:\n  am asset switch-container list\n  am asset switch-container list --json\n"
+    )]
     List {},
 
     /// Update an existing switch container asset
-    #[command(after_help = "Examples:\n  am asset switch-container update footsteps\n  am asset switch-container update footsteps --map stone=stone_step\n")]
+    #[command(
+        after_help = "Examples:\n  am asset switch-container update footsteps\n  am asset switch-container update footsteps --map stone=stone_step\n"
+    )]
     Update {
         /// Name of the switch container asset to update
         name: String,
@@ -85,7 +91,9 @@ pub enum SwitchContainerCommands {
     },
 
     /// Delete a switch container asset
-    #[command(after_help = "Examples:\n  am asset switch-container delete footsteps\n  am asset switch-container delete footsteps --force\n")]
+    #[command(
+        after_help = "Examples:\n  am asset switch-container delete footsteps\n  am asset switch-container delete footsteps --force\n"
+    )]
     Delete {
         /// Name of the switch container asset to delete
         name: String,
@@ -108,9 +116,7 @@ pub async fn handler(
             name,
             switch,
             mappings,
-        } => {
-            create_switch_container(name, switch.clone(), mappings.clone(), input, output).await
-        }
+        } => create_switch_container(name, switch.clone(), mappings.clone(), input, output).await,
         SwitchContainerCommands::List {} => list_switch_containers(output).await,
         SwitchContainerCommands::Update { name, mappings } => {
             update_switch_container(name, mappings.clone(), input, output).await
@@ -183,15 +189,14 @@ async fn create_switch_container(
     // Step 4: Get the controlling switch
     let switch_info = if let Some(switch_name) = switch {
         // Non-interactive mode: validate the switch exists
-        find_switch_by_name(&context, &switch_name)?
-            .ok_or_else(|| {
-                CliError::new(
-                    codes::ERR_VALIDATION_FIELD,
-                    format!("Switch '{}' does not exist", switch_name),
-                    "The controlling switch must be an existing switch asset",
-                )
-                .with_suggestion("Use 'am asset switch list' to see available switches")
-            })?
+        find_switch_by_name(&context, &switch_name)?.ok_or_else(|| {
+            CliError::new(
+                codes::ERR_VALIDATION_FIELD,
+                format!("Switch '{}' does not exist", switch_name),
+                "The controlling switch must be an existing switch asset",
+            )
+            .with_suggestion("Use 'am asset switch list' to see available switches")
+        })?
     } else {
         // Interactive mode: prompt for switch selection
         prompt_switch_selection(input, &context)?
@@ -216,7 +221,10 @@ async fn create_switch_container(
     if context.has_id(container_id) {
         return Err(CliError::new(
             codes::ERR_ASSET_ALREADY_EXISTS,
-            format!("Generated ID {} collides with an existing asset", container_id),
+            format!(
+                "Generated ID {} collides with an existing asset",
+                container_id
+            ),
             "All generated ID attempts collided with existing assets in the project",
         )
         .with_suggestion("Try a different name or wait a moment and retry")
@@ -457,17 +465,16 @@ fn parse_mappings(
             })?;
 
         // Find the sound/collection ID
-        let sound_id = find_asset_id_by_name(context, sound_name)?
-            .ok_or_else(|| {
-                CliError::new(
-                    codes::ERR_VALIDATION_FIELD,
-                    format!("Sound/Collection '{}' not found", sound_name),
-                    "The mapped sound or collection does not exist in the project",
-                )
-                .with_suggestion(
-                    "Use 'am asset sound list' or 'am asset collection list' to see available assets",
-                )
-            })?;
+        let sound_id = find_asset_id_by_name(context, sound_name)?.ok_or_else(|| {
+            CliError::new(
+                codes::ERR_VALIDATION_FIELD,
+                format!("Sound/Collection '{}' not found", sound_name),
+                "The mapped sound or collection does not exist in the project",
+            )
+            .with_suggestion(
+                "Use 'am asset sound list' or 'am asset collection list' to see available assets",
+            )
+        })?;
 
         // Check if we already have an entry for this sound
         if let Some(existing) = entries.iter_mut().find(|e| e.object == sound_id) {
@@ -750,19 +757,12 @@ async fn list_switch_containers(output: &dyn Output) -> Result<()> {
             match path.canonicalize() {
                 Ok(resolved) => {
                     if !resolved.starts_with(&canonical_dir) {
-                        log::warn!(
-                            "Skipping symlink outside directory: {}",
-                            path.display()
-                        );
+                        log::warn!("Skipping symlink outside directory: {}", path.display());
                         continue;
                     }
                 }
                 Err(e) => {
-                    log::warn!(
-                        "Skipping broken symlink: {} (error: {})",
-                        path.display(),
-                        e
-                    );
+                    log::warn!("Skipping broken symlink: {} (error: {})", path.display(), e);
                     continue;
                 }
             }
@@ -947,17 +947,18 @@ async fn update_switch_container(
     let validator = ProjectValidator::new(current_dir.clone())?;
     let context = ProjectContext::new(current_dir.clone()).with_validator(validator);
 
-    let switch_info = find_switch_by_name(&context, &get_switch_name(&context, container.switch_group))
-        .ok()
-        .flatten()
-        .ok_or_else(|| {
-            CliError::new(
-                codes::ERR_VALIDATION_FIELD,
-                "Controlling switch not found",
-                "The switch referenced by this container no longer exists",
-            )
-            .with_suggestion("Delete and recreate the switch container with a valid switch")
-        })?;
+    let switch_info =
+        find_switch_by_name(&context, &get_switch_name(&context, container.switch_group))
+            .ok()
+            .flatten()
+            .ok_or_else(|| {
+                CliError::new(
+                    codes::ERR_VALIDATION_FIELD,
+                    "Controlling switch not found",
+                    "The switch referenced by this container no longer exists",
+                )
+                .with_suggestion("Delete and recreate the switch container with a valid switch")
+            })?;
 
     // Step 5: Apply updates
     let has_any_flag = mappings.is_some();
@@ -968,7 +969,8 @@ async fn update_switch_container(
         updated_fields = apply_mapping_updates(&mut container, mappings, &switch_info, &context)?;
     } else {
         // Interactive mode
-        updated_fields = prompt_container_updates(&mut container, input, output, &switch_info, &context)?;
+        updated_fields =
+            prompt_container_updates(&mut container, input, output, &switch_info, &context)?;
     }
 
     // Validate that we're not trying to change the switch group
@@ -1061,11 +1063,15 @@ fn prompt_container_updates(
 
     // Prompt to modify mappings
     match input.confirm(
-        &format!("Modify state mappings? (current: {} entries)", current_entries),
+        &format!(
+            "Modify state mappings? (current: {} entries)",
+            current_entries
+        ),
         Some(false),
     ) {
         Ok(true) => {
-            let new_entries = prompt_mappings_for_update(input, output, switch_info, context, container)?;
+            let new_entries =
+                prompt_mappings_for_update(input, output, switch_info, context, container)?;
             container.entries = Some(new_entries);
             updated_fields.push("entries".to_string());
         }
@@ -1124,10 +1130,14 @@ fn prompt_mappings_for_update(
             None,
             Some(&|value: &str| {
                 let trimmed = value.trim().to_lowercase();
-                if trimmed.is_empty() || ["a", "add", "r", "remove", "d", "done"].contains(&trimmed.as_str()) {
+                if trimmed.is_empty()
+                    || ["a", "add", "r", "remove", "d", "done"].contains(&trimmed.as_str())
+                {
                     Ok(Validation::Valid)
                 } else {
-                    Ok(Validation::Invalid("Enter 'a' to add, 'r' to remove, or 'd' to done".into()))
+                    Ok(Validation::Invalid(
+                        "Enter 'a' to add, 'r' to remove, or 'd' to done".into(),
+                    ))
                 }
             }),
         )?;
@@ -1135,8 +1145,10 @@ fn prompt_mappings_for_update(
         match choice.trim().to_lowercase().as_str() {
             "a" | "add" => {
                 // Select state
-                let state_names: Vec<String> = switch_info.states.iter().map(|s| s.name.clone()).collect();
-                let state_idx = crate::input::select_index(input, "Select state to map:", &state_names)?;
+                let state_names: Vec<String> =
+                    switch_info.states.iter().map(|s| s.name.clone()).collect();
+                let state_idx =
+                    crate::input::select_index(input, "Select state to map:", &state_names)?;
                 let state = &switch_info.states[state_idx];
 
                 // Select target
@@ -1144,16 +1156,27 @@ fn prompt_mappings_for_update(
                     .iter()
                     .map(|(name, _, kind)| format!("{} ({})", name, kind))
                     .collect();
-                let target_idx = crate::input::select_index(input, "Select sound/collection:", &target_names)?;
+                let target_idx =
+                    crate::input::select_index(input, "Select sound/collection:", &target_names)?;
                 let (target_name, target_id, _) = &available_targets[target_idx];
 
                 // Add or update entry
                 if let Some(existing) = entries.iter_mut().find(|e| e.object == *target_id) {
                     if !existing.switch_states.contains(&state.id) {
                         existing.switch_states.push(state.id);
-                        output.progress(&format!("  {} Added mapping: {} -> {}", "✓".green(), state.name, target_name));
+                        output.progress(&format!(
+                            "  {} Added mapping: {} -> {}",
+                            "✓".green(),
+                            state.name,
+                            target_name
+                        ));
                     } else {
-                        output.progress(&format!("  {} State '{}' is already mapped to '{}'", "ℹ".blue(), state.name, target_name));
+                        output.progress(&format!(
+                            "  {} State '{}' is already mapped to '{}'",
+                            "ℹ".blue(),
+                            state.name,
+                            target_name
+                        ));
                     }
                 } else {
                     entries.push(SwitchContainerEntry {
@@ -1165,7 +1188,12 @@ fn prompt_mappings_for_update(
                         gain: None,
                         pitch: None,
                     });
-                    output.progress(&format!("  {} Added mapping: {} -> {}", "✓".green(), state.name, target_name));
+                    output.progress(&format!(
+                        "  {} Added mapping: {} -> {}",
+                        "✓".green(),
+                        state.name,
+                        target_name
+                    ));
                 }
             }
             "r" | "remove" => {
@@ -1178,9 +1206,12 @@ fn prompt_mappings_for_update(
                 let mapping_strings: Vec<String> = entries
                     .iter()
                     .flat_map(|e| {
-                        let target_name = find_name_by_id(context, e.object).unwrap_or_else(|| format!("ID:{}", e.object));
+                        let target_name = find_name_by_id(context, e.object)
+                            .unwrap_or_else(|| format!("ID:{}", e.object));
                         e.switch_states.iter().map(move |&state_id| {
-                            let state_name = switch_info.states.iter()
+                            let state_name = switch_info
+                                .states
+                                .iter()
                                 .find(|s| s.id == state_id)
                                 .map(|s| s.name.as_str())
                                 .unwrap_or("?");
@@ -1190,11 +1221,18 @@ fn prompt_mappings_for_update(
                     .collect();
 
                 if mapping_strings.is_empty() {
-                    output.progress(&format!("  {} No individual mappings to remove", "ℹ".blue()));
+                    output.progress(&format!(
+                        "  {} No individual mappings to remove",
+                        "ℹ".blue()
+                    ));
                     continue;
                 }
 
-                let mapping_idx = crate::input::select_index(input, "Select mapping to remove:", &mapping_strings)?;
+                let mapping_idx = crate::input::select_index(
+                    input,
+                    "Select mapping to remove:",
+                    &mapping_strings,
+                )?;
 
                 // Find and remove the mapping
                 let mut current_idx = 0;

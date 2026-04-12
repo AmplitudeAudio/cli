@@ -75,9 +75,9 @@ pub mod validator;
 #[allow(unused_imports)]
 pub use generated::{
     CollectionPlayMode, CurveDefinition, CurvePartDefinition, CurvePointDefinition,
-    EventActionDefinition, EventActionRunningMode, EventActionType,
-    RtpcCompatibleValue, RtpcParameter, Scope, SoundLoopConfig, SoundSchedulerMode,
-    SoundSchedulerSettings, Spatialization, ValueKind,
+    EventActionDefinition, EventActionRunningMode, EventActionType, RtpcCompatibleValue,
+    RtpcParameter, Scope, SoundLoopConfig, SoundSchedulerMode, SoundSchedulerSettings,
+    Spatialization, ValueKind,
 };
 // Re-export hand-written types that have no generated equivalent.
 #[allow(unused_imports)]

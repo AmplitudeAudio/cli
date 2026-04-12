@@ -166,7 +166,9 @@ async fn async_main() -> anyhow::Result<()> {
     let is_tty = std::io::IsTerminal::is_terminal(&std::io::stdin());
     let input_mode = if cli.json || cli.non_interactive || cli.quiet || !is_tty {
         if !is_tty && !cli.json && !cli.non_interactive && !cli.quiet {
-            debug!("stdin is not a terminal — using non-interactive mode. Use --non-interactive to suppress this message.");
+            debug!(
+                "stdin is not a terminal — using non-interactive mode. Use --non-interactive to suppress this message."
+            );
         }
         InputMode::NonInteractive
     } else {
