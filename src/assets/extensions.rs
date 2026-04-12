@@ -255,6 +255,7 @@ impl SoundSchedulerSettings {
     pub fn random() -> Self {
         Self {
             mode: SoundSchedulerMode::Random,
+            config: None,
         }
     }
 
@@ -262,6 +263,7 @@ impl SoundSchedulerSettings {
     pub fn sequential() -> Self {
         Self {
             mode: SoundSchedulerMode::Sequence,
+            config: None,
         }
     }
 }

@@ -53,6 +53,7 @@ struct EnumDef {
 struct EnumVariant {
     name: String,
     value: i64,
+    rust_type: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -196,6 +197,9 @@ fn process_schema(
     let schema = reflection::root_as_schema(schema_bytes)
         .map_err(|e| format!("Failed to parse schema: {}", e))?;
 
+    // Collect objects (tables and structs) first so we can resolve union variants
+    let schema_objects = schema.objects();
+
     // Collect enums
     let schema_enums = schema.enums();
     for i in 0..schema_enums.len() {
@@ -213,9 +217,29 @@ fn process_schema(
         let vals = e.values();
         for j in 0..vals.len() {
             let v = vals.get(j);
+            let rust_type = if is_union {
+                if let Some(union_type) = v.union_type() {
+                    let base = union_type.base_type();
+                    let idx = union_type.index();
+                    if base == BaseType::Obj {
+                        let obj_fqn = schema_objects.get(idx as usize).name().to_string();
+                        Some(leaf_name(&obj_fqn).to_string())
+                    } else if base == BaseType::String {
+                        Some("String".to_string())
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
+            } else {
+                None
+            };
+
             variants.push(EnumVariant {
                 name: v.name().to_string(),
                 value: v.value(),
+                rust_type,
             });
         }
 
@@ -229,8 +253,7 @@ fn process_schema(
         );
     }
 
-    // Collect objects (tables and structs)
-    let schema_objects = schema.objects();
+    // Process fields for objects
     for i in 0..schema_objects.len() {
         let obj = schema_objects.get(i);
         let fqn = obj.name().to_string();
@@ -253,17 +276,17 @@ fn process_schema(
                 continue;
             }
 
-            // Skip union fields — unions require special handling (TODO: Story 2c.2)
-            if base == BaseType::Union {
-                continue;
-            }
+            // Union fields are now processed
+            // if base == BaseType::Union {
+            //     continue;
+            // }
 
-            // Skip union vector fields (vector of unions or their discriminators)
-            if base == BaseType::Vector
-                && (ty.element() == BaseType::Union || ty.element() == BaseType::UType)
-            {
-                continue;
-            }
+            // Union vector fields are now processed
+            // if base == BaseType::Vector
+            //     && (ty.element() == BaseType::Union || ty.element() == BaseType::UType)
+            // {
+            //     continue;
+            // }
 
             // Determine the Rust type for this field
             let Some((rust_type, is_optional, default_value, serde_rename)) =
@@ -357,6 +380,14 @@ fn resolve_field_type(
     }
 
     match base {
+        BaseType::Union => {
+            let enum_fqn = schema_enums.get(idx as usize).name().to_string();
+            let enum_name = all_enum_names
+                .get(&enum_fqn)
+                .cloned()
+                .unwrap_or_else(|| leaf_name(&enum_fqn).to_string());
+            Some((enum_name, is_opt, None, None))
+        }
         BaseType::Obj => {
             let obj_fqn = objects.get(idx as usize).name().to_string();
             let obj_name = leaf_name(&obj_fqn).to_string();
@@ -365,6 +396,10 @@ fn resolve_field_type(
         }
         BaseType::Vector => {
             let inner = match ty.element() {
+                BaseType::Union => {
+                    let enum_fqn = schema_enums.get(idx as usize).name().to_string();
+                    leaf_name(&enum_fqn).to_string()
+                }
                 BaseType::Obj => {
                     let obj_fqn = objects.get(idx as usize).name().to_string();
                     leaf_name(&obj_fqn).to_string()
@@ -453,10 +488,21 @@ fn generate_code(
         if def.is_union {
             writeln!(
                 out,
-                "// TODO: Union type {} skipped — requires special serde handling (Story 2c.2)",
-                def.name
+                "#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]"
             )
             .unwrap();
+            writeln!(out, "#[serde(untagged)]").unwrap();
+            writeln!(out, "pub enum {} {{", def.name).unwrap();
+            for variant in &def.variants {
+                let rust_name = &variant.name;
+                if rust_name == "NONE" {
+                    writeln!(out, "    None,").unwrap();
+                } else {
+                    let ty = variant.rust_type.as_deref().unwrap_or(rust_name);
+                    writeln!(out, "    {}({}),", rust_name, ty).unwrap();
+                }
+            }
+            writeln!(out, "}}").unwrap();
             writeln!(out).unwrap();
             continue;
         }
@@ -738,7 +784,7 @@ See the README for detailed setup instructions.
     let union_count = enums.values().filter(|e| e.is_union).count();
     let struct_count = structs.len();
     println!(
-        "cargo:warning=Generated asset types from {} schema files: {} enums, {} structs ({} unions skipped)",
+        "cargo:warning=Generated asset types from {} schema files: {} enums, {} structs ({} unions processed)",
         bfbs_files.len(),
         enum_count,
         struct_count,

@@ -88,6 +88,7 @@ impl CollectionBuilder {
                 scope: Scope::World,
                 play_mode: CollectionPlayMode::PlayOne,
                 scheduler: Some(SoundSchedulerSettings::default()),
+                sounds: Some(Vec::new()),
             },
         }
     }
@@ -166,7 +167,7 @@ impl CollectionBuilder {
 
     /// Sets the scheduler mode.
     pub fn scheduler_mode(mut self, mode: SoundSchedulerMode) -> Self {
-        self.collection.scheduler = Some(SoundSchedulerSettings { mode });
+        self.collection.scheduler = Some(SoundSchedulerSettings { mode, config: None });
         self
     }
 
@@ -293,7 +294,8 @@ mod tests {
         assert_eq!(
             c.scheduler,
             Some(SoundSchedulerSettings {
-                mode: SoundSchedulerMode::Random
+                mode: SoundSchedulerMode::Random,
+                config: None,
             })
         );
     }
@@ -329,7 +331,8 @@ mod tests {
         assert_eq!(
             c.scheduler,
             Some(SoundSchedulerSettings {
-                mode: SoundSchedulerMode::Sequence
+                mode: SoundSchedulerMode::Sequence,
+                config: None,
             })
         );
     }
@@ -430,7 +433,8 @@ mod tests {
         assert_eq!(
             c.scheduler,
             Some(SoundSchedulerSettings {
-                mode: SoundSchedulerMode::Sequence
+                mode: SoundSchedulerMode::Sequence,
+                config: None,
             })
         );
         assert_eq!(c.spatialization, Spatialization::Position);

@@ -294,6 +294,7 @@ fn test_generated_collection_definition_roundtrip() {
         fader: None,
         play_mode: generated::CollectionPlayMode::PlayOne,
         scheduler: None,
+        sounds: Some(Vec::new()),
     };
 
     let json = serde_json::to_string(&collection).unwrap();

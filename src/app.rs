@@ -82,6 +82,12 @@ pub enum Commands {
         command: SudoCommands,
     },
 
+    /// SDK-related tasks
+    Sdk {
+        #[command(subcommand)]
+        command: crate::commands::sdk::SdkCommands,
+    },
+
     /// Manage project templates
     Template {
         #[command(subcommand)]

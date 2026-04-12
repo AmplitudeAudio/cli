@@ -233,16 +233,21 @@ fn test_p1_exit_code_json_mode_error_on_stdout() {
 // =============================================================================
 
 #[test]
-#[ignore] // Enable when SDK validation command is implemented
 fn test_p2_exit_code_system_error_sdk_not_found() {
-    // GIVEN: AM_SDK_PATH is not set or invalid
-    // WHEN: Running a command that requires SDK (e.g., 'am sdk check')
+    // GIVEN: AM_SDK_PATH is explicitly removed
+    // WHEN: Running a command that requires SDK ('am sdk check')
+    let output = std::process::Command::new(env!("CARGO_BIN_EXE_am"))
+        .args(["sdk", "check"])
+        .env_remove("AM_SDK_PATH")
+        .output()
+        .expect("Failed to execute command");
+
     // THEN: Exit code should be 2 (system error)
-    //
-    // TODO: Implement when a command that validates SDK presence is added.
-    // The determine_exit_code() function maps -28xxx errors to exit code 2,
-    // which is tested in unit tests (src/common/errors.rs:437-446).
-    panic!("Test not yet implemented - awaiting SDK validation command");
+    assert_eq!(
+        output.status.code(),
+        Some(am::common::errors::exit_codes::SYSTEM_ERROR),
+        "Expected system error exit code for missing SDK"
+    );
 }
 
 #[test]

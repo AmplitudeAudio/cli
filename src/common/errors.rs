@@ -376,15 +376,6 @@ pub fn asset_already_exists(asset_type: &str, name: &str) -> CliError {
     )
 }
 
-/// Create an error for the SDK not being found.
-pub fn sdk_not_found() -> CliError {
-    CliError::new(
-        codes::ERR_SDK_NOT_FOUND,
-        "Amplitude SDK not found",
-        "The AM_SDK_PATH environment variable is not set or points to an invalid location",
-    )
-}
-
 // =============================================================================
 // Macro for quick error construction
 // =============================================================================

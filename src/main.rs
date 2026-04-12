@@ -26,7 +26,8 @@ use crate::{
     app::{App, Commands},
     commands::{
         asset::handler as handle_asset_command, project::handler as handle_project_command,
-        sudo::handler as handle_sudo_command, template::handler as handle_template_command,
+        sdk::handler as handle_sdk_command, sudo::handler as handle_sudo_command,
+        template::handler as handle_template_command,
     },
     common::errors::{CliError, determine_exit_code, exit_codes},
     common::logger::{init_logger, setup_crash_logging, write_crash_log_on_error},
@@ -197,6 +198,7 @@ async fn run_command(
         Commands::Project { command } => {
             handle_project_command(command, database, input, output).await
         }
+        Commands::Sdk { command } => handle_sdk_command(command, database, input, output).await,
         Commands::Sudo { command } => handle_sudo_command(command, database, input, output).await,
         Commands::Template { command } => {
             handle_template_command(command, database, input, output).await
