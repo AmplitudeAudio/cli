@@ -15,7 +15,7 @@
 use crate::config::sdk::discover_sdk;
 use crate::database::Database;
 use crate::input::Input;
-use crate::presentation::Output;
+use crate::presentation::{Output, OutputMode};
 use clap::Subcommand;
 use serde_json::json;
 use std::sync::Arc;
@@ -36,14 +36,21 @@ pub async fn handler(
         SdkCommands::Check => {
             let location = discover_sdk()?;
 
-            output.success(
-                json!({
-                    "message": "SDK is properly configured",
-                    "path": location.root().to_string_lossy(),
-                    "schemas_dir": location.schemas_dir().to_string_lossy(),
-                }),
-                None,
-            );
+            if output.mode() == OutputMode::Json {
+                output.success(
+                    json!({
+                        "message": "SDK is properly configured",
+                        "path": location.root().to_string_lossy(),
+                    }),
+                    None,
+                );
+            } else {
+                let message = format!(
+                    "SDK is properly configured\n  Path: {}",
+                    location.root().display(),
+                );
+                output.success(json!(message), None);
+            }
             Ok(())
         }
     }
