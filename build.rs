@@ -1,3 +1,17 @@
+// Copyright (c) 2026-present Sparky Studios. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // build.rs — Generates Rust types from Amplitude SDK FlatBuffer schemas (.bfbs files).
 //
 // Reads binary schema files from $AM_SDK_PATH/schemas/, parses them using the
@@ -437,10 +451,6 @@ fn generate_code(
     // Generate enums
     for (fqn, def) in enums {
         if def.is_union {
-            println!(
-                "cargo:warning=Skipping union type {} — requires special serde handling (Story 2c.2)",
-                def.name
-            );
             writeln!(
                 out,
                 "// TODO: Union type {} skipped — requires special serde handling (Story 2c.2)",
