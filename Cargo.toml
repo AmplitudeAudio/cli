@@ -21,6 +21,7 @@ string_template = "0.2.1"
 clap_complete = "4.5"
 colored = "3.0.0"
 chrono = "0.4"
+walkdir = "2.5"
 
 flatbuffers = "25.12.19"
 flatbuffers-reflection = "0.1.0"

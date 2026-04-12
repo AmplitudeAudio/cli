@@ -33,6 +33,7 @@ dependencies = [
  "string_template",
  "tempfile",
  "tokio",
+ "walkdir",
 ]
 
 [[package]]

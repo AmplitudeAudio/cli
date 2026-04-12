@@ -39,6 +39,28 @@ use crate::{
     presentation::{Output, OutputMode},
 };
 
+/// Recursively find all .json files in a directory.
+fn find_json_files_recursive(dir: &std::path::Path) -> anyhow::Result<Vec<std::path::PathBuf>> {
+    let mut files = Vec::new();
+    
+    if !dir.exists() {
+        return Ok(files);
+    }
+    
+    for entry in walkdir::WalkDir::new(dir)
+        .follow_links(true)
+        .into_iter()
+        .filter_map(|e| e.ok())
+    {
+        let path = entry.path();
+        if path.is_file() && path.extension().map(|e| e == "json").unwrap_or(false) {
+            files.push(path.to_path_buf());
+        }
+    }
+    
+    Ok(files)
+}
+
 /// The name of the current asset.
 const ASSET_NAME: &str = "Effect";
 
@@ -347,12 +369,12 @@ async fn list_effects(output: &dyn Output) -> Result<()> {
         return Ok(());
     }
 
-    // Step 4: Read and parse all .json files
+    // Step 4: Read and parse all .json files recursively
     let mut effects: Vec<Effect> = Vec::new();
     let mut warnings: Vec<String> = Vec::new();
 
-    let entries = match fs::read_dir(&effects_dir) {
-        Ok(entries) => entries,
+    let json_files = match find_json_files_recursive(&effects_dir) {
+        Ok(files) => files,
         Err(e) => {
             return Err(CliError::new(
                 codes::ERR_VALIDATION_FIELD,
@@ -365,27 +387,7 @@ async fn list_effects(output: &dyn Output) -> Result<()> {
         }
     };
 
-    let canonical_effects_dir = effects_dir
-        .canonicalize()
-        .unwrap_or_else(|_| effects_dir.clone());
-
-    for entry in entries {
-        let entry = entry?;
-        let path = entry.path();
-
-        // Skip symlinks that resolve outside the effects directory
-        if path.is_symlink()
-            && path
-                .canonicalize()
-                .is_ok_and(|resolved| !resolved.starts_with(&canonical_effects_dir))
-        {
-            log::warn!(
-                "Skipping symlink outside effects directory: {}",
-                path.display()
-            );
-            continue;
-        }
-
+    for path in json_files {
         if path.extension().map(|e| e == "json").unwrap_or(false) {
             match fs::read_to_string(&path) {
                 Ok(content) => match serde_json::from_str::<Effect>(&content) {
