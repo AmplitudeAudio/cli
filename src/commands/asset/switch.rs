@@ -458,7 +458,17 @@ async fn list_switches(output: &dyn Output) -> Result<()> {
                     Err(e) => {
                         let filename = path.file_name().unwrap_or_default().to_string_lossy();
                         log::warn!("Skipping invalid switch file: {}", path.display());
-                        warnings.push(format!("Invalid JSON in {}: {}", filename, e));
+                        // Provide more context for JSON errors
+                        let error_msg = if let Some(line) = content.lines().next() {
+                            if e.to_string().contains("column") {
+                                format!("Invalid JSON in {}: {}. First line: {}", filename, e, &line[..line.len().min(200)])
+                            } else {
+                                format!("Invalid JSON in {}: {}", filename, e)
+                            }
+                        } else {
+                            format!("Invalid JSON in {}: {}", filename, e)
+                        };
+                        warnings.push(error_msg);
                     }
                 },
                 Err(e) => {
