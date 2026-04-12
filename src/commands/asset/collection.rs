@@ -240,7 +240,12 @@ async fn create_collection(
     ));
 
     // Step 3: Validate collection name doesn't already exist (filesystem + registry)
-    let collections_dir = current_dir.join("sources").join("collections");
+    let sources_base = if project_config.sources_dir.is_empty() {
+        current_dir.clone()
+    } else {
+        current_dir.join(&project_config.sources_dir)
+    };
+    let collections_dir = sources_base.join("collections");
     let collection_file_path = collections_dir.join(format!("{}.json", name));
 
     if collection_file_path.exists() {
@@ -408,10 +413,15 @@ fn spatialization_to_string(spatialization: &Spatialization) -> &'static str {
 async fn list_collections(output: &dyn Output) -> Result<()> {
     // Step 1: Detect project
     let current_dir = env::current_dir()?;
-    read_amproject_file(&current_dir)?;
+    let project_config = read_amproject_file(&current_dir)?;
 
     // Step 2: Scan collections directory
-    let collections_dir = current_dir.join("sources").join("collections");
+    let sources_base = if project_config.sources_dir.is_empty() {
+        current_dir.clone()
+    } else {
+        current_dir.join(&project_config.sources_dir)
+    };
+    let collections_dir = sources_base.join("collections");
 
     // Step 3: Handle missing directory
     if !collections_dir.exists() {
@@ -609,7 +619,12 @@ async fn update_collection(
     ));
 
     // Step 2: Locate existing collection file
-    let collections_dir = current_dir.join("sources").join("collections");
+    let sources_base = if project_config.sources_dir.is_empty() {
+        current_dir.clone()
+    } else {
+        current_dir.join(&project_config.sources_dir)
+    };
+    let collections_dir = sources_base.join("collections");
     let collection_file_path = collections_dir.join(format!("{}.json", name));
 
     if !collection_file_path.exists() {
@@ -843,10 +858,15 @@ async fn delete_collection(
 ) -> Result<()> {
     // Step 1: Detect project
     let current_dir = env::current_dir()?;
-    read_amproject_file(&current_dir)?;
+    let project_config = read_amproject_file(&current_dir)?;
 
     // Step 2: Locate collection file
-    let collections_dir = current_dir.join("sources").join("collections");
+    let sources_base = if project_config.sources_dir.is_empty() {
+        current_dir.clone()
+    } else {
+        current_dir.join(&project_config.sources_dir)
+    };
+    let collections_dir = sources_base.join("collections");
     let collection_file_path = collections_dir.join(format!("{}.json", name));
 
     if !collection_file_path.exists() {

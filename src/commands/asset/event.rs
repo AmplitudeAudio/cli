@@ -259,7 +259,12 @@ async fn create_event(
     ));
 
     // Step 2: Validate event name doesn't already exist
-    let events_dir = current_dir.join("sources").join("events");
+    let sources_base = if project_config.sources_dir.is_empty() {
+        current_dir.clone()
+    } else {
+        current_dir.join(&project_config.sources_dir)
+    };
+    let events_dir = sources_base.join("events");
     let event_file_path = events_dir.join(format!("{}.json", name));
 
     if event_file_path.exists() {
@@ -606,10 +611,15 @@ const PATH_MAX_LENGTH: usize = 40;
 async fn list_events(output: &dyn Output) -> Result<()> {
     // Step 1: Detect project
     let current_dir = env::current_dir()?;
-    read_amproject_file(&current_dir)?;
+    let project_config = read_amproject_file(&current_dir)?;
 
     // Step 2: Scan events directory
-    let events_dir = current_dir.join("sources").join("events");
+    let sources_base = if project_config.sources_dir.is_empty() {
+        current_dir.clone()
+    } else {
+        current_dir.join(&project_config.sources_dir)
+    };
+    let events_dir = sources_base.join("events");
 
     // Step 3: Handle missing or unreadable directory
     if !events_dir.exists() {
@@ -813,7 +823,12 @@ async fn update_event(
     ));
 
     // Step 2: Locate existing event file
-    let events_dir = current_dir.join("sources").join("events");
+    let sources_base = if project_config.sources_dir.is_empty() {
+        current_dir.clone()
+    } else {
+        current_dir.join(&project_config.sources_dir)
+    };
+    let events_dir = sources_base.join("events");
     let event_file_path = events_dir.join(format!("{}.json", name));
 
     if !event_file_path.exists() {
@@ -1115,7 +1130,12 @@ async fn delete_event(
     let project_config = read_amproject_file(&current_dir)?;
 
     // Step 2: Locate event file
-    let events_dir = current_dir.join("sources").join("events");
+    let sources_base = if project_config.sources_dir.is_empty() {
+        current_dir.clone()
+    } else {
+        current_dir.join(&project_config.sources_dir)
+    };
+    let events_dir = sources_base.join("events");
     let event_file_path = events_dir.join(format!("{}.json", name));
 
     if !event_file_path.exists() {

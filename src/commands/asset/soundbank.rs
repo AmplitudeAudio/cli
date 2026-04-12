@@ -415,7 +415,12 @@ async fn create_soundbank(
     ));
 
     // Step 2: Validate name doesn't already exist
-    let soundbanks_dir = current_dir.join("sources").join("soundbanks");
+    let sources_base = if project_config.sources_dir.is_empty() {
+        current_dir.clone()
+    } else {
+        current_dir.join(&project_config.sources_dir)
+    };
+    let soundbanks_dir = sources_base.join("soundbanks");
     let soundbank_file_path = soundbanks_dir.join(format!("{}.json", name));
 
     if soundbank_file_path.exists() {
@@ -440,7 +445,7 @@ async fn create_soundbank(
             .into());
     }
 
-    let sources_dir = current_dir.join("sources");
+    let sources_dir = sources_base;
 
     // Step 3: Get assets to include
     let asset_refs: Vec<(String, String)> = if includes.is_empty() {
@@ -632,10 +637,15 @@ fn prompt_select_assets(
 async fn list_soundbanks(output: &dyn Output) -> Result<()> {
     // Step 1: Detect project
     let current_dir = env::current_dir()?;
-    read_amproject_file(&current_dir)?;
+    let project_config = read_amproject_file(&current_dir)?;
 
     // Step 2: Scan soundbanks directory
-    let soundbanks_dir = current_dir.join("sources").join("soundbanks");
+    let sources_base = if project_config.sources_dir.is_empty() {
+        current_dir.clone()
+    } else {
+        current_dir.join(&project_config.sources_dir)
+    };
+    let soundbanks_dir = sources_base.join("soundbanks");
 
     if !soundbanks_dir.exists() {
         match output.mode() {
@@ -822,7 +832,12 @@ async fn update_soundbank(
     ));
 
     // Step 2: Locate existing soundbank file
-    let soundbanks_dir = current_dir.join("sources").join("soundbanks");
+    let sources_base = if project_config.sources_dir.is_empty() {
+        current_dir.clone()
+    } else {
+        current_dir.join(&project_config.sources_dir)
+    };
+    let soundbanks_dir = sources_base.join("soundbanks");
     let soundbank_file_path = soundbanks_dir.join(format!("{}.json", name));
 
     if !soundbank_file_path.exists() {
@@ -844,7 +859,11 @@ async fn update_soundbank(
         soundbank_file_path.display()
     ))?;
 
-    let sources_dir = current_dir.join("sources");
+    let sources_dir = if project_config.sources_dir.is_empty() {
+        current_dir.clone()
+    } else {
+        current_dir.join(&project_config.sources_dir)
+    };
     let mut updated_fields: Vec<String> = Vec::new();
 
     let has_any_flag = !add_specs.is_empty() || !remove_specs.is_empty();
@@ -1036,10 +1055,15 @@ async fn delete_soundbank(
 ) -> Result<()> {
     // Step 1: Detect project
     let current_dir = env::current_dir()?;
-    read_amproject_file(&current_dir)?;
+    let project_config = read_amproject_file(&current_dir)?;
 
     // Step 2: Locate soundbank file
-    let soundbanks_dir = current_dir.join("sources").join("soundbanks");
+    let sources_base = if project_config.sources_dir.is_empty() {
+        current_dir.clone()
+    } else {
+        current_dir.join(&project_config.sources_dir)
+    };
+    let soundbanks_dir = sources_base.join("soundbanks");
     let soundbank_file_path = soundbanks_dir.join(format!("{}.json", name));
 
     if !soundbank_file_path.exists() {

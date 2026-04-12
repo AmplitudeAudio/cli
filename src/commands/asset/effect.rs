@@ -170,7 +170,12 @@ async fn create_effect(
     ));
 
     // Step 3: Validate effect name doesn't already exist (filesystem + registry)
-    let effects_dir = current_dir.join("sources").join("effects");
+    let sources_base = if project_config.sources_dir.is_empty() {
+        current_dir.clone()
+    } else {
+        current_dir.join(&project_config.sources_dir)
+    };
+    let effects_dir = sources_base.join("effects");
     let effect_file_path = effects_dir.join(format!("{}.json", name));
 
     if effect_file_path.exists() {
@@ -308,10 +313,15 @@ async fn create_effect(
 async fn list_effects(output: &dyn Output) -> Result<()> {
     // Step 1: Detect project
     let current_dir = env::current_dir()?;
-    read_amproject_file(&current_dir)?;
+    let project_config = read_amproject_file(&current_dir)?;
 
-    // Step 2: Scan effects directory
-    let effects_dir = current_dir.join("sources").join("effects");
+    // Step 2: Scan effects directory using sources_dir from config
+    let sources_base = if project_config.sources_dir.is_empty() {
+        current_dir.clone()
+    } else {
+        current_dir.join(&project_config.sources_dir)
+    };
+    let effects_dir = sources_base.join("effects");
 
     // Step 3: Handle missing directory
     if !effects_dir.exists() {
@@ -501,7 +511,12 @@ async fn update_effect(
     ));
 
     // Step 2: Locate existing effect file
-    let effects_dir = current_dir.join("sources").join("effects");
+    let sources_base = if project_config.sources_dir.is_empty() {
+        current_dir.clone()
+    } else {
+        current_dir.join(&project_config.sources_dir)
+    };
+    let effects_dir = sources_base.join("effects");
     let effect_file_path = effects_dir.join(format!("{}.json", name));
 
     if !effect_file_path.exists() {
@@ -731,10 +746,15 @@ async fn delete_effect(
 ) -> Result<()> {
     // Step 1: Detect project
     let current_dir = env::current_dir()?;
-    read_amproject_file(&current_dir)?;
+    let project_config = read_amproject_file(&current_dir)?;
 
     // Step 2: Locate effect file
-    let effects_dir = current_dir.join("sources").join("effects");
+    let sources_base = if project_config.sources_dir.is_empty() {
+        current_dir.clone()
+    } else {
+        current_dir.join(&project_config.sources_dir)
+    };
+    let effects_dir = sources_base.join("effects");
     let effect_file_path = effects_dir.join(format!("{}.json", name));
 
     if !effect_file_path.exists() {

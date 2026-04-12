@@ -234,7 +234,12 @@ async fn create_sound(
     ));
 
     // Step 2: Validate sound name doesn't already exist (filesystem + registry)
-    let sounds_dir = current_dir.join("sources").join("sounds");
+    let sources_base = if project_config.sources_dir.is_empty() {
+        current_dir.clone()
+    } else {
+        current_dir.join(&project_config.sources_dir)
+    };
+    let sounds_dir = sources_base.join("sounds");
     let sound_file_path = sounds_dir.join(format!("{}.json", name));
 
     if sound_file_path.exists() {
@@ -268,7 +273,12 @@ async fn create_sound(
     };
 
     // Step 4: Validate audio file exists
-    let audio_full_path = current_dir.join("data").join(&audio_file);
+    let data_base = if project_config.data_dir.is_empty() {
+        current_dir.clone()
+    } else {
+        current_dir.join(&project_config.data_dir)
+    };
+    let audio_full_path = data_base.join(&audio_file);
     if !audio_full_path.exists() {
         return Err(CliError::new(
             codes::ERR_VALIDATION_FIELD,
@@ -428,14 +438,41 @@ fn spatialization_to_string(spatialization: &Spatialization) -> &'static str {
     }
 }
 
+/// Recursively find all .json files in a directory.
+fn find_json_files_recursive(dir: &std::path::Path) -> anyhow::Result<Vec<std::path::PathBuf>> {
+    let mut files = Vec::new();
+    
+    if !dir.exists() {
+        return Ok(files);
+    }
+    
+    for entry in walkdir::WalkDir::new(dir)
+        .follow_links(true)
+        .into_iter()
+        .filter_map(|e| e.ok())
+    {
+        let path = entry.path();
+        if path.is_file() && path.extension().map(|e| e == "json").unwrap_or(false) {
+            files.push(path.to_path_buf());
+        }
+    }
+    
+    Ok(files)
+}
+
 /// List all sound assets in the current project.
 async fn list_sounds(output: &dyn Output) -> Result<()> {
     // Step 1: Detect project (validates we're in a project directory)
     let current_dir = env::current_dir()?;
-    read_amproject_file(&current_dir)?;
+    let project_config = read_amproject_file(&current_dir)?;
 
-    // Step 2: Scan sounds directory
-    let sounds_dir = current_dir.join("sources").join("sounds");
+    // Step 2: Scan sounds directory using sources_dir from config
+    let sources_base = if project_config.sources_dir.is_empty() {
+        current_dir.clone()
+    } else {
+        current_dir.join(&project_config.sources_dir)
+    };
+    let sounds_dir = sources_base.join("sounds");
 
     // Step 3: Handle missing or unreadable directory
     if !sounds_dir.exists() {
@@ -461,12 +498,12 @@ async fn list_sounds(output: &dyn Output) -> Result<()> {
         return Ok(());
     }
 
-    // Step 4: Read and parse all .json files
+    // Step 4: Read and parse all .json files recursively
     let mut sounds: Vec<Sound> = Vec::new();
     let mut warnings: Vec<String> = Vec::new();
 
-    let entries = match fs::read_dir(&sounds_dir) {
-        Ok(entries) => entries,
+    let json_files = match find_json_files_recursive(&sounds_dir) {
+        Ok(files) => files,
         Err(e) => {
             return Err(CliError::new(
                 codes::ERR_VALIDATION_FIELD,
@@ -479,10 +516,7 @@ async fn list_sounds(output: &dyn Output) -> Result<()> {
         }
     };
 
-    for entry in entries {
-        let entry = entry?;
-        let path = entry.path();
-
+    for path in json_files {
         if path.extension().map(|e| e == "json").unwrap_or(false) {
             match fs::read_to_string(&path) {
                 Ok(content) => match serde_json::from_str::<Sound>(&content) {
@@ -490,7 +524,12 @@ async fn list_sounds(output: &dyn Output) -> Result<()> {
                         // Check if referenced audio file exists
                         let path_str = sound.path.as_deref().unwrap_or("");
                         if !path_str.is_empty() {
-                            let audio_path = current_dir.join("data").join(path_str);
+                            let data_base = if project_config.data_dir.is_empty() {
+                                current_dir.clone()
+                            } else {
+                                current_dir.join(&project_config.data_dir)
+                            };
+                            let audio_path = data_base.join(path_str);
                             if !audio_path.exists() {
                                 warnings.push(format!(
                                     "Warning: Sound '{}' references missing audio file: {}. Re-add the file or update the sound.",
@@ -787,7 +826,12 @@ async fn update_sound(
     ));
 
     // Step 2: Locate existing sound file
-    let sounds_dir = current_dir.join("sources").join("sounds");
+    let sources_base = if project_config.sources_dir.is_empty() {
+        current_dir.clone()
+    } else {
+        current_dir.join(&project_config.sources_dir)
+    };
+    let sounds_dir = sources_base.join("sounds");
     let sound_file_path = sounds_dir.join(format!("{}.json", name));
 
     if !sound_file_path.exists() {

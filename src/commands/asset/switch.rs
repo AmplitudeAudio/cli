@@ -146,7 +146,12 @@ async fn create_switch(
     ));
 
     // Step 3: Validate switch name doesn't already exist
-    let switches_dir = current_dir.join("sources").join("switches");
+    let sources_base = if project_config.sources_dir.is_empty() {
+        current_dir.clone()
+    } else {
+        current_dir.join(&project_config.sources_dir)
+    };
+    let switches_dir = sources_base.join("switches");
     let switch_file_path = switches_dir.join(format!("{}.json", name));
 
     if switch_file_path.exists() {
@@ -369,10 +374,15 @@ fn prompt_states(input: &dyn Input) -> Result<Vec<String>> {
 async fn list_switches(output: &dyn Output) -> Result<()> {
     // Step 1: Detect project
     let current_dir = env::current_dir()?;
-    read_amproject_file(&current_dir)?;
+    let project_config = read_amproject_file(&current_dir)?;
 
     // Step 2: Scan switches directory
-    let switches_dir = current_dir.join("sources").join("switches");
+    let sources_base = if project_config.sources_dir.is_empty() {
+        current_dir.clone()
+    } else {
+        current_dir.join(&project_config.sources_dir)
+    };
+    let switches_dir = sources_base.join("switches");
 
     // Step 3: Handle missing directory
     if !switches_dir.exists() {
@@ -576,7 +586,12 @@ async fn update_switch(
     ));
 
     // Step 2: Locate existing switch file
-    let switches_dir = current_dir.join("sources").join("switches");
+    let sources_base = if project_config.sources_dir.is_empty() {
+        current_dir.clone()
+    } else {
+        current_dir.join(&project_config.sources_dir)
+    };
+    let switches_dir = sources_base.join("switches");
     let switch_file_path = switches_dir.join(format!("{}.json", name));
 
     if !switch_file_path.exists() {
@@ -871,10 +886,15 @@ async fn delete_switch(
 ) -> Result<()> {
     // Step 1: Detect project
     let current_dir = env::current_dir()?;
-    read_amproject_file(&current_dir)?;
+    let project_config = read_amproject_file(&current_dir)?;
 
     // Step 2: Locate switch file
-    let switches_dir = current_dir.join("sources").join("switches");
+    let sources_base = if project_config.sources_dir.is_empty() {
+        current_dir.clone()
+    } else {
+        current_dir.join(&project_config.sources_dir)
+    };
+    let switches_dir = sources_base.join("switches");
     let switch_file_path = switches_dir.join(format!("{}.json", name));
 
     if !switch_file_path.exists() {

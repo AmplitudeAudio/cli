@@ -160,7 +160,12 @@ async fn create_switch_container(
     ));
 
     // Step 3: Validate switch container name doesn't already exist
-    let switch_containers_dir = current_dir.join("sources").join("switch_containers");
+    let sources_base = if project_config.sources_dir.is_empty() {
+        current_dir.clone()
+    } else {
+        current_dir.join(&project_config.sources_dir)
+    };
+    let switch_containers_dir = sources_base.join("switch_containers");
     let container_file_path = switch_containers_dir.join(format!("{}.json", name));
 
     if container_file_path.exists() {
@@ -693,10 +698,15 @@ fn get_available_collections(context: &ProjectContext) -> Result<Vec<(String, u6
 async fn list_switch_containers(output: &dyn Output) -> Result<()> {
     // Step 1: Detect project
     let current_dir = env::current_dir()?;
-    read_amproject_file(&current_dir)?;
+    let project_config = read_amproject_file(&current_dir)?;
 
     // Step 2: Scan switch_containers directory
-    let containers_dir = current_dir.join("sources").join("switch_containers");
+    let sources_base = if project_config.sources_dir.is_empty() {
+        current_dir.clone()
+    } else {
+        current_dir.join(&project_config.sources_dir)
+    };
+    let containers_dir = sources_base.join("switch_containers");
 
     // Step 3: Handle missing directory
     if !containers_dir.exists() {
@@ -921,7 +931,12 @@ async fn update_switch_container(
     ));
 
     // Step 2: Locate existing container file
-    let containers_dir = current_dir.join("sources").join("switch_containers");
+    let sources_base = if project_config.sources_dir.is_empty() {
+        current_dir.clone()
+    } else {
+        current_dir.join(&project_config.sources_dir)
+    };
+    let containers_dir = sources_base.join("switch_containers");
     let container_file_path = containers_dir.join(format!("{}.json", name));
 
     if !container_file_path.exists() {
@@ -1332,10 +1347,15 @@ async fn delete_switch_container(
 ) -> Result<()> {
     // Step 1: Detect project
     let current_dir = env::current_dir()?;
-    read_amproject_file(&current_dir)?;
+    let project_config = read_amproject_file(&current_dir)?;
 
     // Step 2: Locate container file
-    let containers_dir = current_dir.join("sources").join("switch_containers");
+    let sources_base = if project_config.sources_dir.is_empty() {
+        current_dir.clone()
+    } else {
+        current_dir.join(&project_config.sources_dir)
+    };
+    let containers_dir = sources_base.join("switch_containers");
     let container_file_path = containers_dir.join(format!("{}.json", name));
 
     if !container_file_path.exists() {
