@@ -578,9 +578,15 @@ async fn handle_info_by_name(
             let project_path = PathBuf::from(&project.path);
             let asset_counts = count_assets_by_type(&project_path).unwrap_or_default();
 
+            // Read the .amproject file to get the actual directory configuration
+            let config = read_amproject_file(&project_path)?;
+
             display_project_info(
                 &project.name,
                 &project_path,
+                &config.sources_dir,
+                &config.data_dir,
+                &config.build_dir,
                 true,
                 project.registered_at.as_deref(),
                 &asset_counts,
@@ -628,6 +634,9 @@ async fn handle_info_current_dir(
             display_project_info(
                 &config.name,
                 cwd,
+                &config.sources_dir,
+                &config.data_dir,
+                &config.build_dir,
                 true,
                 project.registered_at.as_deref(),
                 &asset_counts,
@@ -636,12 +645,15 @@ async fn handle_info_current_dir(
         }
         None => match output.mode() {
             crate::presentation::OutputMode::Json => {
-                display_project_info(&config.name, cwd, false, None, &asset_counts, output);
+                display_project_info(&config.name, cwd, &config.sources_dir, &config.data_dir, &config.build_dir, false, None, &asset_counts, output);
             }
             crate::presentation::OutputMode::Interactive => {
                 display_project_info_interactive(
                     &config.name,
                     cwd,
+                    &config.sources_dir,
+                    &config.data_dir,
+                    &config.build_dir,
                     false,
                     None,
                     &asset_counts,
@@ -674,6 +686,9 @@ async fn handle_info_current_dir(
 fn display_project_info(
     name: &str,
     path: &std::path::Path,
+    sources_dir: &str,
+    data_dir: &str,
+    build_dir: &str,
     registered: bool,
     registered_at: Option<&str>,
     asset_counts: &HashMap<String, usize>,
@@ -682,13 +697,16 @@ fn display_project_info(
     match output.mode() {
         crate::presentation::OutputMode::Json => {
             let json_data =
-                build_project_info_json(name, path, registered, registered_at, asset_counts);
+                build_project_info_json(name, path, sources_dir, data_dir, build_dir, registered, registered_at, asset_counts);
             output.success(json_data, None);
         }
         crate::presentation::OutputMode::Interactive => {
             display_project_info_interactive(
                 name,
                 path,
+                sources_dir,
+                data_dir,
+                build_dir,
                 registered,
                 registered_at,
                 asset_counts,
@@ -698,23 +716,77 @@ fn display_project_info(
     }
 }
 
+fn normalize_path(path: &std::path::Path) -> String {
+    // Normalize the path by resolving . and .. components
+    // without requiring the path to exist (unlike canonicalize)
+    let mut components = Vec::new();
+    for component in path.components() {
+        match component {
+            std::path::Component::Prefix(_) | std::path::Component::RootDir => {
+                components.push(component);
+            }
+            std::path::Component::CurDir => {
+                // Skip . components
+            }
+            std::path::Component::ParentDir => {
+                // Pop the last component if it's a normal directory
+                if let Some(last) = components.last() {
+                    if matches!(last, std::path::Component::Normal(_)) {
+                        components.pop();
+                    } else {
+                        components.push(component);
+                    }
+                } else {
+                    components.push(component);
+                }
+            }
+            std::path::Component::Normal(_) => {
+                components.push(component);
+            }
+        }
+    }
+
+    let normalized: std::path::PathBuf = components.iter().collect();
+    normalized.to_str().unwrap_or_default().to_string()
+}
+
 fn build_project_info_json(
     name: &str,
     path: &std::path::Path,
+    sources_dir: &str,
+    data_dir: &str,
+    build_dir: &str,
     registered: bool,
     registered_at: Option<&str>,
     asset_counts: &HashMap<String, usize>,
 ) -> serde_json::Value {
     let path_str = path.to_str().unwrap_or_default();
 
+    // Resolve relative paths against the project root and normalize
+    let sources_path = if sources_dir.is_empty() {
+        path_str.to_string()
+    } else {
+        normalize_path(&path.join(sources_dir))
+    };
+    let data_path = if data_dir.is_empty() {
+        path_str.to_string()
+    } else {
+        normalize_path(&path.join(data_dir))
+    };
+    let build_path = if build_dir.is_empty() {
+        path_str.to_string()
+    } else {
+        normalize_path(&path.join(build_dir))
+    };
+
     let mut json_value = json!({
         "name": name,
         "path": path_str,
         "registered": registered,
         "paths": {
-            "sources": format!("{}/sources", path_str),
-            "data": format!("{}/data", path_str),
-            "build": format!("{}/build", path_str),
+            "sources": sources_path,
+            "data": data_path,
+            "build": build_path,
         },
         "assets": {
             "sounds": asset_counts.get("sounds").unwrap_or(&0),
@@ -746,12 +818,32 @@ fn build_project_info_json(
 fn display_project_info_interactive(
     name: &str,
     path: &std::path::Path,
+    sources_dir: &str,
+    data_dir: &str,
+    build_dir: &str,
     registered: bool,
     registered_at: Option<&str>,
     asset_counts: &HashMap<String, usize>,
     output: &dyn Output,
 ) {
     let path_str = path.to_str().unwrap_or_default();
+
+    // Resolve relative paths against the project root and normalize
+    let sources_path = if sources_dir.is_empty() {
+        path_str.to_string()
+    } else {
+        normalize_path(&path.join(sources_dir))
+    };
+    let data_path = if data_dir.is_empty() {
+        path_str.to_string()
+    } else {
+        normalize_path(&path.join(data_dir))
+    };
+    let build_path = if build_dir.is_empty() {
+        path_str.to_string()
+    } else {
+        normalize_path(&path.join(build_dir))
+    };
 
     output.progress(&format!("Project: {}", name.cyan().bold()));
     output.progress(&"─".repeat(PROJECT_INFO_SEPARATOR_WIDTH));
@@ -769,9 +861,9 @@ fn display_project_info_interactive(
     }
     output.progress("");
     output.progress("Paths:");
-    output.progress(&format!("  Sources:        {}/sources", path_str));
-    output.progress(&format!("  Data:           {}/data", path_str));
-    output.progress(&format!("  Build:          {}/build", path_str));
+    output.progress(&format!("  Sources:        {}", sources_path));
+    output.progress(&format!("  Data:           {}", data_path));
+    output.progress(&format!("  Build:          {}", build_path));
 
     let has_assets = asset_counts.values().any(|&v| v > 0);
     if has_assets {
