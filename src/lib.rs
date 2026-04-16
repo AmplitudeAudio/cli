@@ -19,6 +19,7 @@
 pub mod app;
 pub mod assets;
 pub mod common;
+pub mod compiler;
 pub mod config;
 pub mod database;
 pub mod input;
