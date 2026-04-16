@@ -45,6 +45,37 @@ use log::warn;
 use super::{AssetType, ValidationError, ValidationLayer};
 use crate::common::errors::codes;
 
+/// Runtime binary extensions mapped to their source equivalent.
+/// Soundbank references use these runtime names; the validator needs to
+/// convert them back to `.json` to find the source file on disk.
+const RUNTIME_EXTENSIONS: &[&str] = &[
+    ".amsound",
+    ".amcollection",
+    ".ambank",
+    ".amevent",
+    ".ampipeline",
+    ".amattenuation",
+    ".amswitch",
+    ".amswitchcontainer",
+    ".amrtpc",
+    ".amenv",
+    ".amfx",
+    ".amconfig",
+    ".ambus",
+];
+
+/// Convert a runtime binary asset path to its source `.json` path.
+///
+/// Example: `sounds/throw_01.wav.amsound` → `sounds/throw_01.wav.json`
+fn runtime_path_to_source(path: &str) -> String {
+    for ext in RUNTIME_EXTENSIONS {
+        if path.ends_with(ext) {
+            return format!("{}.json", &path[..path.len() - ext.len()]);
+        }
+    }
+    path.to_string()
+}
+
 /// Validates cross-asset references within an Amplitude project.
 ///
 /// Scans all asset directories under `sources/` to build a registry of known
@@ -289,10 +320,21 @@ impl ProjectValidator {
 
     /// Checks if an asset exists at the given path relative to the sources directory.
     ///
-    /// Path strings are compared as-is against tracked file paths from scanning.
-    /// The path should be relative to the `sources/` directory (e.g., `sounds/footstep.json`).
+    /// Supports both source paths (`sounds/footstep.json`) and runtime binary paths
+    /// (`sounds/footstep.amsound`). Runtime extensions are mapped back to `.json` for
+    /// lookup since the validator scans source files on disk.
     pub fn asset_exists_by_path(&self, path: &str) -> bool {
-        self.asset_paths.contains(path)
+        if self.asset_paths.contains(path) {
+            return true;
+        }
+
+        // Map runtime binary extensions back to .json for source file lookup
+        let json_path = runtime_path_to_source(path);
+        if json_path != path {
+            return self.asset_paths.contains(json_path.as_str());
+        }
+
+        false
     }
 
     /// Returns the project root path.

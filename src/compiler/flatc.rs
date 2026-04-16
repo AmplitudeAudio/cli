@@ -371,7 +371,7 @@ fn build_table<'a>(
             continue;
         }
 
-        let slot = field.id() as VOffsetT;
+        let slot = flatbuffers::field_index_to_field_offset(field.id());
         let base_type = field.type_().base_type();
 
         // Handle UType discriminators (pushed as u8).
@@ -641,18 +641,93 @@ fn build_vector<'a>(
             }
         }
         BaseType::Union => {
-            bail!("vectors of unions are not supported");
+            // Vector of unions: each element is a table whose type is determined
+            // by the companion `<field>_type` vector in the parent JSON.
+            // We build each element as a table based on its resolved variant.
+            let enum_idx = field.type_().index();
+            let union_enum = schema.enums().get(enum_idx as usize);
+
+            let mut offsets: Vec<WIPOffset<flatbuffers::TableFinishedWIPOffset>> =
+                Vec::with_capacity(arr.len());
+
+            for v in arr {
+                // Each element in a union vector is a table.
+                // The type discriminator comes from the companion _type vector,
+                // but we don't have it here. Instead, we look at the JSON object
+                // fields to determine the variant — union vector elements are
+                // typically all the same type, or we pick the first non-NONE variant.
+                // In FlatBuffers JSON, vector-of-union elements are just objects
+                // whose type is implied by the companion _type array.
+                // We need to try each non-NONE variant until one succeeds.
+                let child_json = v
+                    .as_object()
+                    .with_context(|| format!("union vector element in '{}' expected object", field.name()))?;
+
+                let mut built = false;
+                let values = union_enum.values();
+                for j in 0..values.len() {
+                    let ev = values.get(j);
+                    if ev.value() == 0 {
+                        continue; // Skip NONE
+                    }
+                    if let Some(ut) = ev.union_type() {
+                        if ut.base_type() == BaseType::Obj {
+                            let obj_idx = ut.index();
+                            let variant_obj = schema.objects().get(obj_idx as usize);
+                            // Try building with this variant's schema
+                            match build_table(builder, schema, &variant_obj, child_json) {
+                                Ok(off) => {
+                                    offsets.push(off);
+                                    built = true;
+                                    break;
+                                }
+                                Err(_) => continue,
+                            }
+                        }
+                    }
+                }
+                if !built {
+                    bail!(
+                        "could not resolve union vector element in field '{}'",
+                        field.name()
+                    );
+                }
+            }
+            let off = builder.create_vector(&offsets);
+            Ok(PrebuiltOffset::from_wip(off))
+        }
+        BaseType::UType => {
+            // Vector of union type discriminators (e.g., sounds_type).
+            // Values are enum variant names or integers, resolved to u8.
+            let enum_idx = field.type_().index();
+            let items: Vec<u8> = arr
+                .iter()
+                .map(|v| {
+                    if let Some(n) = v.as_i64() {
+                        n as u8
+                    } else if let Some(s) = v.as_str() {
+                        if enum_idx >= 0 {
+                            resolve_enum_name(schema, enum_idx as usize, s).unwrap_or(0) as u8
+                        } else {
+                            0
+                        }
+                    } else {
+                        0
+                    }
+                })
+                .collect();
+            let off = builder.create_vector(&items);
+            Ok(PrebuiltOffset::from_wip(off))
         }
         _ => {
             // For enum-typed vectors, try to resolve as integers.
+            let enum_idx = field.type_().index();
             let items: Vec<i64> = arr
                 .iter()
                 .map(|v| {
                     if let Some(n) = v.as_i64() {
                         n
                     } else if let Some(s) = v.as_str() {
-                        // Try enum resolution.
-                        let enum_idx = field.type_().index();
                         if enum_idx >= 0 {
                             resolve_enum_name(schema, enum_idx as usize, s).unwrap_or(0)
                         } else {
@@ -664,14 +739,9 @@ fn build_vector<'a>(
                 })
                 .collect();
 
-            // Push as the element's scalar type.
-            match element_type {
-                _ => {
-                    let i32_items: Vec<i32> = items.iter().map(|&v| v as i32).collect();
-                    let off = builder.create_vector(&i32_items);
-                    Ok(PrebuiltOffset::from_wip(off))
-                }
-            }
+            let i32_items: Vec<i32> = items.iter().map(|&v| v as i32).collect();
+            let off = builder.create_vector(&i32_items);
+            Ok(PrebuiltOffset::from_wip(off))
         }
     }
 }

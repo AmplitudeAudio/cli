@@ -348,78 +348,31 @@ impl Asset for Soundbank {
         // Note: The SDK uses path strings for references, so we can't directly
         // check for ID matches. This check would need path-to-ID resolution.
 
-        // Validate all referenced assets exist (if validator is available)
+        // Validate all referenced assets exist (if validator is available).
+        // Soundbank references use runtime binary names (e.g., "throw.amsound")
+        // without a type directory prefix. We prepend the type directory so the
+        // validator can locate the source file on disk.
         if let Some(ref validator) = context.validator {
             let mut missing_assets: Vec<String> = Vec::new();
 
-            // Validate sounds
-            if let Some(ref sounds) = self.sounds {
-                for sound_path in sounds {
-                    if !validator.asset_exists_by_path(sound_path) {
-                        missing_assets.push(format!("sound: {}", sound_path));
-                    }
-                }
-            }
+            let checks: &[(&str, &Option<Vec<String>>)] = &[
+                ("sounds", &self.sounds),
+                ("collections", &self.collections),
+                ("events", &self.events),
+                ("switches", &self.switches),
+                ("switch_containers", &self.switch_containers),
+                ("effects", &self.effects),
+                ("attenuators", &self.attenuators),
+                ("rtpc", &self.rtpc),
+            ];
 
-            // Validate collections
-            if let Some(ref collections) = self.collections {
-                for collection_path in collections {
-                    if !validator.asset_exists_by_path(collection_path) {
-                        missing_assets.push(format!("collection: {}", collection_path));
-                    }
-                }
-            }
-
-            // Validate events
-            if let Some(ref events) = self.events {
-                for event_path in events {
-                    if !validator.asset_exists_by_path(event_path) {
-                        missing_assets.push(format!("event: {}", event_path));
-                    }
-                }
-            }
-
-            // Validate switches
-            if let Some(ref switches) = self.switches {
-                for switch_path in switches {
-                    if !validator.asset_exists_by_path(switch_path) {
-                        missing_assets.push(format!("switch: {}", switch_path));
-                    }
-                }
-            }
-
-            // Validate switch containers
-            if let Some(ref containers) = self.switch_containers {
-                for container_path in containers {
-                    if !validator.asset_exists_by_path(container_path) {
-                        missing_assets.push(format!("switch_container: {}", container_path));
-                    }
-                }
-            }
-
-            // Validate effects
-            if let Some(ref effects) = self.effects {
-                for effect_path in effects {
-                    if !validator.asset_exists_by_path(effect_path) {
-                        missing_assets.push(format!("effect: {}", effect_path));
-                    }
-                }
-            }
-
-            // Validate attenuators
-            if let Some(ref attenuators) = self.attenuators {
-                for attenuator_path in attenuators {
-                    if !validator.asset_exists_by_path(attenuator_path) {
-                        missing_assets.push(format!("attenuator: {}", attenuator_path));
-                    }
-                }
-            }
-
-            // Validate RTPCs
-            if let Some(ref rtpcs) = self.rtpc {
-                for rtpc_path in rtpcs {
-                    if !validator.asset_exists_by_path(rtpc_path) {
-                        missing_assets.push(format!("rtpc: {}", rtpc_path));
+            for &(type_dir, ref field) in checks {
+                if let Some(paths) = field {
+                    for asset_path in paths {
+                        let full_path = format!("{}/{}", type_dir, asset_path);
+                        if !validator.asset_exists_by_path(&full_path) {
+                            missing_assets.push(format!("{}: {}", type_dir, asset_path));
+                        }
                     }
                 }
             }
