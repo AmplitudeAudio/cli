@@ -516,7 +516,7 @@ impl ProjectContext {
         let data_dir = match crate::common::utils::read_amproject_file(&project_root) {
             Ok(config) => {
                 if config.data_dir.is_empty() {
-                    project_root.join("data")
+                    project_root.clone()
                 } else {
                     project_root.join(&config.data_dir)
                 }
