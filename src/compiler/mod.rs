@@ -315,7 +315,7 @@ pub fn compile_project(
                     summary.total_bytes += bytes_written;
                     *summary.type_counts.entry(type_key.clone()).or_insert(0) += 1;
 
-                    log::info!(
+                    log::debug!(
                         "compiled {} -> {} ({} bytes)",
                         source.display(),
                         target.display(),
