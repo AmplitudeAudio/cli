@@ -16,6 +16,7 @@ mod app;
 mod assets;
 mod commands;
 mod common;
+mod compiler;
 mod config;
 mod database;
 mod input;
