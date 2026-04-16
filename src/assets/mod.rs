@@ -497,6 +497,8 @@ impl From<ValidationError> for CliError {
 pub struct ProjectContext {
     /// Root path of the project (where .amproject lives)
     pub project_root: PathBuf,
+    /// Resolved data directory path (audio files)
+    pub data_dir: PathBuf,
     /// Registry of existing asset IDs for uniqueness checks (populated lazily)
     pub id_registry: HashSet<u64>,
     /// Registry of existing asset names by type (populated lazily)
@@ -508,11 +510,23 @@ pub struct ProjectContext {
 impl ProjectContext {
     /// Creates a new ProjectContext for the given project root.
     ///
-    /// The registries are initially empty and should be populated
-    /// before validation if uniqueness checks are needed.
+    /// Reads `.amproject` to resolve the data directory path.
+    /// Falls back to `<project_root>/data` if `.amproject` is unavailable.
     pub fn new(project_root: PathBuf) -> Self {
+        let data_dir = match crate::common::utils::read_amproject_file(&project_root) {
+            Ok(config) => {
+                if config.data_dir.is_empty() {
+                    project_root.join("data")
+                } else {
+                    project_root.join(&config.data_dir)
+                }
+            }
+            Err(_) => project_root.join("data"),
+        };
+
         Self {
             project_root,
+            data_dir,
             id_registry: HashSet::new(),
             name_registry: HashMap::new(),
             validator: None,
@@ -524,7 +538,13 @@ impl ProjectContext {
     /// Uses current directory as root. Useful when only registry
     /// operations are needed without actual file system access.
     pub fn empty() -> Self {
-        Self::new(PathBuf::new())
+        Self {
+            project_root: PathBuf::new(),
+            data_dir: PathBuf::from("data"),
+            id_registry: HashSet::new(),
+            name_registry: HashMap::new(),
+            validator: None,
+        }
     }
 
     /// Attaches a `ProjectValidator` for cross-asset reference checking.

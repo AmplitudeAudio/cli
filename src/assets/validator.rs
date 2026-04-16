@@ -162,6 +162,12 @@ impl ProjectValidator {
             validator.scan_assets_of_type(*asset_type)?;
         }
 
+        // Scan additional directories that don't have AssetType variants
+        // but are referenced by soundbanks (attenuators, pipelines, rtpc)
+        for extra_dir in &["attenuators", "pipelines", "rtpc"] {
+            validator.scan_directory_paths(extra_dir);
+        }
+
         Ok(validator)
     }
 
@@ -374,30 +380,16 @@ impl ProjectValidator {
     fn scan_assets_of_type(&mut self, asset_type: AssetType) -> anyhow::Result<()> {
         let dir = self.sources_dir.join(asset_type.directory_name());
 
-        // Attempt to read the directory directly. Missing or non-directory paths
-        // return an error which we treat as "no assets of this type" (not a failure).
-        let entries = match fs::read_dir(&dir) {
-            Ok(entries) => entries,
-            Err(_) => return Ok(()),
-        };
+        if !dir.exists() {
+            return Ok(());
+        }
 
-        for entry in entries {
-            let entry = match entry {
-                Ok(e) => e,
-                Err(err) => {
-                    warn!(
-                        "Failed to read directory entry in {}: {}",
-                        dir.display(),
-                        err
-                    );
-                    continue;
-                }
-            };
+        // Walk recursively to handle subdirectories (e.g., sounds/footsteps/grass/)
+        for entry in walkdir::WalkDir::new(&dir).into_iter().flatten() {
+            let path = entry.into_path();
 
-            let path = entry.path();
-
-            // Only process .json files (skip directories, non-JSON files, etc.)
-            if path.extension().is_none_or(|ext| ext != "json") {
+            // Only process .json files
+            if !path.is_file() || path.extension().is_none_or(|ext| ext != "json") {
                 continue;
             }
 
@@ -439,6 +431,30 @@ impl ProjectValidator {
         }
 
         Ok(())
+    }
+
+    /// Scan a directory by name for path-based lookups only (no id/name extraction).
+    ///
+    /// Used for asset types that don't have `AssetType` variants (attenuators,
+    /// pipelines, rtpc) but are referenced by soundbanks.
+    fn scan_directory_paths(&mut self, dir_name: &str) {
+        let dir = self.sources_dir.join(dir_name);
+
+        if !dir.exists() {
+            return;
+        }
+
+        for entry in walkdir::WalkDir::new(&dir).into_iter().flatten() {
+            let path = entry.into_path();
+            if !path.is_file() || path.extension().is_none_or(|ext| ext != "json") {
+                continue;
+            }
+
+            if let Ok(relative) = path.strip_prefix(&self.sources_dir) {
+                self.asset_paths
+                    .insert(relative.to_string_lossy().into_owned());
+            }
+        }
     }
 }
 

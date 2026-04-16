@@ -219,7 +219,7 @@ impl Asset for Sound {
             )
             .with_field("path"));
         }
-        let audio_path = context.project_root.join("data").join(path_str);
+        let audio_path = context.data_dir.join(path_str);
         if !audio_path.exists() {
             return Err(ValidationError::type_rule_violation(
                 format!("Audio file not found: {}", path_str),
