@@ -1190,7 +1190,17 @@ async fn delete_soundbank(
 
 /// Check which assets would become orphaned (not in any other soundbank) after deletion.
 fn check_orphaned_assets(soundbank: &Soundbank, project_root: &std::path::Path) -> Vec<String> {
-    let soundbanks_dir = project_root.join("sources").join("soundbanks");
+    let sources_dir = match crate::common::utils::read_amproject_file(project_root) {
+        Ok(config) => {
+            if config.sources_dir.is_empty() {
+                project_root.to_path_buf()
+            } else {
+                project_root.join(&config.sources_dir)
+            }
+        }
+        Err(_) => project_root.join("sources"),
+    };
+    let soundbanks_dir = sources_dir.join("soundbanks");
 
     // Load all other soundbanks
     let mut other_assets: std::collections::HashSet<String> = std::collections::HashSet::new();

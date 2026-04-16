@@ -1062,7 +1062,11 @@ async fn handle_validate_project_command(
         ]
     });
 
-    let sources_dir = current_dir.join("sources");
+    let sources_dir = if project_config.sources_dir.is_empty() {
+        current_dir.clone()
+    } else {
+        current_dir.join(&project_config.sources_dir)
+    };
     let mut errors: Vec<ValidationResult> = Vec::new();
     let mut warnings: Vec<String> = Vec::new();
     let mut asset_summary: HashMap<String, usize> = HashMap::new();

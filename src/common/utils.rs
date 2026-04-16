@@ -232,7 +232,16 @@ pub fn read_amproject_file(path: &Path) -> anyhow::Result<ProjectConfiguration> 
 /// println!("Sounds: {}", counts.get("sounds").unwrap_or(&0));
 /// ```
 pub fn count_assets_by_type(project_path: &Path) -> anyhow::Result<HashMap<String, usize>> {
-    let sources_dir = project_path.join("sources");
+    let sources_dir = match read_amproject_file(project_path) {
+        Ok(config) => {
+            if config.sources_dir.is_empty() {
+                project_path.to_path_buf()
+            } else {
+                project_path.join(&config.sources_dir)
+            }
+        }
+        Err(_) => project_path.join("sources"),
+    };
     let mut counts = HashMap::new();
 
     // Initialize all asset types with 0

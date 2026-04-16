@@ -328,9 +328,24 @@ struct SwitchStateInfo {
     name: String,
 }
 
+/// Resolve the sources directory from the project config.
+fn resolve_sources_dir(project_root: &std::path::Path) -> std::path::PathBuf {
+    match read_amproject_file(project_root) {
+        Ok(config) => {
+            if config.sources_dir.is_empty() {
+                project_root.to_path_buf()
+            } else {
+                project_root.join(&config.sources_dir)
+            }
+        }
+        Err(_) => project_root.join("sources"),
+    }
+}
+
 /// Find a switch by name and return its info.
 fn find_switch_by_name(context: &ProjectContext, name: &str) -> Result<Option<SwitchInfo>> {
-    let switches_dir = context.project_root.join("sources").join("switches");
+    let sources_dir = resolve_sources_dir(&context.project_root);
+    let switches_dir = sources_dir.join("switches");
     let switch_file = switches_dir.join(format!("{}.json", name));
 
     if !switch_file.exists() {
@@ -367,7 +382,8 @@ fn find_switch_by_name(context: &ProjectContext, name: &str) -> Result<Option<Sw
 
 /// Get all available switches in the project.
 fn get_available_switches(context: &ProjectContext) -> Result<Vec<SwitchInfo>> {
-    let switches_dir = context.project_root.join("sources").join("switches");
+    let sources_dir = resolve_sources_dir(&context.project_root);
+    let switches_dir = sources_dir.join("switches");
 
     if !switches_dir.exists() {
         return Ok(Vec::new());
@@ -634,8 +650,10 @@ fn prompt_mappings(
 
 /// Find an asset (sound or collection) ID by name.
 fn find_asset_id_by_name(context: &ProjectContext, name: &str) -> Result<Option<u64>> {
+    let sources_dir = resolve_sources_dir(&context.project_root);
+
     // Try sounds first
-    let sounds_dir = context.project_root.join("sources").join("sounds");
+    let sounds_dir = sources_dir.join("sounds");
     let sound_file = sounds_dir.join(format!("{}.json", name));
 
     if sound_file.exists() {
@@ -645,7 +663,7 @@ fn find_asset_id_by_name(context: &ProjectContext, name: &str) -> Result<Option<
     }
 
     // Try collections
-    let collections_dir = context.project_root.join("sources").join("collections");
+    let collections_dir = sources_dir.join("collections");
     let collection_file = collections_dir.join(format!("{}.json", name));
 
     if collection_file.exists() {
@@ -659,7 +677,8 @@ fn find_asset_id_by_name(context: &ProjectContext, name: &str) -> Result<Option<
 
 /// Get all available sounds in the project.
 fn get_available_sounds(context: &ProjectContext) -> Result<Vec<(String, u64)>> {
-    let sounds_dir = context.project_root.join("sources").join("sounds");
+    let sources_dir = resolve_sources_dir(&context.project_root);
+    let sounds_dir = sources_dir.join("sounds");
 
     if !sounds_dir.exists() {
         return Ok(Vec::new());
@@ -686,7 +705,8 @@ fn get_available_sounds(context: &ProjectContext) -> Result<Vec<(String, u64)>> 
 
 /// Get all available collections in the project.
 fn get_available_collections(context: &ProjectContext) -> Result<Vec<(String, u64)>> {
-    let collections_dir = context.project_root.join("sources").join("collections");
+    let sources_dir = resolve_sources_dir(&context.project_root);
+    let collections_dir = sources_dir.join("collections");
 
     if !collections_dir.exists() {
         return Ok(Vec::new());

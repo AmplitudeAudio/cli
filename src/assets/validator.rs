@@ -91,6 +91,8 @@ fn runtime_path_to_source(path: &str) -> String {
 pub struct ProjectValidator {
     /// Root path of the project (where .amproject lives).
     project_root: PathBuf,
+    /// Resolved sources directory (from .amproject `sources_dir` field).
+    sources_dir: PathBuf,
     /// All known asset IDs grouped by type.
     pub(crate) asset_ids: HashMap<AssetType, HashSet<u64>>,
     /// All known asset names grouped by type.
@@ -124,8 +126,21 @@ impl ProjectValidator {
     /// Returns an error only for I/O failures that prevent scanning entirely
     /// (e.g., permission denied on the sources directory itself).
     pub fn new(project_root: PathBuf) -> anyhow::Result<Self> {
+        // Read .amproject to get the configured sources directory
+        let sources_dir = match crate::common::utils::read_amproject_file(&project_root) {
+            Ok(config) => {
+                if config.sources_dir.is_empty() {
+                    project_root.clone()
+                } else {
+                    project_root.join(&config.sources_dir)
+                }
+            }
+            Err(_) => project_root.join("sources"), // fallback for projects without .amproject
+        };
+
         let mut validator = Self {
             project_root,
+            sources_dir,
             asset_ids: HashMap::new(),
             asset_names: HashMap::new(),
             asset_locations: HashMap::new(),
@@ -156,6 +171,7 @@ impl ProjectValidator {
     pub fn empty() -> Self {
         Self {
             project_root: PathBuf::new(),
+            sources_dir: PathBuf::new(),
             asset_ids: HashMap::new(),
             asset_names: HashMap::new(),
             asset_locations: HashMap::new(),
@@ -342,6 +358,11 @@ impl ProjectValidator {
         &self.project_root
     }
 
+    /// Returns the resolved sources directory path.
+    pub fn sources_dir(&self) -> &Path {
+        &self.sources_dir
+    }
+
     /// Scans a single asset type directory and populates the registries.
     ///
     /// Reads all `.json` files from `sources/<type>/`, extracting `id` and
@@ -351,10 +372,7 @@ impl ProjectValidator {
     /// Symlinks are followed when scanning. Symlinked JSON files are processed
     /// as regular files.
     fn scan_assets_of_type(&mut self, asset_type: AssetType) -> anyhow::Result<()> {
-        let dir = self
-            .project_root
-            .join("sources")
-            .join(asset_type.directory_name());
+        let dir = self.sources_dir.join(asset_type.directory_name());
 
         // Attempt to read the directory directly. Missing or non-directory paths
         // return an error which we treat as "no assets of this type" (not a failure).
@@ -413,9 +431,8 @@ impl ProjectValidator {
                     .insert(name.to_string());
             }
 
-            // Track the relative path from sources/ for path-based lookups
-            let sources_dir = self.project_root.join("sources");
-            if let Ok(relative) = path.strip_prefix(&sources_dir) {
+            // Track the relative path from sources dir for path-based lookups
+            if let Ok(relative) = path.strip_prefix(&self.sources_dir) {
                 self.asset_paths
                     .insert(relative.to_string_lossy().into_owned());
             }
