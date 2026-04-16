@@ -102,6 +102,19 @@ pub mod codes {
 
     /// Failed to load SDK schema files (.bfbs files)
     pub const ERR_SDK_SCHEMA_LOAD_FAILED: i32 = -28002;
+
+    // =========================================================================
+    // Build/compile errors (-27xxx)
+    // =========================================================================
+
+    /// FlatBuffers compilation failed (e.g., schema parse error, type mismatch)
+    pub const ERR_BUILD_COMPILE_FAILED: i32 = -27001;
+
+    /// Schema file not found for a conversion entry
+    pub const ERR_BUILD_SCHEMA_NOT_FOUND: i32 = -27002;
+
+    /// Build I/O error (e.g., cannot write output file)
+    pub const ERR_BUILD_IO: i32 = -27003;
 }
 
 /// Structured CLI error with What/Why/Fix components.
@@ -232,6 +245,11 @@ pub fn error_type_name(code: i32) -> String {
         codes::ERR_SDK_SCHEMA_LOAD_FAILED => "schema_load_failed".to_string(),
         -28999..=-28000 => "sdk_error".to_string(),
 
+        // Build/compile errors (-27xxx)
+        codes::ERR_BUILD_COMPILE_FAILED => "build_compile_failed".to_string(),
+        codes::ERR_BUILD_SCHEMA_NOT_FOUND => "build_schema_not_found".to_string(),
+        codes::ERR_BUILD_IO => "build_io_error".to_string(),
+
         _ => "unknown_error".to_string(),
     }
 }
@@ -306,6 +324,15 @@ pub fn error_suggestion(code: i32) -> String {
         codes::ERR_VALIDATION_CIRCULAR_REFERENCE => {
             "Remove the circular dependency between assets to break the cycle".to_string()
         }
+
+        // Build/compile errors
+        codes::ERR_BUILD_COMPILE_FAILED => {
+            "Check that your JSON files match the expected schema format".to_string()
+        }
+        codes::ERR_BUILD_SCHEMA_NOT_FOUND => {
+            "Verify that AM_SDK_PATH points to an SDK with schemas/ directory".to_string()
+        }
+        codes::ERR_BUILD_IO => "Check file permissions and disk space".to_string(),
 
         // Generic fallbacks by range
         -31999..=-31000 => "Check your input values and try again".to_string(),
