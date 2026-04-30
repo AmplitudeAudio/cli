@@ -391,11 +391,6 @@ fn count_assets_by_type(soundbank: &Soundbank) -> Vec<(String, usize)> {
     counts
 }
 
-/// Simple output helper for interactive prompts.
-fn output_simple(message: &str) {
-    println!("{}", message);
-}
-
 // =============================================================================
 // Create
 // =============================================================================
@@ -452,7 +447,7 @@ async fn create_soundbank(
     // Step 3: Get assets to include
     let asset_refs: Vec<(String, String)> = if includes.is_empty() {
         // Interactive mode: prompt for assets
-        prompt_select_assets(input, &sources_dir)?
+        prompt_select_assets(input, output, &sources_dir)?
     } else {
         // Non-interactive: parse --include flags
         let mut refs = Vec::new();
@@ -500,12 +495,12 @@ async fn create_soundbank(
 
     // Step 6: Show summary in interactive mode
     if output.mode() == OutputMode::Interactive {
-        output_simple(&format!("\nSoundbank '{}' will include:", name));
+        output.print(&format!("\nSoundbank '{}' will include:", name));
         let counts = count_assets_by_type(&soundbank);
         for (type_name, count) in &counts {
-            output_simple(&format!("  {}: {}", type_name, count));
+            output.print(&format!("  {}: {}", type_name, count));
         }
-        output_simple(&format!("  Total: {} asset(s)\n", soundbank.asset_count()));
+        output.print(&format!("  Total: {} asset(s)\n", soundbank.asset_count()));
     }
 
     // Step 7: Serialize to JSON
@@ -556,6 +551,7 @@ async fn create_soundbank(
 /// Prompt user to select assets interactively, grouped by type.
 fn prompt_select_assets(
     input: &dyn Input,
+    output: &dyn Output,
     sources_dir: &std::path::Path,
 ) -> Result<Vec<(String, String)>> {
     let available = collect_available_assets(sources_dir);
@@ -573,24 +569,24 @@ fn prompt_select_assets(
     let mut selected: Vec<(String, String)> = Vec::new();
 
     // Group by type for display
-    output_simple("\nAvailable assets by type:");
+    output.print("\nAvailable assets by type:");
     let mut current_type = String::new();
     for (type_label, name, _path) in &available {
         if *type_label != current_type {
             current_type = type_label.clone();
-            output_simple(&format!("  {}:", type_label));
+            output.print(&format!("  {}:", type_label));
         }
-        output_simple(&format!("    - {}", name));
+        output.print(&format!("    - {}", name));
     }
-    output_simple("");
+    output.print("");
 
     loop {
         if !selected.is_empty() {
-            output_simple(&format!("\nSelected ({}):", selected.len()));
+            output.print(&format!("\nSelected ({}):", selected.len()));
             for (t, p) in &selected {
-                output_simple(&format!("  {} : {}", t, p));
+                output.print(&format!("  {} : {}", t, p));
             }
-            output_simple("");
+            output.print("");
         }
 
         let should_add = match input.confirm("Add an asset to this soundbank?", Some(true)) {
@@ -610,7 +606,7 @@ fn prompt_select_assets(
             .collect();
 
         if options.is_empty() {
-            output_simple("All available assets have been selected.");
+            output.print("All available assets have been selected.");
             break;
         }
 
@@ -907,7 +903,7 @@ async fn update_soundbank(
         }
     } else {
         // Interactive mode: prompt for modifications
-        let modified = prompt_modify_soundbank(input, &mut soundbank, &sources_dir)?;
+        let modified = prompt_modify_soundbank(input, output, &mut soundbank, &sources_dir)?;
         if modified {
             updated_fields.push("assets".to_string());
         }
@@ -962,6 +958,7 @@ async fn update_soundbank(
 /// Prompt to modify soundbank contents interactively. Returns true if modified.
 fn prompt_modify_soundbank(
     input: &dyn Input,
+    output: &dyn Output,
     soundbank: &mut Soundbank,
     sources_dir: &std::path::Path,
 ) -> Result<bool> {
@@ -970,15 +967,15 @@ fn prompt_modify_soundbank(
     loop {
         // Show current assets
         let current = get_soundbank_assets(soundbank);
-        output_simple("\nCurrent soundbank contents:");
+        output.print("\nCurrent soundbank contents:");
         if current.is_empty() {
-            output_simple("  (empty)");
+            output.print("  (empty)");
         } else {
             for (type_key, path) in &current {
-                output_simple(&format!("  [{}] {}", type_key, path));
+                output.print(&format!("  [{}] {}", type_key, path));
             }
         }
-        output_simple(&format!("  Total: {} asset(s)", soundbank.asset_count()));
+        output.print(&format!("  Total: {} asset(s)", soundbank.asset_count()));
 
         let options = vec![
             "Add asset".to_string(),
@@ -1004,7 +1001,7 @@ fn prompt_modify_soundbank(
                     .collect();
 
                 if add_options.is_empty() {
-                    output_simple("All available assets are already included.");
+                    output.print("All available assets are already included.");
                     continue;
                 }
 
@@ -1026,7 +1023,7 @@ fn prompt_modify_soundbank(
                 // Remove asset
                 let current = get_soundbank_assets(soundbank);
                 if current.is_empty() {
-                    output_simple("No assets to remove.");
+                    output.print("No assets to remove.");
                     continue;
                 }
 
@@ -1092,24 +1089,24 @@ async fn delete_soundbank(
 
     // Step 5: Confirmation prompt
     if !yes {
-        output_simple(&format!(
+        output.print(&format!(
             "\n{} You are about to delete the following soundbank:",
             "⚠".yellow()
         ));
-        output_simple(&format!("  Name: {}", soundbank.name()));
-        output_simple(&format!("  ID: {}", soundbank.id));
-        output_simple(&format!("  Assets: {}", soundbank.asset_count()));
-        output_simple(&format!("  File: {}\n", soundbank_file_path.display()));
+        output.print(&format!("  Name: {}", soundbank.name()));
+        output.print(&format!("  ID: {}", soundbank.id));
+        output.print(&format!("  Assets: {}", soundbank.asset_count()));
+        output.print(&format!("  File: {}\n", soundbank_file_path.display()));
 
         if !orphan_info.is_empty() {
-            output_simple(&format!(
+            output.print(&format!(
                 "{} The following assets will no longer be in any soundbank after deletion:",
                 "ℹ".blue()
             ));
             for orphan in &orphan_info {
-                output_simple(&format!("  - {}", orphan));
+                output.print(&format!("  - {}", orphan));
             }
-            output_simple("");
+            output.print("");
         }
 
         let confirmed = match input.confirm(

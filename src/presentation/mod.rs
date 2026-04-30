@@ -75,6 +75,15 @@ pub trait Output: Send + Sync {
     /// * `message` - Progress message to display
     fn progress(&self, message: &str);
 
+    /// Print a plain line of output, without log-level prefixes.
+    ///
+    /// In interactive mode, writes to stdout verbatim. In JSON mode, the
+    /// message is suppressed so it never pollutes the parseable response.
+    ///
+    /// Use for human-facing prompts, headers, and listing rows that should
+    /// render cleanly without the `[INFO]` decoration applied by `progress`.
+    fn print(&self, message: &str);
+
     /// Display a warning message.
     ///
     /// In interactive mode, renders a colored warning line via the logger.

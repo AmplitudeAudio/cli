@@ -158,6 +158,10 @@ impl Output for JsonOutput {
         // Progress is intended for interactive users, not machine consumers.
     }
 
+    fn print(&self, _message: &str) {
+        // JSON mode suppresses plain output to avoid polluting parseable stdout.
+    }
+
     fn warning(&self, _message: &str) {
         // JSON mode suppresses warnings to avoid polluting parseable stdout.
         // Warnings are advisory and intended for interactive users only.

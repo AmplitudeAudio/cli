@@ -66,10 +66,6 @@ pub enum EventCommands {
         /// Action in format "type:target_id[,target_id,...]" (repeatable)
         #[arg(short, long)]
         action: Vec<String>,
-
-        /// Fade time in milliseconds for applicable actions
-        #[arg(long)]
-        fade: Option<u64>,
     },
 
     /// List all event assets in the project
@@ -131,8 +127,7 @@ pub async fn handler(
             name,
             run_mode,
             action,
-            fade,
-        } => create_event(name, run_mode.clone(), action.clone(), *fade, input, output).await,
+        } => create_event(name, run_mode.clone(), action.clone(), input, output).await,
         EventCommands::List {} => list_events(output).await,
         EventCommands::Update {
             name,
@@ -247,7 +242,6 @@ async fn create_event(
     name: &str,
     run_mode: Option<String>,
     actions: Vec<String>,
-    _fade: Option<u64>,
     input: &dyn Input,
     output: &dyn Output,
 ) -> Result<()> {
@@ -301,7 +295,7 @@ async fn create_event(
 
     // Step 4: Get actions (from flags or prompt)
     let actions_list = if actions.is_empty() {
-        prompt_actions_interactive(input, &context)?
+        prompt_actions_interactive(input, output, &context)?
     } else {
         parse_actions_from_flags(&actions, &context)?
     };
@@ -483,6 +477,7 @@ fn prompt_run_mode(input: &dyn Input) -> Result<EventActionRunningMode> {
 /// Prompt for actions in interactive mode.
 fn prompt_actions_interactive(
     input: &dyn Input,
+    output: &dyn Output,
     context: &ProjectContext,
 ) -> Result<Vec<EventActionDefinition>> {
     let mut actions: Vec<EventActionDefinition> = Vec::new();
@@ -491,7 +486,7 @@ fn prompt_actions_interactive(
     loop {
         // Show current actions
         if !actions.is_empty() {
-            output_simple("\nCurrent actions:");
+            output.print("\nCurrent actions:");
             for (idx, action) in actions.iter().enumerate() {
                 let targets = action
                     .targets
@@ -503,14 +498,14 @@ fn prompt_actions_interactive(
                             .join(", ")
                     })
                     .unwrap_or_else(|| "none".to_string());
-                output_simple(&format!(
+                output.print(&format!(
                     "  {}. {} -> {}",
                     idx + 1,
                     format_action_type(&action.type_),
                     targets
                 ));
             }
-            output_simple("");
+            output.print("");
         }
 
         let should_add = match input.confirm("Add an action?", Some(true)) {
@@ -578,7 +573,7 @@ fn prompt_actions_interactive(
             if action_type == EventActionType::Play || action_type == EventActionType::Resume {
                 for target_id in &target_ids {
                     if !validator.is_playable_asset(*target_id) {
-                        output_simple(&format!(
+                        output.print(&format!(
                             "{} Warning: Target {} is not a playable asset (sound, collection, or switch container){}",
                             "⚠".yellow(),
                             target_id,
@@ -599,11 +594,6 @@ fn prompt_actions_interactive(
     }
 
     Ok(actions)
-}
-
-/// Simple output helper for interactive prompts.
-fn output_simple(message: &str) {
-    println!("{}", message);
 }
 
 /// Maximum character length for paths before truncation in table display.
@@ -892,7 +882,7 @@ async fn update_event(
         }
 
         // Prompt to modify actions
-        let modified_actions = prompt_modify_actions(input, &actions, &context)?;
+        let modified_actions = prompt_modify_actions(input, output, &actions, &context)?;
         if modified_actions.len() != actions.len()
             || modified_actions
                 .iter()
@@ -983,6 +973,7 @@ fn prompt_update_run_mode(
 /// Prompt to modify actions in interactive mode.
 fn prompt_modify_actions(
     input: &dyn Input,
+    output: &dyn Output,
     current_actions: &[EventActionDefinition],
     _context: &ProjectContext,
 ) -> Result<Vec<EventActionDefinition>> {
@@ -990,9 +981,9 @@ fn prompt_modify_actions(
 
     loop {
         // Show current actions
-        output_simple("\nCurrent actions:");
+        output.print("\nCurrent actions:");
         if actions.is_empty() {
-            output_simple("  (none)");
+            output.print("  (none)");
         } else {
             for (idx, action) in actions.iter().enumerate() {
                 let targets = action
@@ -1005,7 +996,7 @@ fn prompt_modify_actions(
                             .join(", ")
                     })
                     .unwrap_or_else(|| "none".to_string());
-                output_simple(&format!(
+                output.print(&format!(
                     "  {}. {} -> {}",
                     idx,
                     format_action_type(&action.type_),
@@ -1090,7 +1081,7 @@ fn prompt_modify_actions(
             1 => {
                 // Remove action
                 if actions.is_empty() {
-                    output_simple("No actions to remove.");
+                    output.print("No actions to remove.");
                     continue;
                 }
 
@@ -1167,25 +1158,25 @@ async fn delete_event(
 
     // Step 5: Confirmation prompt
     if !yes {
-        output_simple(&format!(
+        output.print(&format!(
             "\n{} You are about to delete the following event:",
             "⚠".yellow()
         ));
-        output_simple(&format!("  Name: {}", event.name()));
-        output_simple(&format!("  ID: {}", event.id));
-        output_simple(&format!(
+        output.print(&format!("  Name: {}", event.name()));
+        output.print(&format!("  ID: {}", event.id));
+        output.print(&format!(
             "  Actions: {}",
             event.actions.as_ref().map(|a| a.len()).unwrap_or(0)
         ));
-        output_simple(&format!("  File: {}\n", event_file_path.display()));
+        output.print(&format!("  File: {}\n", event_file_path.display()));
 
         if !dependent_soundbanks.is_empty() && !force {
-            output_simple(&format!(
+            output.print(&format!(
                 "{} This event is included in {} soundbank(s).",
                 "⚠".yellow(),
                 dependent_soundbanks.len()
             ));
-            output_simple("  Use --force to delete anyway.\n");
+            output.print("  Use --force to delete anyway.\n");
         }
 
         let confirmed =

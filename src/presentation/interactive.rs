@@ -87,6 +87,10 @@ impl Output for InteractiveOutput {
         info!("{}", message);
     }
 
+    fn print(&self, message: &str) {
+        println!("{}", message);
+    }
+
     fn warning(&self, message: &str) {
         // Use warn! macro for consistent formatting and crash logging
         warn!("{}", message);
