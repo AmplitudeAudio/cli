@@ -210,7 +210,7 @@ async fn create_effect(
     }
 
     // Build populated ProjectContext for validation
-    let validator = ProjectValidator::new(current_dir.clone())?;
+    let validator = ProjectValidator::new(current_dir.clone(), output)?;
     let context = ProjectContext::new(current_dir.clone()).with_validator(validator);
 
     // Check name uniqueness via ProjectContext registry
@@ -396,7 +396,7 @@ async fn list_effects(output: &dyn Output) -> Result<()> {
                     }
                     Err(e) => {
                         let filename = path.file_name().unwrap_or_default().to_string_lossy();
-                        log::warn!("Skipping invalid effect file: {}", path.display());
+                        output.warning(&format!("Skipping invalid effect file: {}", path.display()));
                         // Provide more context for JSON errors
                         let error_msg = if let Some(line) = content.lines().next() {
                             if e.to_string().contains("column") {
@@ -412,7 +412,7 @@ async fn list_effects(output: &dyn Output) -> Result<()> {
                 },
                 Err(e) => {
                     let filename = path.file_name().unwrap_or_default().to_string_lossy();
-                    log::warn!("Failed to read effect file: {}", path.display());
+                    output.warning(&format!("Failed to read effect file: {}", path.display()));
                     warnings.push(format!("Failed to read {}: {}", filename, e));
                 }
             }
@@ -561,7 +561,7 @@ async fn update_effect(
     };
 
     // Step 6: Validate
-    let validator = ProjectValidator::new(current_dir.clone())?;
+    let validator = ProjectValidator::new(current_dir.clone(), output)?;
     let context = ProjectContext::new(current_dir.clone()).with_validator(validator);
     effect.validate_rules(&context)?;
 

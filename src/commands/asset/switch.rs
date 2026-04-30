@@ -186,7 +186,7 @@ async fn create_switch(
     }
 
     // Build populated ProjectContext for validation
-    let validator = ProjectValidator::new(current_dir.clone())?;
+    let validator = ProjectValidator::new(current_dir.clone(), output)?;
     let context = ProjectContext::new(current_dir.clone()).with_validator(validator);
 
     // Check name uniqueness via ProjectContext registry
@@ -457,7 +457,7 @@ async fn list_switches(output: &dyn Output) -> Result<()> {
                     }
                     Err(e) => {
                         let filename = path.file_name().unwrap_or_default().to_string_lossy();
-                        log::warn!("Skipping invalid switch file: {}", path.display());
+                        output.warning(&format!("Skipping invalid switch file: {}", path.display()));
                         // Provide more context for JSON errors
                         let error_msg = if let Some(line) = content.lines().next() {
                             if e.to_string().contains("column") {
@@ -473,7 +473,7 @@ async fn list_switches(output: &dyn Output) -> Result<()> {
                 },
                 Err(e) => {
                     let filename = path.file_name().unwrap_or_default().to_string_lossy();
-                    log::warn!("Failed to read switch file: {}", path.display());
+                    output.warning(&format!("Failed to read switch file: {}", path.display()));
                     warnings.push(format!("Failed to read {}: {}", filename, e));
                 }
             }
@@ -623,7 +623,7 @@ async fn update_switch(
     let has_any_flag = states.is_some();
 
     // Step 5: Apply updates
-    let validator = ProjectValidator::new(current_dir.clone())?;
+    let validator = ProjectValidator::new(current_dir.clone(), output)?;
     let context = ProjectContext::new(current_dir.clone()).with_validator(validator);
 
     let updated_fields: Vec<String> = if has_any_flag {
@@ -920,7 +920,7 @@ async fn delete_switch(
     ))?;
 
     // Step 4: Check for switch container references
-    let validator = ProjectValidator::new(current_dir.clone())?;
+    let validator = ProjectValidator::new(current_dir.clone(), output)?;
     let has_references = check_switch_references(&validator, switch.id);
 
     // Step 5: Confirm deletion

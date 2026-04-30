@@ -40,10 +40,9 @@ use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use log::warn;
-
 use super::{AssetType, ValidationError, ValidationLayer};
 use crate::common::errors::codes;
+use crate::presentation::Output;
 
 /// Runtime binary extensions mapped to their source equivalent.
 /// Soundbank references use these runtime names; the validator needs to
@@ -125,7 +124,7 @@ impl ProjectValidator {
     ///
     /// Returns an error only for I/O failures that prevent scanning entirely
     /// (e.g., permission denied on the sources directory itself).
-    pub fn new(project_root: PathBuf) -> anyhow::Result<Self> {
+    pub fn new(project_root: PathBuf, output: &dyn Output) -> anyhow::Result<Self> {
         // Read .amproject to get the configured sources directory
         let sources_dir = match crate::common::utils::read_amproject_file(&project_root) {
             Ok(config) => {
@@ -159,7 +158,7 @@ impl ProjectValidator {
         ];
 
         for asset_type in &asset_types {
-            validator.scan_assets_of_type(*asset_type)?;
+            validator.scan_assets_of_type(*asset_type, output)?;
         }
 
         // Scan additional directories that don't have AssetType variants
@@ -377,7 +376,7 @@ impl ProjectValidator {
     ///
     /// Symlinks are followed when scanning. Symlinked JSON files are processed
     /// as regular files.
-    fn scan_assets_of_type(&mut self, asset_type: AssetType) -> anyhow::Result<()> {
+    fn scan_assets_of_type(&mut self, asset_type: AssetType, output: &dyn Output) -> anyhow::Result<()> {
         let dir = self.sources_dir.join(asset_type.directory_name());
 
         if !dir.exists() {
@@ -397,7 +396,7 @@ impl ProjectValidator {
             let content = match fs::read_to_string(&path) {
                 Ok(c) => c,
                 Err(err) => {
-                    warn!("Failed to read asset file {}: {}", path.display(), err);
+                    output.warning(&format!("Failed to read asset file {}: {}", path.display(), err));
                     continue;
                 }
             };
@@ -405,7 +404,7 @@ impl ProjectValidator {
             let value: serde_json::Value = match serde_json::from_str(&content) {
                 Ok(v) => v,
                 Err(err) => {
-                    warn!("Malformed JSON in asset file {}: {}", path.display(), err);
+                    output.warning(&format!("Malformed JSON in asset file {}: {}", path.display(), err));
                     continue;
                 }
             };
@@ -512,7 +511,7 @@ mod tests {
         write_sound_json(&sounds_dir, "footstep.json", 42, "footstep");
         write_sound_json(&sounds_dir, "explosion.json", 100, "explosion");
 
-        let validator = ProjectValidator::new(dir.path().to_path_buf()).unwrap();
+        let validator = ProjectValidator::new(dir.path().to_path_buf(), &crate::presentation::JsonOutput::new()).unwrap();
         assert!(validator.validate_sound_exists(42).is_ok());
         assert!(validator.validate_sound_exists(100).is_ok());
     }
@@ -533,7 +532,7 @@ mod tests {
         fs::create_dir_all(&sounds_dir).unwrap();
         write_sound_json(&sounds_dir, "footstep.json", 42, "footstep");
 
-        let validator = ProjectValidator::new(dir.path().to_path_buf()).unwrap();
+        let validator = ProjectValidator::new(dir.path().to_path_buf(), &crate::presentation::JsonOutput::new()).unwrap();
         assert!(validator.validate_sound_exists(42).is_ok());
     }
 
@@ -544,7 +543,7 @@ mod tests {
         fs::create_dir_all(&sounds_dir).unwrap();
         write_sound_json(&sounds_dir, "footstep.json", 42, "footstep");
 
-        let validator = ProjectValidator::new(dir.path().to_path_buf()).unwrap();
+        let validator = ProjectValidator::new(dir.path().to_path_buf(), &crate::presentation::JsonOutput::new()).unwrap();
         let result = validator.validate_sound_exists(999);
         assert!(result.is_err());
 
@@ -575,7 +574,7 @@ mod tests {
         fs::create_dir_all(&collections_dir).unwrap();
         write_minimal_asset_json(&collections_dir, "footsteps.json", 30, "footsteps");
 
-        let validator = ProjectValidator::new(dir.path().to_path_buf()).unwrap();
+        let validator = ProjectValidator::new(dir.path().to_path_buf(), &crate::presentation::JsonOutput::new()).unwrap();
 
         // Each type validates independently
         assert!(validator.validate_sound_exists(10).is_ok());
@@ -610,7 +609,7 @@ mod tests {
     fn test_p1_missing_directories_not_an_error() {
         let dir = tempdir().unwrap();
         // Don't create any sources/ directories at all
-        let validator = ProjectValidator::new(dir.path().to_path_buf()).unwrap();
+        let validator = ProjectValidator::new(dir.path().to_path_buf(), &crate::presentation::JsonOutput::new()).unwrap();
         // Should succeed (no crash), but no assets registered
         assert!(validator.validate_sound_exists(1).is_err());
     }
@@ -630,7 +629,7 @@ mod tests {
         // File without .json extension (should be ignored)
         fs::write(sounds_dir.join("readme.txt"), "not an asset").unwrap();
 
-        let validator = ProjectValidator::new(dir.path().to_path_buf()).unwrap();
+        let validator = ProjectValidator::new(dir.path().to_path_buf(), &crate::presentation::JsonOutput::new()).unwrap();
         // Valid sound should be found despite broken file
         assert!(validator.validate_sound_exists(42).is_ok());
     }
@@ -639,7 +638,7 @@ mod tests {
     fn test_p1_empty_project_no_sources_dir() {
         let dir = tempdir().unwrap();
         // Project root exists but no sources/ directory at all
-        let validator = ProjectValidator::new(dir.path().to_path_buf()).unwrap();
+        let validator = ProjectValidator::new(dir.path().to_path_buf(), &crate::presentation::JsonOutput::new()).unwrap();
         assert!(validator.validate_sound_exists(1).is_err());
         assert!(validator.validate_sound_exists(0).is_ok());
     }
@@ -651,7 +650,7 @@ mod tests {
         fs::create_dir_all(&switches_dir).unwrap();
         write_minimal_asset_json(&switches_dir, "surface.json", 50, "surface");
 
-        let validator = ProjectValidator::new(dir.path().to_path_buf()).unwrap();
+        let validator = ProjectValidator::new(dir.path().to_path_buf(), &crate::presentation::JsonOutput::new()).unwrap();
 
         // Switch exists - state validation is a no-op (stub)
         assert!(validator.validate_switch_state_exists(50, 1).is_ok());
@@ -702,7 +701,7 @@ mod tests {
         fs::create_dir_all(&effects_dir).unwrap();
         write_sound_json(&effects_dir, "misplaced.json", 100, "misplaced");
 
-        let validator = ProjectValidator::new(dir.path().to_path_buf()).unwrap();
+        let validator = ProjectValidator::new(dir.path().to_path_buf(), &crate::presentation::JsonOutput::new()).unwrap();
 
         // ID 100 is in effects, so asking for it as a Sound should fail
         let result = validator.validate_sound_exists(100);
@@ -720,7 +719,7 @@ mod tests {
         fs::create_dir_all(&sounds_dir).unwrap();
         write_sound_json(&sounds_dir, "correct.json", 200, "correct");
 
-        let validator = ProjectValidator::new(dir.path().to_path_buf()).unwrap();
+        let validator = ProjectValidator::new(dir.path().to_path_buf(), &crate::presentation::JsonOutput::new()).unwrap();
 
         // ID 200 is in sounds, so asking for it as a Sound should pass
         assert!(validator.validate_sound_exists(200).is_ok());
@@ -738,7 +737,7 @@ mod tests {
         fs::create_dir_all(&effects_dir).unwrap();
         write_minimal_asset_json(&effects_dir, "reverb.json", 20, "reverb");
 
-        let validator = ProjectValidator::new(dir.path().to_path_buf()).unwrap();
+        let validator = ProjectValidator::new(dir.path().to_path_buf(), &crate::presentation::JsonOutput::new()).unwrap();
 
         // Correct directory
         assert!(

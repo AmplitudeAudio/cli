@@ -200,7 +200,7 @@ async fn create_switch_container(
     }
 
     // Build populated ProjectContext for validation
-    let validator = ProjectValidator::new(current_dir.clone())?;
+    let validator = ProjectValidator::new(current_dir.clone(), output)?;
     let context = ProjectContext::new(current_dir.clone()).with_validator(validator);
 
     // Check name uniqueness via ProjectContext registry
@@ -226,7 +226,7 @@ async fn create_switch_container(
         })?
     } else {
         // Interactive mode: prompt for switch selection
-        prompt_switch_selection(input, &context)?
+        prompt_switch_selection(input, output, &context)?
     };
 
     // Step 5: Get state-to-sound mappings
@@ -381,7 +381,7 @@ fn find_switch_by_name(context: &ProjectContext, name: &str) -> Result<Option<Sw
 }
 
 /// Get all available switches in the project.
-fn get_available_switches(context: &ProjectContext) -> Result<Vec<SwitchInfo>> {
+fn get_available_switches(context: &ProjectContext, output: &dyn Output) -> Result<Vec<SwitchInfo>> {
     let sources_dir = resolve_sources_dir(&context.project_root);
     let switches_dir = sources_dir.join("switches");
 
@@ -422,11 +422,11 @@ fn get_available_switches(context: &ProjectContext) -> Result<Vec<SwitchInfo>> {
                         });
                     }
                     Err(e) => {
-                        log::warn!("Failed to parse switch file: {} - {}", path.display(), e);
+                        output.warning(&format!("Failed to parse switch file: {} - {}", path.display(), e));
                     }
                 },
                 Err(e) => {
-                    log::warn!("Failed to read switch file: {} - {}", path.display(), e);
+                    output.warning(&format!("Failed to read switch file: {} - {}", path.display(), e));
                 }
             }
         }
@@ -437,8 +437,8 @@ fn get_available_switches(context: &ProjectContext) -> Result<Vec<SwitchInfo>> {
 }
 
 /// Prompt user to select a switch in interactive mode.
-fn prompt_switch_selection(input: &dyn Input, context: &ProjectContext) -> Result<SwitchInfo> {
-    let switches = get_available_switches(context)?;
+fn prompt_switch_selection(input: &dyn Input, output: &dyn Output, context: &ProjectContext) -> Result<SwitchInfo> {
+    let switches = get_available_switches(context, output)?;
 
     if switches.is_empty() {
         return Err(CliError::new(
@@ -775,7 +775,7 @@ async fn list_switch_containers(output: &dyn Output) -> Result<()> {
     }
 
     // Build context for resolving references
-    let validator = ProjectValidator::new(current_dir.clone())?;
+    let validator = ProjectValidator::new(current_dir.clone(), output)?;
     let context = ProjectContext::new(current_dir.clone()).with_validator(validator);
 
     // Step 4: Read and parse all .json files recursively
@@ -805,7 +805,7 @@ async fn list_switch_containers(output: &dyn Output) -> Result<()> {
                     }
                     Err(e) => {
                         let filename = path.file_name().unwrap_or_default().to_string_lossy();
-                        log::warn!("Skipping invalid switch container file: {}", path.display());
+                        output.warning(&format!("Skipping invalid switch container file: {}", path.display()));
                         // Provide more context for JSON errors
                         let error_msg = if let Some(line) = content.lines().next() {
                             if e.to_string().contains("column") {
@@ -821,7 +821,7 @@ async fn list_switch_containers(output: &dyn Output) -> Result<()> {
                 },
                 Err(e) => {
                     let filename = path.file_name().unwrap_or_default().to_string_lossy();
-                    log::warn!("Failed to read switch container file: {}", path.display());
+                    output.warning(&format!("Failed to read switch container file: {}", path.display()));
                     warnings.push(format!("Failed to read {}: {}", filename, e));
                 }
             }
@@ -988,7 +988,7 @@ async fn update_switch_container(
     ))?;
 
     // Step 4: Build context and get switch info
-    let validator = ProjectValidator::new(current_dir.clone())?;
+    let validator = ProjectValidator::new(current_dir.clone(), output)?;
     let context = ProjectContext::new(current_dir.clone()).with_validator(validator);
 
     let switch_info =

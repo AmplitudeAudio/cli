@@ -26,7 +26,7 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use log::warn;
+use crate::presentation::Output;
 
 use crate::assets::AssetType;
 use crate::common::errors::{CliError, codes};
@@ -157,7 +157,7 @@ fn leaf_name(fqn: &str) -> &str {
 ///
 /// Returns `Err` only for I/O failures that prevent scanning the schemas
 /// directory entirely (e.g., permission denied).
-pub fn load_schemas(sdk: &SdkLocation) -> Result<SchemaRegistry, CliError> {
+pub fn load_schemas(sdk: &SdkLocation, output: &dyn Output) -> Result<SchemaRegistry, CliError> {
     let schemas_dir = sdk.schemas_dir();
 
     let entries = fs::read_dir(schemas_dir).map_err(|e| {
@@ -177,7 +177,7 @@ pub fn load_schemas(sdk: &SdkLocation) -> Result<SchemaRegistry, CliError> {
         let entry = match entry {
             Ok(e) => e,
             Err(e) => {
-                warn!("Failed to read directory entry in schemas: {}", e);
+                output.warning(&format!("Failed to read directory entry in schemas: {}", e));
                 continue;
             }
         };
@@ -202,7 +202,7 @@ pub fn load_schemas(sdk: &SdkLocation) -> Result<SchemaRegistry, CliError> {
                     .unwrap_or_default()
                     .to_string_lossy()
                     .to_string();
-                warn!("Failed to load schema {}: {}", filename, e);
+                output.warning(&format!("Failed to load schema {}: {}", filename, e));
                 failed_files.push((path, e));
             }
         }
@@ -308,6 +308,7 @@ fn describe_field_type(field: &flatbuffers_reflection::reflection::Field) -> Str
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::presentation::JsonOutput;
     use std::fs;
     use tempfile::tempdir;
 
@@ -449,7 +450,7 @@ mod tests {
         fs::create_dir_all(&schemas_dir).unwrap();
 
         let sdk = SdkLocation::new_for_test(dir.path().to_path_buf());
-        let registry = load_schemas(&sdk).unwrap();
+        let registry = load_schemas(&sdk, &JsonOutput::new()).unwrap();
 
         assert_eq!(registry.schema_count(), 0);
         assert_eq!(registry.loaded_file_count(), 0);
@@ -465,7 +466,7 @@ mod tests {
         fs::write(schemas_dir.join("broken.bfbs"), b"not a valid schema").unwrap();
 
         let sdk = SdkLocation::new_for_test(dir.path().to_path_buf());
-        let registry = load_schemas(&sdk).unwrap();
+        let registry = load_schemas(&sdk, &JsonOutput::new()).unwrap();
 
         assert_eq!(registry.schema_count(), 0);
         assert_eq!(registry.failed_files().len(), 1);
@@ -482,7 +483,7 @@ mod tests {
         fs::write(schemas_dir.join("data.json"), "{}").unwrap();
 
         let sdk = SdkLocation::new_for_test(dir.path().to_path_buf());
-        let registry = load_schemas(&sdk).unwrap();
+        let registry = load_schemas(&sdk, &JsonOutput::new()).unwrap();
 
         assert_eq!(registry.schema_count(), 0);
         assert_eq!(registry.loaded_file_count(), 0);
@@ -497,7 +498,7 @@ mod tests {
         let sdk = SdkLocation::new_for_test(dir.path().to_path_buf());
 
         // This should fail because the schemas directory doesn't exist
-        let result = load_schemas(&sdk);
+        let result = load_schemas(&sdk, &JsonOutput::new());
         assert!(result.is_err());
     }
 }

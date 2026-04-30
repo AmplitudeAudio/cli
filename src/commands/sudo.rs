@@ -14,7 +14,6 @@
 
 use anyhow::Result;
 use clap::Subcommand;
-use log::warn;
 use std::sync::Arc;
 
 use crate::{
@@ -115,7 +114,7 @@ async fn reset_database(
             .map_err(|e| anyhow::anyhow!("Failed to delete database file: {}", e))?;
         output.progress("Database file deleted");
     } else {
-        warn!("Database file does not exist, skipping deletion");
+        output.warning("Database file does not exist, skipping deletion");
     }
 
     // Also clean up any WAL or journal files that might exist

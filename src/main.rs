@@ -38,7 +38,7 @@ use crate::{
 };
 use clap::{CommandFactory, Parser};
 use clap_complete::generate;
-use log::{debug, error, warn};
+use log::{debug, error};
 use std::{panic, sync::Arc};
 use tokio::signal;
 
@@ -138,6 +138,15 @@ async fn async_main() -> anyhow::Result<()> {
     setup_crash_db_cleanup(database.clone());
     let db_for_handler = database.clone();
 
+    // Create output handler based on --json flag
+    let output_mode = if cli.json {
+        OutputMode::Json
+    } else {
+        OutputMode::Interactive
+    };
+    let output: Arc<dyn Output> = Arc::from(create_output(output_mode));
+    let output_for_handler = output.clone();
+
     // Set up signal handlers for graceful shutdown
     tokio::spawn(async move {
         let _ = signal::ctrl_c().await;
@@ -147,20 +156,12 @@ async fn async_main() -> anyhow::Result<()> {
             if let Ok(db) = Arc::try_unwrap(db) {
                 database::cleanup(Some(db));
             } else {
-                warn!("Database connections still active, forcing shutdown");
+                output_for_handler.warning("Database connections still active, forcing shutdown");
             }
         }
 
         std::process::exit(0);
     });
-
-    // Create output handler based on --json flag
-    let output_mode = if cli.json {
-        OutputMode::Json
-    } else {
-        OutputMode::Interactive
-    };
-    let output = create_output(output_mode);
 
     // Create input handler based on flags.
     // Rule: --json, --quiet, --non-interactive, or non-TTY stdin all imply non-interactive input.

@@ -87,6 +87,11 @@ impl Output for InteractiveOutput {
         info!("{}", message);
     }
 
+    fn warning(&self, message: &str) {
+        // Use warn! macro for consistent formatting and crash logging
+        warn!("{}", message);
+    }
+
     fn table(&self, title: Option<&str>, data: serde_json::Value) {
         // Display title if provided
         if let Some(t) = title {

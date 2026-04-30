@@ -10,8 +10,11 @@
 /.trae
 /.goose
 /.junie
+/.omk
+/.omc
 /skills-lock.json
 /.env
 .ralph/
 bmalph/
 _bmad-output/
+.DS_Store

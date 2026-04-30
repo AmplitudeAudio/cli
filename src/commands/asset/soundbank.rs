@@ -455,7 +455,7 @@ async fn create_soundbank(
     }
 
     // Build context for validation
-    let validator = ProjectValidator::new(current_dir.clone())?;
+    let validator = ProjectValidator::new(current_dir.clone(), output)?;
     let context = ProjectContext::new(current_dir.clone()).with_validator(validator);
 
     if context.has_name(AssetType::Soundbank, name) {
@@ -719,7 +719,7 @@ async fn list_soundbanks(output: &dyn Output) -> Result<()> {
                     }
                     Err(e) => {
                         let filename = path.file_name().unwrap_or_default().to_string_lossy();
-                        log::warn!("Skipping invalid soundbank file: {}", path.display());
+                        output.warning(&format!("Skipping invalid soundbank file: {}", path.display()));
                         // Provide more context for JSON errors
                         let error_msg = if let Some(line) = content.lines().next() {
                             if e.to_string().contains("column") {
@@ -735,7 +735,7 @@ async fn list_soundbanks(output: &dyn Output) -> Result<()> {
                 },
                 Err(e) => {
                     let filename = path.file_name().unwrap_or_default().to_string_lossy();
-                    log::warn!("Failed to read soundbank file: {}", path.display());
+                    output.warning(&format!("Failed to read soundbank file: {}", path.display()));
                     warnings.push(format!("Failed to read {}: {}", filename, e));
                 }
             }

@@ -299,7 +299,7 @@ async fn create_event(
     }
 
     // Build populated ProjectContext for validation
-    let validator = ProjectValidator::new(current_dir.clone())?;
+    let validator = ProjectValidator::new(current_dir.clone(), output)?;
     let context = ProjectContext::new(current_dir.clone()).with_validator(validator);
 
     // Check name uniqueness
@@ -694,7 +694,7 @@ async fn list_events(output: &dyn Output) -> Result<()> {
                     }
                     Err(e) => {
                         let filename = path.file_name().unwrap_or_default().to_string_lossy();
-                        log::warn!("Skipping invalid event file: {}", path.display());
+                        output.warning(&format!("Skipping invalid event file: {}", path.display()));
                         // Provide more context for JSON errors
                         let error_msg = if let Some(line) = content.lines().next() {
                             if e.to_string().contains("column") {
@@ -710,7 +710,7 @@ async fn list_events(output: &dyn Output) -> Result<()> {
                 },
                 Err(e) => {
                     let filename = path.file_name().unwrap_or_default().to_string_lossy();
-                    log::warn!("Failed to read event file: {}", path.display());
+                    output.warning(&format!("Failed to read event file: {}", path.display()));
                     warnings.push(format!("Failed to read {}: {}", filename, e));
                 }
             }
@@ -751,7 +751,7 @@ async fn list_events(output: &dyn Output) -> Result<()> {
     }
 
     // Build validator for resolving target names
-    let validator = ProjectValidator::new(current_dir).ok();
+    let validator = ProjectValidator::new(current_dir, output).ok();
 
     // Step 7: Output based on mode
     match output.mode() {
@@ -880,7 +880,7 @@ async fn update_event(
     ))?;
 
     // Step 4: Build context for validation
-    let validator = ProjectValidator::new(current_dir.clone())?;
+    let validator = ProjectValidator::new(current_dir.clone(), output)?;
     let context = ProjectContext::new(current_dir.clone()).with_validator(validator);
 
     // Step 5: Track updated fields
@@ -1178,7 +1178,7 @@ async fn delete_event(
     let event: Event = serde_json::from_str(&content)?;
 
     // Step 4: Check for dependencies (soundbanks that include this event)
-    let validator = ProjectValidator::new(current_dir.clone())?;
+    let validator = ProjectValidator::new(current_dir.clone(), output)?;
     let dependent_soundbanks: Vec<String> = validator
         .asset_ids
         .get(&AssetType::Soundbank)

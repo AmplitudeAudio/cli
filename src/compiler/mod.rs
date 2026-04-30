@@ -248,6 +248,7 @@ pub fn compile_project(
     build_dir: &Path,
     sdk: &SdkLocation,
     fail_fast: bool,
+    output: &dyn crate::presentation::Output,
 ) -> Result<BuildSummary> {
     let entries = get_conversion_entries();
     let mut summary = BuildSummary::default();
@@ -262,7 +263,7 @@ pub fn compile_project(
                     schema_path.display(),
                     e
                 );
-                log::warn!("{}", msg);
+                output.warning(&msg);
                 // Skip this entry entirely — schema not available.
                 continue;
             }
@@ -297,7 +298,7 @@ pub fn compile_project(
                 }
             };
 
-            match flatc::compile_json_to_binary(&schema_bytes, &json_str) {
+            match flatc::compile_json_to_binary(&schema_bytes, &json_str, output) {
                 Ok(binary) => {
                     // Ensure output directory exists.
                     if let Some(parent) = target.parent() {

@@ -46,7 +46,11 @@ thread_local! {
 /// # Returns
 ///
 /// The serialized FlatBuffers binary as a `Vec<u8>`.
-pub fn compile_json_to_binary(schema_bytes: &[u8], json_str: &str) -> Result<Vec<u8>> {
+pub fn compile_json_to_binary(
+    schema_bytes: &[u8],
+    json_str: &str,
+    output: &dyn crate::presentation::Output,
+) -> Result<Vec<u8>> {
     let schema = root_as_schema(schema_bytes)
         .context("failed to parse .bfbs schema")?;
 
@@ -63,7 +67,7 @@ pub fn compile_json_to_binary(schema_bytes: &[u8], json_str: &str) -> Result<Vec
 
     let mut builder = FlatBufferBuilder::with_capacity(1024);
 
-    let root_offset = build_table(&mut builder, &schema, &root_table, json_obj)?;
+    let root_offset = build_table(&mut builder, &schema, &root_table, json_obj, output)?;
 
     builder.finish(root_offset, schema.file_ident());
 
@@ -292,6 +296,7 @@ fn build_table<'a>(
     schema: &Schema<'_>,
     object: &Object<'_>,
     json_obj: &serde_json::Map<String, Value>,
+    output: &dyn crate::presentation::Output,
 ) -> Result<WIPOffset<flatbuffers::TableFinishedWIPOffset>> {
     let fields = object.fields();
     let num_fields = fields.len();
@@ -339,17 +344,17 @@ fn build_table<'a>(
                     let child_json = json_val
                         .as_object()
                         .with_context(|| format!("field '{}' expected object", field_name))?;
-                    let off = build_table(builder, schema, &child_obj, child_json)?;
+                    let off = build_table(builder, schema, &child_obj, child_json, output)?;
                     prebuilt[i] = Some(PrebuiltOffset::from_wip(off));
                 }
             }
             BaseType::Vector | BaseType::Vector64 => {
-                let off = build_vector(builder, schema, &field, json_val)?;
+                let off = build_vector(builder, schema, &field, json_val, output)?;
                 prebuilt[i] = Some(off);
             }
             BaseType::Union => {
                 let (type_val, off) =
-                    build_union_value(builder, schema, &field, json_obj, field_name)?;
+                    build_union_value(builder, schema, &field, json_obj, field_name, output)?;
                 prebuilt[i] = Some(off);
                 // Find the corresponding UType field and store the discriminator.
                 union_types[i] = Some(type_val);
@@ -482,11 +487,11 @@ fn build_table<'a>(
             }
             _ => {
                 // Unknown or unhandled type — skip silently.
-                log::warn!(
+                output.warning(&format!(
                     "skipping field '{}' with unhandled base type {:?}",
                     field_name,
                     base_type.variant_name()
-                );
+                ));
             }
         }
     }
@@ -502,6 +507,7 @@ fn build_vector<'a>(
     schema: &Schema<'_>,
     field: &Field<'_>,
     json_val: &Value,
+    output: &dyn crate::presentation::Output,
 ) -> Result<PrebuiltOffset> {
     let arr = json_val
         .as_array()
@@ -633,7 +639,7 @@ fn build_vector<'a>(
                         .with_context(|| {
                             format!("vector element in '{}' expected object", field.name())
                         })?;
-                    let off = build_table(builder, schema, &child_obj, child_json)?;
+                    let off = build_table(builder, schema, &child_obj, child_json, output)?;
                     offsets.push(off);
                 }
                 let off = builder.create_vector(&offsets);
@@ -675,7 +681,7 @@ fn build_vector<'a>(
                             let obj_idx = ut.index();
                             let variant_obj = schema.objects().get(obj_idx as usize);
                             // Try building with this variant's schema
-                            match build_table(builder, schema, &variant_obj, child_json) {
+                            match build_table(builder, schema, &variant_obj, child_json, output) {
                                 Ok(off) => {
                                     offsets.push(off);
                                     built = true;
@@ -759,6 +765,7 @@ fn build_union_value(
     field: &Field<'_>,
     json_obj: &serde_json::Map<String, Value>,
     field_name: &str,
+    output: &dyn crate::presentation::Output,
 ) -> Result<(u8, PrebuiltOffset)> {
     let enum_idx = field.type_().index();
     let union_enum = schema.enums().get(enum_idx as usize);
@@ -786,7 +793,7 @@ fn build_union_value(
         .as_object()
         .with_context(|| format!("union value '{}' expected object", field_name))?;
 
-    let off = build_table(builder, schema, &variant_obj, child_json)?;
+    let off = build_table(builder, schema, &variant_obj, child_json, output)?;
 
     Ok((type_val, PrebuiltOffset::from_wip(off)))
 }

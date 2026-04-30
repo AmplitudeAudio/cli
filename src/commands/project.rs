@@ -14,7 +14,7 @@
 
 use anyhow::Result;
 use colored::*;
-use log::{info, warn};
+use log::info;
 use std::collections::HashMap;
 use std::env;
 use std::fs;
@@ -22,6 +22,7 @@ use std::io::Write;
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use crate::compiler;
 use crate::{
     app::Resource,
     assets::{
@@ -47,7 +48,6 @@ use crate::{
     presentation::{Output, OutputMode},
     schema::loader::load_schemas,
 };
-use crate::compiler;
 use clap::{Subcommand, value_parser};
 use inquire::{CustomUserError, validator::Validation};
 use serde_json::json;
@@ -290,11 +290,11 @@ async fn handle_init_project_command(
     if !no_register
         && let Ok(Some(p)) = db_get_project_by_name(project_name.as_str(), database.clone())
     {
-        warn!(
+        output.warning(&format!(
             "A project with the name {} is already registered at path {}",
             project_name.cyan(),
             p.path.cyan()
-        );
+        ));
 
         if input.confirm(
             "Do you want to forget that project and create this new one?",
@@ -322,10 +322,10 @@ async fn handle_init_project_command(
     let project_path = &cwd.join(&project_name);
 
     if project_path.exists() && project_path.read_dir()?.next().is_some() {
-        warn!(
+        output.warning(&format!(
             "The project path {} already exists and is not empty",
             project_path.to_str().unwrap_or_default().cyan()
-        );
+        ));
 
         if input.confirm(
             "Do you want to overwrite the directory? All existing content will be deleted!",
@@ -454,11 +454,25 @@ async fn handle_register_project_command(
     let project_name = project_config.name.clone();
 
     if let Ok(Some(p)) = db_get_project_by_name(project_name.as_str(), database.clone()) {
-        warn!(
+        let normalized_existing = normalize_path(std::path::Path::new(&p.path));
+        let normalized_new = normalize_path(path);
+
+        if normalized_existing == normalized_new {
+            output.success(
+                json!(format!(
+                    "Project {} is already registered",
+                    project_config.name
+                )),
+                None,
+            );
+            return Ok(());
+        }
+
+        output.warning(&format!(
             "A project with the name {} is already registered at path {}",
             project_name.cyan(),
             p.path.cyan()
-        );
+        ));
 
         if input.confirm(
             "Do you want to forget that project and register this one?",
@@ -646,7 +660,17 @@ async fn handle_info_current_dir(
         }
         None => match output.mode() {
             crate::presentation::OutputMode::Json => {
-                display_project_info(&config.name, cwd, &config.sources_dir, &config.data_dir, &config.build_dir, false, None, &asset_counts, output);
+                display_project_info(
+                    &config.name,
+                    cwd,
+                    &config.sources_dir,
+                    &config.data_dir,
+                    &config.build_dir,
+                    false,
+                    None,
+                    &asset_counts,
+                    output,
+                );
             }
             crate::presentation::OutputMode::Interactive => {
                 display_project_info_interactive(
@@ -697,8 +721,16 @@ fn display_project_info(
 ) {
     match output.mode() {
         crate::presentation::OutputMode::Json => {
-            let json_data =
-                build_project_info_json(name, path, sources_dir, data_dir, build_dir, registered, registered_at, asset_counts);
+            let json_data = build_project_info_json(
+                name,
+                path,
+                sources_dir,
+                data_dir,
+                build_dir,
+                registered,
+                registered_at,
+                asset_counts,
+            );
             output.success(json_data, None);
         }
         crate::presentation::OutputMode::Interactive => {
@@ -939,8 +971,6 @@ fn register_project(
     path: &std::path::Path,
     database: Option<Arc<Database>>,
 ) -> Result<bool> {
-    info!("Registering project {}...", config.name.cyan());
-
     db_create_project(&config.to_project(path.to_str().unwrap()), database.clone())
 }
 
@@ -1009,7 +1039,7 @@ async fn handle_validate_project_command(
 
     // Try to discover SDK for schema validation
     let sdk_available = match discover_sdk() {
-        Ok(sdk) => match load_schemas(&sdk) {
+        Ok(sdk) => match load_schemas(&sdk, output) {
             Ok(registry) => {
                 output.progress(&format!(
                     "SDK found: loaded {} schema(s) from {}",
@@ -1046,7 +1076,7 @@ async fn handle_validate_project_command(
     };
 
     // Build project context with validator for cross-reference checking
-    let validator = ProjectValidator::new(current_dir.clone())?;
+    let validator = ProjectValidator::new(current_dir.clone(), output)?;
     let context = ProjectContext::new(current_dir.clone()).with_validator(validator);
 
     // Determine which types to validate
@@ -1358,7 +1388,7 @@ async fn handle_build_project_command(
     // Step 2: Validate all assets first
     output.progress("Running validation...");
 
-    let validator = ProjectValidator::new(current_dir.clone())?;
+    let validator = ProjectValidator::new(current_dir.clone(), output)?;
     let context = ProjectContext::new(current_dir.clone()).with_validator(validator);
 
     let sources_dir = current_dir.join(&project_config.sources_dir);
@@ -1384,8 +1414,7 @@ async fn handle_build_project_command(
             .into_iter()
             .filter_map(|e| e.ok())
             .filter(|e| {
-                e.file_type().is_file()
-                    && e.path().extension().is_some_and(|ext| ext == "json")
+                e.file_type().is_file() && e.path().extension().is_some_and(|ext| ext == "json")
             });
 
         for entry in walk {
@@ -1486,7 +1515,7 @@ async fn handle_build_project_command(
     // Step 5: Compile assets to FlatBuffers binaries
     output.progress("Compiling assets...");
 
-    let build_summary = compiler::compile_project(&sources_dir, &build_dir, &sdk, fail_fast)?;
+    let build_summary = compiler::compile_project(&sources_dir, &build_dir, &sdk, fail_fast, output)?;
 
     // Step 6: Copy data files (audio files)
     let data_dir = current_dir.join(&project_config.data_dir);

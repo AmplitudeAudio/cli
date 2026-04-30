@@ -75,6 +75,16 @@ pub trait Output: Send + Sync {
     /// * `message` - Progress message to display
     fn progress(&self, message: &str);
 
+    /// Display a warning message.
+    ///
+    /// In interactive mode, renders a colored warning line via the logger.
+    /// In JSON mode, the message is suppressed so it never reaches stdout
+    /// and pollutes the parseable response envelope.
+    ///
+    /// # Arguments
+    /// * `message` - Warning message to display
+    fn warning(&self, message: &str);
+
     /// Display tabular data with an optional title.
     ///
     /// In interactive mode, renders a formatted table with headers and rows.

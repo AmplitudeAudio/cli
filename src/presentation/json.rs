@@ -164,6 +164,11 @@ impl Output for JsonOutput {
         // Progress is intended for interactive users, not machine consumers.
     }
 
+    fn warning(&self, _message: &str) {
+        // JSON mode suppresses warnings to avoid polluting parseable stdout.
+        // Warnings are advisory and intended for interactive users only.
+    }
+
     fn table(&self, _title: Option<&str>, data: serde_json::Value) {
         // In JSON mode, output the data in the success envelope format
         let response = Self::build_success_response(data);
