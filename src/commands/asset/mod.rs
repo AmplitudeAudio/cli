@@ -14,8 +14,8 @@
 
 //! Asset management commands.
 //!
-//! This module provides commands for managing Amplitude Audio SDK assets.
-//! Currently supports Sound assets, with more asset types planned.
+//! Manages Amplitude Audio SDK assets: sounds, collections, effects, switches,
+//! switch containers, events, and soundbanks.
 
 mod collection;
 mod effect;
@@ -44,6 +44,27 @@ use crate::{
     input::Input,
     presentation::Output,
 };
+
+/// Recursively find all `.json` files under `dir`. Returns empty vec if `dir` doesn't exist.
+pub(crate) fn find_json_files_recursive(
+    dir: &std::path::Path,
+) -> Result<Vec<std::path::PathBuf>> {
+    let mut files = Vec::new();
+    if !dir.exists() {
+        return Ok(files);
+    }
+    for entry in walkdir::WalkDir::new(dir)
+        .follow_links(true)
+        .into_iter()
+        .filter_map(|e| e.ok())
+    {
+        let path = entry.path();
+        if path.is_file() && path.extension().map(|e| e == "json").unwrap_or(false) {
+            files.push(path.to_path_buf());
+        }
+    }
+    Ok(files)
+}
 
 /// Parse spatialization mode from string.
 ///

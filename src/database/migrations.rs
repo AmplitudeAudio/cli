@@ -279,49 +279,6 @@ impl MigrationManager {
         Ok(())
     }
 
-    /// Rollback a migration (if down_sql is provided)
-    pub fn rollback_migration(&self, db: &Database, version: u32) -> Result<()> {
-        let migration = self
-            .migrations
-            .get(&version)
-            .ok_or_else(|| anyhow::anyhow!("Migration {} not found", version))?;
-
-        if let Some(down_sql) = &migration.down_sql {
-            debug!(
-                "Rolling back migration {}: {}",
-                migration.version, migration.description
-            );
-
-            let transaction = db.transaction()?;
-
-            // Execute the rollback SQL
-            transaction
-                .execute_batch(down_sql)
-                .with_context(|| format!("Failed to rollback migration {}", version))?;
-
-            // Remove the migration record
-            transaction
-                .execute(
-                    "DELETE FROM schema_migrations WHERE version = ?1",
-                    rusqlite::params![version],
-                )
-                .with_context(|| {
-                    format!("Failed to remove migration record for version {}", version)
-                })?;
-
-            transaction.commit()?;
-
-            debug!("Migration {} rolled back successfully", migration.version);
-        } else {
-            return Err(anyhow::anyhow!(
-                "Migration {} does not support rollback",
-                version
-            ));
-        }
-
-        Ok(())
-    }
-
     /// Calculate a checksum for a migration to detect changes
     fn calculate_checksum(&self, migration: &Migration) -> String {
         use std::collections::hash_map::DefaultHasher;
@@ -338,60 +295,6 @@ impl MigrationManager {
         format!("{:x}", hasher.finish())
     }
 
-    /// Verify all applied migrations match their expected checksums
-    pub fn verify_migrations(&self, db: &Database) -> Result<()> {
-        let conn = db.get_connection();
-        let conn = conn
-            .lock()
-            .map_err(|e| anyhow::anyhow!("Failed to acquire lock: {}", e))?;
-
-        let mut stmt =
-            conn.prepare("SELECT version, checksum FROM schema_migrations ORDER BY version")?;
-
-        let applied_migrations = stmt
-            .query_map([], |row| {
-                Ok((row.get::<_, u32>(0)?, row.get::<_, String>(1)?))
-            })?
-            .collect::<Result<Vec<_>, _>>()?;
-
-        for (version, stored_checksum) in applied_migrations {
-            if let Some(migration) = self.migrations.get(&version) {
-                let expected_checksum = self.calculate_checksum(migration);
-                if stored_checksum != expected_checksum {
-                    return Err(anyhow::anyhow!(
-                        "Migration {} has been modified! Expected checksum: {}, found: {}",
-                        version,
-                        expected_checksum,
-                        stored_checksum
-                    ));
-                }
-            } else {
-                return Err(anyhow::anyhow!(
-                    "Unknown migration {} found in database",
-                    version
-                ));
-            }
-        }
-
-        Ok(())
-    }
-
-    /// Get list of all available migrations
-    pub fn get_migrations(&self) -> Vec<&Migration> {
-        self.migrations.values().collect()
-    }
-
-    /// Get list of pending migrations
-    pub fn get_pending_migrations(&self, db: &Database) -> Result<Vec<&Migration>> {
-        let current_version = self.get_current_version(db)?;
-
-        Ok(self
-            .migrations
-            .iter()
-            .filter(|(version, _)| **version > current_version)
-            .map(|(_, migration)| migration)
-            .collect())
-    }
 }
 
 impl Default for MigrationManager {

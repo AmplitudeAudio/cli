@@ -42,27 +42,7 @@ use crate::{
     presentation::{Output, OutputMode},
 };
 
-/// Recursively find all .json files in a directory.
-fn find_json_files_recursive(dir: &std::path::Path) -> anyhow::Result<Vec<std::path::PathBuf>> {
-    let mut files = Vec::new();
-    
-    if !dir.exists() {
-        return Ok(files);
-    }
-    
-    for entry in walkdir::WalkDir::new(dir)
-        .follow_links(true)
-        .into_iter()
-        .filter_map(|e| e.ok())
-    {
-        let path = entry.path();
-        if path.is_file() && path.extension().map(|e| e == "json").unwrap_or(false) {
-            files.push(path.to_path_buf());
-        }
-    }
-    
-    Ok(files)
-}
+use super::find_json_files_recursive;
 
 /// The name of the current asset.
 const ASSET_NAME: &str = "Switch";

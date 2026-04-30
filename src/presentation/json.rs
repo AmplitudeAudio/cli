@@ -78,8 +78,6 @@ impl JsonOutput {
 
 impl JsonOutput {
     /// Build a success response structure without writing to stdout.
-    /// Useful for testing and for building responses that will be written elsewhere.
-    #[allow(dead_code)] // Used by tests via library crate
     pub fn build_success_response(data: serde_json::Value) -> JsonResponse<serde_json::Value> {
         JsonResponse {
             ok: true,
@@ -89,11 +87,9 @@ impl JsonOutput {
     }
 
     /// Build an error response structure without writing to stdout.
-    /// Useful for testing and for building responses that will be written elsewhere.
     ///
     /// If the error is a `CliError`, extracts structured fields (code, what, why, suggestion, context).
     /// Otherwise, falls back to the provided code and generates type/suggestion from that code.
-    #[allow(dead_code)] // Used by tests via library crate
     pub fn build_error_response(err: &Error, code: i32) -> JsonResponse<()> {
         // Try to downcast to CliError for rich error information
         let error = if let Some(cli_err) = err.downcast_ref::<CliError>() {
@@ -125,14 +121,12 @@ impl JsonOutput {
     }
 
     /// Serialize a response to a pretty-printed JSON string.
-    #[allow(dead_code)] // Used by tests via library crate
     pub fn serialize_response<T: Serialize>(response: &JsonResponse<T>) -> Result<String> {
         serde_json::to_string_pretty(response)
             .map_err(|e| anyhow::anyhow!("JSON serialization failed: {}", e))
     }
 
     /// Write a response to a writer with proper flushing.
-    #[allow(dead_code)] // Used by tests via library crate
     pub fn write_response<W: Write, T: Serialize>(
         writer: &mut W,
         response: &JsonResponse<T>,

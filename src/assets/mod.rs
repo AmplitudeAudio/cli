@@ -246,15 +246,7 @@ impl AssetType {
     /// assert_eq!(AssetType::Event.file_extension(), ".json");
     /// ```
     pub fn file_extension(&self) -> &'static str {
-        match self {
-            Self::Sound => ".json",
-            Self::Collection => ".json",
-            Self::Switch => ".json",
-            Self::SwitchContainer => ".json",
-            Self::Soundbank => ".json",
-            Self::Event => ".json",
-            Self::Effect => ".json",
-        }
+        ".json"
     }
 }
 

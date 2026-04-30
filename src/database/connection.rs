@@ -129,7 +129,6 @@ impl Database {
 }
 
 /// Wrapper for a prepared statement
-#[allow(dead_code)]
 pub struct DatabaseStatement {
     connection: Arc<Mutex<Connection>>,
     sql: String,
@@ -137,7 +136,6 @@ pub struct DatabaseStatement {
 
 impl DatabaseStatement {
     /// Execute the prepared statement
-    #[allow(dead_code)]
     pub fn execute<P>(&self, params: P) -> Result<usize>
     where
         P: rusqlite::Params,
@@ -152,7 +150,6 @@ impl DatabaseStatement {
     }
 
     /// Query the prepared statement
-    #[allow(dead_code)]
     pub fn query_map<T, P, F>(&self, params: P, f: F) -> Result<Vec<T>>
     where
         P: rusqlite::Params,
@@ -238,20 +235,6 @@ impl DatabaseTransaction {
         Ok(())
     }
 
-    /// Rollback the transaction
-    #[allow(dead_code)]
-    pub fn rollback(mut self) -> Result<()> {
-        let conn = self
-            .connection
-            .lock()
-            .map_err(|e| anyhow::anyhow!("Failed to acquire database lock: {}", e))?;
-
-        conn.execute("ROLLBACK", [])
-            .context("Failed to rollback transaction")?;
-
-        self.committed = true;
-        Ok(())
-    }
 }
 
 impl Drop for DatabaseTransaction {
@@ -264,6 +247,3 @@ impl Drop for DatabaseTransaction {
     }
 }
 
-/// Type alias for a shared database connection
-#[allow(dead_code)]
-pub type DatabaseConnection = Arc<Mutex<Connection>>;

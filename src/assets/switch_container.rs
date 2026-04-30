@@ -19,10 +19,10 @@
 //! surfaces like wood, stone, grass) for the Amplitude Audio SDK.
 
 use super::generated::{
-    FadeTransitionSettings, RtpcCompatibleValue, Scope, Spatialization, SwitchContainerDefinition,
-    SwitchContainerEntry, SwitchContainerUpdateBehavior,
+    RtpcCompatibleValue, Scope, Spatialization, SwitchContainerDefinition, SwitchContainerEntry,
+    SwitchContainerUpdateBehavior,
 };
-use super::{Asset, AssetType, ProjectContext, Schema, ValidationError, ValidationLayer};
+use super::{Asset, AssetType, ProjectContext, Schema, ValidationError};
 
 // =============================================================================
 // SwitchContainer Type Alias
