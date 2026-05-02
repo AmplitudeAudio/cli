@@ -137,7 +137,7 @@ pub fn db_get_project_by_name(
     let db = database.as_ref().context(ERR_DATABASE_NOT_AVAILABLE)?;
 
     let query = db.prepare(
-        "SELECT id, name, path, date(created_at) as registered_at FROM projects WHERE name = $1",
+        "SELECT id, name, path, date(created_at) as registered_at, is_favorite FROM projects WHERE name = $1",
     )?;
 
     let results = query.query_map([name], |row| {
@@ -146,19 +146,45 @@ pub fn db_get_project_by_name(
             name: row.get(1)?,
             path: row.get(2)?,
             registered_at: row.get(3)?,
+            is_favorite: row.get::<_, i32>(4)? != 0,
         })
     })?;
 
     Ok(results.first().cloned())
 }
 
-/// Get all registered projects from the database, sorted alphabetically by name.
+/// Get all registered projects from the database. Favorites are pinned to the
+/// top, then sorted alphabetically by name within each group.
 pub fn db_get_all_projects(database: Option<Arc<Database>>) -> Result<Vec<entities::Project>> {
+    db_get_projects_filtered(None, database)
+}
+
+/// Get registered projects, optionally filtered by favorite status.
+///
+/// `favorite_only`:
+/// - `None` returns every project.
+/// - `Some(true)` returns only favorites.
+/// - `Some(false)` returns only non-favorites.
+///
+/// Ordering is always favorites-first, then alphabetical by name.
+pub fn db_get_projects_filtered(
+    favorite_only: Option<bool>,
+    database: Option<Arc<Database>>,
+) -> Result<Vec<entities::Project>> {
     let db = database.as_ref().context(ERR_DATABASE_NOT_AVAILABLE)?;
 
-    let query = db.prepare(
-        "SELECT id, name, path, date(created_at) as registered_at FROM projects ORDER BY name ASC",
-    )?;
+    let (where_clause, order_clause) = match favorite_only {
+        None => ("", "is_favorite DESC, name ASC"),
+        Some(true) => ("WHERE is_favorite = 1", "name ASC"),
+        Some(false) => ("WHERE is_favorite = 0", "name ASC"),
+    };
+
+    let sql = format!(
+        "SELECT id, name, path, date(created_at) as registered_at, is_favorite \
+         FROM projects {where_clause} ORDER BY {order_clause}"
+    );
+
+    let query = db.prepare(&sql)?;
 
     query.query_map([], |row| {
         Ok(Project {
@@ -166,6 +192,7 @@ pub fn db_get_all_projects(database: Option<Arc<Database>>) -> Result<Vec<entiti
             name: row.get(1)?,
             path: row.get(2)?,
             registered_at: row.get(3)?,
+            is_favorite: row.get::<_, i32>(4)? != 0,
         })
     })
 }
@@ -178,6 +205,20 @@ pub fn db_forget_project(id: i32, database: Option<Arc<Database>>) -> Result<boo
     query.execute([id]).map(|_| true)
 }
 
+/// Update the `is_favorite` flag for a project. Returns whether a row was affected.
+pub fn db_set_project_favorite(
+    id: i32,
+    value: bool,
+    database: Option<Arc<Database>>,
+) -> Result<bool> {
+    let db = database.as_ref().context(ERR_DATABASE_NOT_AVAILABLE)?;
+
+    let query = db.prepare("UPDATE projects SET is_favorite = ?1 WHERE id = ?2")?;
+
+    let rows = query.execute(rusqlite::params![if value { 1 } else { 0 }, id])?;
+    Ok(rows > 0)
+}
+
 /// Get a project by its filesystem path from the database.
 pub fn db_get_project_by_path(
     path: &str,
@@ -186,7 +227,7 @@ pub fn db_get_project_by_path(
     let db = database.as_ref().context(ERR_DATABASE_NOT_AVAILABLE)?;
 
     let query = db.prepare(
-        "SELECT id, name, path, date(created_at) as registered_at FROM projects WHERE path = $1",
+        "SELECT id, name, path, date(created_at) as registered_at, is_favorite FROM projects WHERE path = $1",
     )?;
 
     let results = query.query_map([path], |row| {
@@ -195,6 +236,7 @@ pub fn db_get_project_by_path(
             name: row.get(1)?,
             path: row.get(2)?,
             registered_at: row.get(3)?,
+            is_favorite: row.get::<_, i32>(4)? != 0,
         })
     })?;
 

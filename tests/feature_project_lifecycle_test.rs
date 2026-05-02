@@ -138,6 +138,7 @@ async fn test_p1_project_registration_prevents_duplicate_names() {
             .unwrap()
             .to_string(),
         registered_at: None,
+        is_favorite: false,
     };
     db_create_project(&project1, Some(db.clone())).expect("First registration should succeed");
 
@@ -151,6 +152,7 @@ async fn test_p1_project_registration_prevents_duplicate_names() {
             .unwrap()
             .to_string(),
         registered_at: None,
+        is_favorite: false,
     };
     let result = db_create_project(&project2, Some(db.clone()));
 
@@ -170,6 +172,7 @@ async fn test_p0_project_unregistration_removes_from_database() {
         name: "to_unregister".to_string(),
         path: "/path/to/project".to_string(),
         registered_at: None,
+        is_favorite: false,
     };
     db_create_project(&project, Some(db.clone())).expect("Registration should succeed");
 
@@ -198,6 +201,7 @@ async fn test_p1_project_unregistration_does_not_delete_files_by_default() {
         name: "project_with_files".to_string(),
         path: project_path.to_str().unwrap().to_string(),
         registered_at: None,
+        is_favorite: false,
     };
     db_create_project(&project, Some(db.clone())).expect("Registration should succeed");
 
@@ -280,6 +284,7 @@ async fn test_p1_re_register_after_unregister() {
             .unwrap()
             .to_string(),
         registered_at: None,
+        is_favorite: false,
     };
 
     db_create_project(&project, Some(db.clone())).expect("First registration should succeed");
@@ -308,12 +313,14 @@ async fn test_p0_project_list_shows_registered_projects() {
         name: "alpha_project".to_string(),
         path: temp_dir.path().join("alpha").to_str().unwrap().to_string(),
         registered_at: None,
+        is_favorite: false,
     };
     let project2 = Project {
         id: None,
         name: "beta_project".to_string(),
         path: temp_dir.path().join("beta").to_str().unwrap().to_string(),
         registered_at: None,
+        is_favorite: false,
     };
     db_create_project(&project1, Some(db.clone())).expect("First registration should succeed");
     db_create_project(&project2, Some(db.clone())).expect("Second registration should succeed");
@@ -352,6 +359,7 @@ async fn test_p1_project_list_includes_path_and_date() {
         name: "test_project".to_string(),
         path: project_path.to_str().unwrap().to_string(),
         registered_at: None,
+        is_favorite: false,
     };
     db_create_project(&project, Some(db.clone())).expect("Registration should succeed");
 
@@ -498,6 +506,7 @@ async fn test_p1_project_info_named_lookup_finds_registered() {
         name: "named_lookup_test".to_string(),
         path: temp_dir.path().join("named").to_str().unwrap().to_string(),
         registered_at: None,
+        is_favorite: false,
     };
     db_create_project(&project, Some(db.clone())).expect("Registration should succeed");
 

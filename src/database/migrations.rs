@@ -174,6 +174,20 @@ impl MigrationManager {
             },
         );
 
+        migrations.insert(
+            6,
+            Migration {
+                version: 6,
+                description: "Add is_favorite column to projects table".to_string(),
+                up_sql: r#"
+                    ALTER TABLE projects ADD COLUMN is_favorite INTEGER NOT NULL DEFAULT 0;
+                    CREATE INDEX IF NOT EXISTS idx_projects_is_favorite ON projects(is_favorite);
+                "#
+                .to_string(),
+                down_sql: None,
+            },
+        );
+
         Self { migrations }
     }
 
@@ -294,7 +308,6 @@ impl MigrationManager {
 
         format!("{:x}", hasher.finish())
     }
-
 }
 
 impl Default for MigrationManager {

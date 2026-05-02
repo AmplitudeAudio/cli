@@ -40,8 +40,9 @@ use crate::{
     },
     config::sdk::discover_sdk,
     database::{
-        Database, db_create_project, db_forget_project, db_get_all_projects,
-        db_get_project_by_name, db_get_project_by_path, db_get_template_by_name, db_get_templates,
+        Database, db_create_project, db_forget_project, db_get_project_by_name,
+        db_get_project_by_path, db_get_projects_filtered, db_get_template_by_name,
+        db_get_templates, db_set_project_favorite,
         entities::{ProjectConfiguration, Template},
     },
     input::Input,
@@ -97,8 +98,35 @@ pub enum ProjectCommands {
     },
 
     /// List all registered projects
-    #[command(after_help = "Examples:\n  am project list\n  am project list --json\n")]
-    List {},
+    #[command(
+        after_help = "Examples:\n  am project list\n  am project list --json\n  am project list --favorite\n  am project list --no-favorite\n"
+    )]
+    List {
+        /// Show only favorite projects
+        #[arg(long, conflicts_with = "no_favorite")]
+        favorite: bool,
+
+        /// Show only non-favorite projects
+        #[arg(long = "no-favorite", conflicts_with = "favorite")]
+        no_favorite: bool,
+    },
+
+    /// Mark or unmark a project as favorite
+    #[command(
+        after_help = "Examples:\n  am project favorite my_game\n  am project favorite my_game --set\n  am project favorite my_game --unset\n"
+    )]
+    Favorite {
+        /// The name of the project to update
+        name: String,
+
+        /// Mark the project as favorite (default if neither flag is given)
+        #[arg(long, conflicts_with = "unset")]
+        set: bool,
+
+        /// Unmark the project as favorite
+        #[arg(long, conflicts_with = "set")]
+        unset: bool,
+    },
 
     /// Show details of a project
     #[command(after_help = "Examples:\n  am project info\n  am project info my_game\n")]
@@ -245,7 +273,22 @@ pub async fn handler(
         } => {
             handle_unregister_project_command(name.as_str(), delete, database, input, output).await
         }
-        ProjectCommands::List {} => handle_list_projects_command(database, output).await,
+        ProjectCommands::List {
+            favorite,
+            no_favorite,
+        } => {
+            let filter = match (*favorite, *no_favorite) {
+                (true, _) => Some(true),
+                (_, true) => Some(false),
+                _ => None,
+            };
+            handle_list_projects_command(filter, database, output).await
+        }
+        ProjectCommands::Favorite { name, unset, .. } => {
+            // --set and --unset are mutually exclusive (clap enforces);
+            // defaults to setting when neither flag is provided.
+            handle_favorite_project_command(name, !*unset, database, output).await
+        }
         ProjectCommands::Info { name } => {
             handle_info_project_command(name.clone(), database, input, output).await
         }
@@ -526,10 +569,11 @@ async fn handle_unregister_project_command(
 }
 
 async fn handle_list_projects_command(
+    favorite_filter: Option<bool>,
     database: Option<Arc<Database>>,
     output: &dyn Output,
 ) -> anyhow::Result<()> {
-    let projects = db_get_all_projects(database)?;
+    let projects = db_get_projects_filtered(favorite_filter, database)?;
 
     if projects.is_empty() {
         output.table(Some("Registered Projects"), json!([]));
@@ -550,19 +594,68 @@ async fn handle_list_projects_command(
             "<path>".white()
         ));
     } else {
+        let is_json = matches!(output.mode(), crate::presentation::OutputMode::Json);
         let display_data: Vec<serde_json::Value> = projects
             .iter()
             .map(|p| {
-                json!({
-                    "name": p.name,
+                let display_name = if !is_json && p.is_favorite {
+                    format!("★ {}", p.name)
+                } else {
+                    p.name.clone()
+                };
+                let mut row = json!({
+                    "name": display_name,
                     "path": p.path,
-                    "registered_at": p.registered_at.clone().unwrap_or_else(|| "-".to_string())
-                })
+                    "registered_at": p.registered_at.clone().unwrap_or_else(|| "-".to_string()),
+                });
+                if is_json {
+                    row["favorite"] = json!(p.is_favorite);
+                }
+                row
             })
             .collect();
 
         output.table(Some("Registered Projects"), json!(display_data));
     }
+
+    Ok(())
+}
+
+async fn handle_favorite_project_command(
+    name: &str,
+    target: bool,
+    database: Option<Arc<Database>>,
+    output: &dyn Output,
+) -> anyhow::Result<()> {
+    let project = db_get_project_by_name(name, database.clone())?.ok_or_else(|| {
+        CliError::new(
+            codes::ERR_PROJECT_NOT_REGISTERED,
+            format!("Project '{}' not found", name),
+            "The project is not registered in the database",
+        )
+        .with_suggestion("Use 'am project list' to see registered projects")
+    })?;
+
+    let id = project.id.expect("registered project must have an id");
+
+    if project.is_favorite == target {
+        let msg = if target {
+            format!("Project {} is already marked as favorite", name)
+        } else {
+            format!("Project {} is not marked as favorite", name)
+        };
+        output.success(json!(msg), None);
+        return Ok(());
+    }
+
+    db_set_project_favorite(id, target, database)?;
+
+    let msg = if target {
+        format!("Project {} marked as favorite", name)
+    } else {
+        format!("Project {} unmarked as favorite", name)
+    };
+    output.success(json!(msg), None);
 
     Ok(())
 }
@@ -604,6 +697,7 @@ async fn handle_info_by_name(
                 &config.build_dir,
                 true,
                 project.registered_at.as_deref(),
+                project.is_favorite,
                 &asset_counts,
                 output,
             );
@@ -654,6 +748,7 @@ async fn handle_info_current_dir(
                 &config.build_dir,
                 true,
                 project.registered_at.as_deref(),
+                project.is_favorite,
                 &asset_counts,
                 output,
             );
@@ -668,6 +763,7 @@ async fn handle_info_current_dir(
                     &config.build_dir,
                     false,
                     None,
+                    false,
                     &asset_counts,
                     output,
                 );
@@ -681,6 +777,7 @@ async fn handle_info_current_dir(
                     &config.build_dir,
                     false,
                     None,
+                    false,
                     &asset_counts,
                     output,
                 );
@@ -708,6 +805,7 @@ async fn handle_info_current_dir(
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 fn display_project_info(
     name: &str,
     path: &std::path::Path,
@@ -716,6 +814,7 @@ fn display_project_info(
     build_dir: &str,
     registered: bool,
     registered_at: Option<&str>,
+    favorite: bool,
     asset_counts: &HashMap<String, usize>,
     output: &dyn Output,
 ) {
@@ -729,6 +828,7 @@ fn display_project_info(
                 build_dir,
                 registered,
                 registered_at,
+                favorite,
                 asset_counts,
             );
             output.success(json_data, None);
@@ -742,6 +842,7 @@ fn display_project_info(
                 build_dir,
                 registered,
                 registered_at,
+                favorite,
                 asset_counts,
                 output,
             );
@@ -783,6 +884,7 @@ fn normalize_path(path: &std::path::Path) -> String {
     normalized.to_str().unwrap_or_default().to_string()
 }
 
+#[allow(clippy::too_many_arguments)]
 fn build_project_info_json(
     name: &str,
     path: &std::path::Path,
@@ -791,6 +893,7 @@ fn build_project_info_json(
     build_dir: &str,
     registered: bool,
     registered_at: Option<&str>,
+    favorite: bool,
     asset_counts: &HashMap<String, usize>,
 ) -> serde_json::Value {
     let path_str = path.to_str().unwrap_or_default();
@@ -816,6 +919,7 @@ fn build_project_info_json(
         "name": name,
         "path": path_str,
         "registered": registered,
+        "favorite": favorite,
         "paths": {
             "sources": sources_path,
             "data": data_path,
@@ -848,6 +952,7 @@ fn build_project_info_json(
     json_value
 }
 
+#[allow(clippy::too_many_arguments)]
 fn display_project_info_interactive(
     name: &str,
     path: &std::path::Path,
@@ -856,6 +961,7 @@ fn display_project_info_interactive(
     build_dir: &str,
     registered: bool,
     registered_at: Option<&str>,
+    favorite: bool,
     asset_counts: &HashMap<String, usize>,
     output: &dyn Output,
 ) {
@@ -892,6 +998,12 @@ fn display_project_info_interactive(
     } else {
         output.progress(&format!("  Registered:     {}", "No".yellow()));
     }
+    let favorite_label = if favorite {
+        "Yes".green()
+    } else {
+        "No".white()
+    };
+    output.progress(&format!("  Favorite:       {}", favorite_label));
     output.progress("");
     output.progress("Paths:");
     output.progress(&format!("  Sources:        {}", sources_path));
@@ -1515,7 +1627,8 @@ async fn handle_build_project_command(
     // Step 5: Compile assets to FlatBuffers binaries
     output.progress("Compiling assets...");
 
-    let build_summary = compiler::compile_project(&sources_dir, &build_dir, &sdk, fail_fast, output)?;
+    let build_summary =
+        compiler::compile_project(&sources_dir, &build_dir, &sdk, fail_fast, output)?;
 
     // Step 6: Copy data files (audio files)
     let data_dir = current_dir.join(&project_config.data_dir);

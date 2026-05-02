@@ -43,6 +43,7 @@ async fn test_p0_db_create_project_inserts_new_project() {
         name: "test_project".to_string(),
         path: "/path/to/project".to_string(),
         registered_at: None,
+        is_favorite: false,
     };
 
     let result = db_create_project(&project, Some(db.clone()));
@@ -60,6 +61,7 @@ async fn test_p0_db_create_project_fails_on_duplicate_name() {
         name: "duplicate_project".to_string(),
         path: "/path/one".to_string(),
         registered_at: None,
+        is_favorite: false,
     };
     db_create_project(&project1, Some(db.clone())).expect("First insert should succeed");
 
@@ -68,6 +70,7 @@ async fn test_p0_db_create_project_fails_on_duplicate_name() {
         name: "duplicate_project".to_string(),
         path: "/path/two".to_string(),
         registered_at: None,
+        is_favorite: false,
     };
 
     let result = db_create_project(&project2, Some(db.clone()));
@@ -84,6 +87,7 @@ async fn test_p1_db_create_project_allows_same_path_different_name() {
         name: "project_a".to_string(),
         path: "/shared/path".to_string(),
         registered_at: None,
+        is_favorite: false,
     };
     db_create_project(&project1, Some(db.clone())).expect("First insert should succeed");
 
@@ -92,6 +96,7 @@ async fn test_p1_db_create_project_allows_same_path_different_name() {
         name: "project_b".to_string(),
         path: "/shared/path".to_string(),
         registered_at: None,
+        is_favorite: false,
     };
 
     let result = db_create_project(&project2, Some(db.clone()));
@@ -115,6 +120,7 @@ async fn test_p0_db_get_project_by_name_returns_existing_project() {
         name: "findable_project".to_string(),
         path: "/path/to/findable".to_string(),
         registered_at: None,
+        is_favorite: false,
     };
     db_create_project(&project, Some(db.clone())).expect("Insert should succeed");
 
@@ -152,6 +158,7 @@ async fn test_p1_db_get_project_by_name_is_case_sensitive() {
         name: "CaseSensitiveProject".to_string(),
         path: "/path/case".to_string(),
         registered_at: None,
+        is_favorite: false,
     };
     db_create_project(&project, Some(db.clone())).expect("Insert should succeed");
 
@@ -177,6 +184,7 @@ async fn test_p0_db_forget_project_removes_project() {
         name: "to_be_forgotten".to_string(),
         path: "/path/to/forget".to_string(),
         registered_at: None,
+        is_favorite: false,
     };
     db_create_project(&project, Some(db.clone())).expect("Insert should succeed");
 
@@ -307,12 +315,14 @@ async fn test_p0_db_get_all_projects_returns_all_projects() {
         name: "project_one".to_string(),
         path: "/path/one".to_string(),
         registered_at: None,
+        is_favorite: false,
     };
     let project2 = Project {
         id: None,
         name: "project_two".to_string(),
         path: "/path/two".to_string(),
         registered_at: None,
+        is_favorite: false,
     };
     db_create_project(&project1, Some(db.clone())).expect("First insert should succeed");
     db_create_project(&project2, Some(db.clone())).expect("Second insert should succeed");
@@ -334,18 +344,21 @@ async fn test_p1_db_get_all_projects_returns_sorted_by_name() {
         name: "zebra_project".to_string(),
         path: "/path/zebra".to_string(),
         registered_at: None,
+        is_favorite: false,
     };
     let project_a = Project {
         id: None,
         name: "alpha_project".to_string(),
         path: "/path/alpha".to_string(),
         registered_at: None,
+        is_favorite: false,
     };
     let project_m = Project {
         id: None,
         name: "middle_project".to_string(),
         path: "/path/middle".to_string(),
         registered_at: None,
+        is_favorite: false,
     };
     db_create_project(&project_z, Some(db.clone())).expect("Insert should succeed");
     db_create_project(&project_a, Some(db.clone())).expect("Insert should succeed");
@@ -379,6 +392,7 @@ async fn test_p1_db_get_all_projects_includes_registered_at() {
         name: "dated_project".to_string(),
         path: "/path/dated".to_string(),
         registered_at: None,
+        is_favorite: false,
     };
     db_create_project(&project, Some(db.clone())).expect("Insert should succeed");
 
@@ -414,6 +428,7 @@ async fn test_p0_db_get_project_by_path_returns_existing_project() {
         name: "path_lookup_project".to_string(),
         path: "/home/user/my_project".to_string(),
         registered_at: None,
+        is_favorite: false,
     };
     db_create_project(&project, Some(db.clone())).expect("Insert should succeed");
 
@@ -449,6 +464,7 @@ async fn test_p1_db_get_project_by_path_is_case_sensitive() {
         name: "case_path_project".to_string(),
         path: "/Home/User/Project".to_string(),
         registered_at: None,
+        is_favorite: false,
     };
     db_create_project(&project, Some(db.clone())).expect("Insert should succeed");
 
@@ -468,6 +484,7 @@ async fn test_p1_db_get_project_by_path_includes_registered_at() {
         name: "dated_path_project".to_string(),
         path: "/path/with/date".to_string(),
         registered_at: None,
+        is_favorite: false,
     };
     db_create_project(&project, Some(db.clone())).expect("Insert should succeed");
 

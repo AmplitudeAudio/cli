@@ -55,6 +55,8 @@ pub struct Project {
     pub path: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub registered_at: Option<String>,
+    #[serde(default)]
+    pub is_favorite: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -82,6 +84,7 @@ impl ProjectConfiguration {
             name: self.name.clone(),
             path: path.to_string(),
             registered_at: None,
+            is_favorite: false,
         }
     }
 }

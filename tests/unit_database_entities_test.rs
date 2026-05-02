@@ -109,6 +109,7 @@ fn test_p2_project_clone_creates_independent_copy() {
         name: "original".to_string(),
         path: "/original/path".to_string(),
         registered_at: Some("2026-01-20".to_string()),
+        is_favorite: false,
     };
 
     let cloned = project.clone();
@@ -126,6 +127,7 @@ fn test_p2_project_serializes_to_json() {
         name: "test".to_string(),
         path: "/test/path".to_string(),
         registered_at: Some("2026-01-20".to_string()),
+        is_favorite: false,
     };
 
     let json = serde_json::to_string(&project);
