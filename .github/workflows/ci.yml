@@ -8,7 +8,6 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
-  AM_SDK_REPO: AmplitudeAudio/sdk
 
 jobs:
   build-and-test:
@@ -17,7 +16,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        include:
+          - os: ubuntu-latest
+            sdk_platform: x86_64-linux
+          - os: macos-latest
+            sdk_platform: arm64-macosx
+          - os: windows-latest
+            sdk_platform: x64-windows
 
     steps:
       - name: Checkout repository
@@ -29,16 +34,19 @@ jobs:
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@v2
 
-      - name: Clone Amplitude SDK
-        run: git clone --depth 1 https://github.com/${{ env.AM_SDK_REPO }}.git amplitude-sdk
+      - name: Setup Amplitude Audio SDK
+        id: setup-sdk
+        uses: AmplitudeAudio/action-setup-sdk@main
+        with:
+          platforms: ${{ matrix.sdk_platform }}
+          version: nightly
+          config: release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Set AM_SDK_PATH (Unix)
-        if: runner.os != 'Windows'
-        run: echo "AM_SDK_PATH=${{ github.workspace }}/amplitude-sdk" >> "$GITHUB_ENV"
-
-      - name: Set AM_SDK_PATH (Windows)
-        if: runner.os == 'Windows'
-        run: echo "AM_SDK_PATH=${{ github.workspace }}\amplitude-sdk" >> $env:GITHUB_ENV
+      - name: Set AM_SDK_PATH
+        shell: bash
+        run: echo "AM_SDK_PATH=${{ steps.setup-sdk.outputs.path }}" >> "$GITHUB_ENV"
 
       - name: Check formatting
         run: cargo fmt --check

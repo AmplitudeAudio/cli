@@ -1,0 +1,344 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g. 0.2.0, no leading v)'
+        required: true
+        type: string
+
+env:
+  CARGO_TERM_COLOR: always
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  id-token: write
+  attestations: write
+
+jobs:
+  prepare:
+    name: Prepare release
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.resolve.outputs.version }}
+      tag: ${{ steps.resolve.outputs.tag }}
+      should_release: ${{ steps.resolve.outputs.should_release }}
+      prerelease: ${{ steps.resolve.outputs.prerelease }}
+      changelog: ${{ steps.changelog.outputs.body }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Resolve version, tag, prerelease, and release intent
+        id: resolve
+        shell: bash
+        run: |
+          set -euo pipefail
+          event="${{ github.event_name }}"
+          ref="${{ github.ref }}"
+          cargo_version="$(grep -m1 '^version = ' Cargo.toml | sed -E 's/version = "([^"]+)"/\1/')"
+          should_release="true"
+          version=""
+          tag=""
+
+          if [[ "$event" == "push" && "$ref" == refs/tags/v* ]]; then
+            tag="${ref#refs/tags/}"
+            version="${tag#v}"
+          elif [[ "$event" == "workflow_dispatch" ]]; then
+            version="${{ inputs.version }}"
+            tag="v${version}"
+          elif [[ "$event" == "push" && "$ref" == "refs/heads/main" ]]; then
+            latest_tag="$(git tag --list 'v*' --sort=-v:refname | head -n1 || true)"
+            latest_version="${latest_tag#v}"
+            if [[ "$cargo_version" == "$latest_version" ]]; then
+              echo "Cargo.toml version ($cargo_version) matches latest tag ($latest_tag); no release."
+              should_release="false"
+              version="$cargo_version"
+              tag="v${version}"
+            else
+              version="$cargo_version"
+              tag="v${version}"
+            fi
+          else
+            echo "Unsupported trigger: event=$event ref=$ref" >&2
+            exit 1
+          fi
+
+          if [[ "$should_release" == "true" && "$version" != "$cargo_version" ]]; then
+            echo "::error::Resolved version ($version) does not match Cargo.toml version ($cargo_version)."
+            exit 1
+          fi
+
+          prerelease="false"
+          if [[ "$version" =~ -(alpha|beta|rc) ]]; then
+            prerelease="true"
+          fi
+
+          echo "version=$version"          | tee -a "$GITHUB_OUTPUT"
+          echo "tag=$tag"                  | tee -a "$GITHUB_OUTPUT"
+          echo "should_release=$should_release" | tee -a "$GITHUB_OUTPUT"
+          echo "prerelease=$prerelease"    | tee -a "$GITHUB_OUTPUT"
+
+      - name: Abort if release already exists
+        if: steps.resolve.outputs.should_release == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          tag="${{ steps.resolve.outputs.tag }}"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo "::error::Release $tag already exists."
+            exit 1
+          fi
+
+      - name: Create and push tag (dispatch / main bump)
+        if: |
+          steps.resolve.outputs.should_release == 'true' &&
+          (github.event_name == 'workflow_dispatch' ||
+           (github.event_name == 'push' && github.ref == 'refs/heads/main'))
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          tag="${{ steps.resolve.outputs.tag }}"
+          if git rev-parse "$tag" >/dev/null 2>&1; then
+            echo "Tag $tag already exists locally; skipping creation."
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git tag -a "$tag" -m "Release $tag"
+            git push origin "$tag"
+          fi
+
+      - name: Install git-cliff
+        if: steps.resolve.outputs.should_release == 'true'
+        uses: taiki-e/install-action@v2
+        with:
+          tool: git-cliff
+
+      - name: Generate changelog
+        id: changelog
+        if: steps.resolve.outputs.should_release == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="${{ steps.resolve.outputs.tag }}"
+          body="$(git-cliff --config cliff.toml --tag "$tag" --unreleased --strip all || true)"
+          if [[ -z "$body" ]]; then
+            body="Release ${tag}."
+          fi
+          delim="CHANGELOG_EOF_$(uuidgen | tr -d '-')"
+          {
+            echo "body<<${delim}"
+            echo "$body"
+            echo "${delim}"
+          } >> "$GITHUB_OUTPUT"
+
+  build:
+    name: Build ${{ matrix.target }}
+    needs: prepare
+    if: needs.prepare.outputs.should_release == 'true'
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            runner: ubuntu-latest
+            cross: false
+            bin: am
+            archive_ext: zip
+            sdk_platform: x86_64-linux
+          - target: aarch64-unknown-linux-gnu
+            runner: ubuntu-latest
+            cross: zigbuild
+            bin: am
+            archive_ext: zip
+            sdk_platform: x86_64-linux
+          - target: x86_64-apple-darwin
+            runner: macos-latest
+            cross: false
+            bin: am
+            archive_ext: zip
+            sdk_platform: x86_64-macosx
+          - target: aarch64-apple-darwin
+            runner: macos-latest
+            cross: false
+            bin: am
+            archive_ext: zip
+            sdk_platform: arm64-macosx
+          - target: x86_64-pc-windows-msvc
+            runner: windows-latest
+            cross: false
+            bin: am.exe
+            archive_ext: zip
+            sdk_platform: x64-windows
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.prepare.outputs.tag }}
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Install cargo-zigbuild (Linux aarch64)
+        if: matrix.cross == 'zigbuild'
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-zigbuild,zig
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+
+      - name: Setup Amplitude Audio SDK
+        id: setup-sdk
+        uses: AmplitudeAudio/action-setup-sdk@main
+        with:
+          platforms: ${{ matrix.sdk_platform }}
+          version: nightly
+          config: release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set AM_SDK_PATH
+        shell: bash
+        run: echo "AM_SDK_PATH=${{ steps.setup-sdk.outputs.path }}" >> "$GITHUB_ENV"
+
+      - name: Build (native)
+        if: matrix.cross == false
+        run: cargo build --release --target ${{ matrix.target }}
+
+      - name: Build (zigbuild)
+        if: matrix.cross == 'zigbuild'
+        run: cargo zigbuild --release --target ${{ matrix.target }}
+
+      - name: Stage artifact directory (Unix)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${{ needs.prepare.outputs.version }}"
+          target="${{ matrix.target }}"
+          stage="am-v${version}-${target}"
+          mkdir -p "dist/${stage}/completions"
+          cp "target/${target}/release/${{ matrix.bin }}" "dist/${stage}/"
+          cp README.md LICENSE "dist/${stage}/"
+          chmod +x "dist/${stage}/${{ matrix.bin }}" || true
+          bin_for_completions="dist/${stage}/${{ matrix.bin }}"
+          # On cross-compiled aarch64 Linux we cannot exec the binary on x86_64 host.
+          # In that case generate completions on the host using a native build.
+          if [[ "${target}" == "aarch64-unknown-linux-gnu" ]]; then
+            cargo build --release --target x86_64-unknown-linux-gnu
+            bin_for_completions="target/x86_64-unknown-linux-gnu/release/am"
+          fi
+          # On macOS x86_64 cross-build (host arm64), Rosetta-less hosts can still execute via Apple's translation,
+          # but to be safe always use the arm64 build for completion generation when host is arm64.
+          if [[ "${target}" == "x86_64-apple-darwin" ]]; then
+            cargo build --release --target aarch64-apple-darwin
+            bin_for_completions="target/aarch64-apple-darwin/release/am"
+          fi
+          "$bin_for_completions" completions bash       > "dist/${stage}/completions/am.bash"
+          "$bin_for_completions" completions zsh        > "dist/${stage}/completions/am.zsh"
+          "$bin_for_completions" completions fish       > "dist/${stage}/completions/am.fish"
+          "$bin_for_completions" completions powershell > "dist/${stage}/completions/_am.ps1"
+          echo "STAGE_DIR=dist/${stage}" >> "$GITHUB_ENV"
+          echo "STAGE_NAME=${stage}"     >> "$GITHUB_ENV"
+
+      - name: Stage artifact directory (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $version = "${{ needs.prepare.outputs.version }}"
+          $target  = "${{ matrix.target }}"
+          $stage   = "am-v$version-$target"
+          New-Item -ItemType Directory -Force -Path "dist/$stage/completions" | Out-Null
+          Copy-Item "target/$target/release/${{ matrix.bin }}" "dist/$stage/"
+          Copy-Item README.md "dist/$stage/"
+          Copy-Item LICENSE   "dist/$stage/"
+          $bin = "dist/$stage/${{ matrix.bin }}"
+          & $bin completions bash       | Out-File -Encoding utf8NoBOM "dist/$stage/completions/am.bash"
+          & $bin completions zsh        | Out-File -Encoding utf8NoBOM "dist/$stage/completions/am.zsh"
+          & $bin completions fish       | Out-File -Encoding utf8NoBOM "dist/$stage/completions/am.fish"
+          & $bin completions powershell | Out-File -Encoding utf8NoBOM "dist/$stage/completions/_am.ps1"
+          "STAGE_DIR=dist/$stage" | Out-File -Append -Encoding ascii $env:GITHUB_ENV
+          "STAGE_NAME=$stage"     | Out-File -Append -Encoding ascii $env:GITHUB_ENV
+
+      - name: Create zip (Unix)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd dist
+          zip -r "${STAGE_NAME}.zip" "${STAGE_NAME}"
+          shasum -a 256 "${STAGE_NAME}.zip" > "${STAGE_NAME}.zip.sha256"
+
+      - name: Create zip (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Set-Location dist
+          Compress-Archive -Path $env:STAGE_NAME -DestinationPath "$($env:STAGE_NAME).zip" -Force
+          $hash = Get-FileHash "$($env:STAGE_NAME).zip" -Algorithm SHA256
+          "$($hash.Hash.ToLower())  $($env:STAGE_NAME).zip" | Out-File -Encoding ascii "$($env:STAGE_NAME).zip.sha256"
+
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: dist/${{ env.STAGE_NAME }}.zip
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.STAGE_NAME }}
+          path: |
+            dist/${{ env.STAGE_NAME }}.zip
+            dist/${{ env.STAGE_NAME }}.zip.sha256
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    name: Publish GitHub Release
+    needs: [prepare, build]
+    if: needs.prepare.outputs.should_release == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Flatten artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p release
+          find artifacts -type f \( -name '*.zip' -o -name '*.zip.sha256' \) -exec cp {} release/ \;
+          ls -la release
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.prepare.outputs.tag }}
+          name: ${{ needs.prepare.outputs.tag }}
+          body: ${{ needs.prepare.outputs.changelog }}
+          prerelease: ${{ needs.prepare.outputs.prerelease == 'true' }}
+          draft: false
+          fail_on_unmatched_files: true
+          files: |
+            release/*.zip
+            release/*.zip.sha256
