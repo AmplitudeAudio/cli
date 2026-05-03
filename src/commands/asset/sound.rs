@@ -526,7 +526,12 @@ async fn list_sounds(output: &dyn Output) -> Result<()> {
                         // Provide more context for JSON errors
                         let error_msg = if let Some(line) = content.lines().next() {
                             if e.to_string().contains("column") {
-                                format!("Invalid JSON in {}: {}. First line: {}", filename, e, &line[..line.len().min(200)])
+                                format!(
+                                    "Invalid JSON in {}: {}. First line: {}",
+                                    filename,
+                                    e,
+                                    &line[..line.len().min(200)]
+                                )
                             } else {
                                 format!("Invalid JSON in {}: {}", filename, e)
                             }

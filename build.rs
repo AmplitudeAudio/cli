@@ -572,7 +572,11 @@ fn generate_enum(out: &mut String, def: &EnumDef, _fqn: &str) {
     if !def.is_union {
         writeln!(out).unwrap();
         writeln!(out, "impl<'de> serde::Deserialize<'de> for {} {{", def.name).unwrap();
-        writeln!(out, "    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>").unwrap();
+        writeln!(
+            out,
+            "    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>"
+        )
+        .unwrap();
         writeln!(out, "    where").unwrap();
         writeln!(out, "        D: serde::Deserializer<'de>,").unwrap();
         writeln!(out, "    {{").unwrap();
@@ -581,56 +585,95 @@ fn generate_enum(out: &mut String, def: &EnumDef, _fqn: &str) {
         writeln!(out).unwrap();
         writeln!(out, "        struct {}Visitor;", def.name).unwrap();
         writeln!(out).unwrap();
-        writeln!(out, "        impl<'de> Visitor<'de> for {}Visitor {{", def.name).unwrap();
+        writeln!(
+            out,
+            "        impl<'de> Visitor<'de> for {}Visitor {{",
+            def.name
+        )
+        .unwrap();
         writeln!(out, "            type Value = {};", def.name).unwrap();
         writeln!(out).unwrap();
-        writeln!(out, "            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {{").unwrap();
-        writeln!(out, "                write!(formatter, \"string or integer\")").unwrap();
+        writeln!(
+            out,
+            "            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {{"
+        )
+        .unwrap();
+        writeln!(
+            out,
+            "                write!(formatter, \"string or integer\")"
+        )
+        .unwrap();
         writeln!(out, "            }}").unwrap();
         writeln!(out).unwrap();
-        writeln!(out, "            fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>").unwrap();
+        writeln!(
+            out,
+            "            fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>"
+        )
+        .unwrap();
         writeln!(out, "            where").unwrap();
         writeln!(out, "                E: de::Error,").unwrap();
         writeln!(out, "            {{").unwrap();
         writeln!(out, "                match value {{").unwrap();
-        
+
         // Generate match arms for string values
         for variant in &def.variants {
             let rust_name = &variant.name;
-            let serde_name = if rust_name.chars().all(|c| c.is_uppercase() || c == '_')
-                && rust_name.len() > 1
-            {
-                rust_name.clone() // Keep as-is for HRTF, etc.
-            } else {
-                rust_name.clone()
-            };
-            writeln!(out, "                    \"{}\" => Ok({}::{}),", serde_name, def.name, rust_name).unwrap();
+            let serde_name =
+                if rust_name.chars().all(|c| c.is_uppercase() || c == '_') && rust_name.len() > 1 {
+                    rust_name.clone() // Keep as-is for HRTF, etc.
+                } else {
+                    rust_name.clone()
+                };
+            writeln!(
+                out,
+                "                    \"{}\" => Ok({}::{}),",
+                serde_name, def.name, rust_name
+            )
+            .unwrap();
         }
-        writeln!(out, "                    _ => Err(de::Error::unknown_variant(value, &[])),").unwrap();
+        writeln!(
+            out,
+            "                    _ => Err(de::Error::unknown_variant(value, &[])),"
+        )
+        .unwrap();
         writeln!(out, "                }}").unwrap();
         writeln!(out, "            }}").unwrap();
         writeln!(out).unwrap();
-        writeln!(out, "            fn visit_u64<E>(self, value: u64) -> Result<Self::Value, E>").unwrap();
+        writeln!(
+            out,
+            "            fn visit_u64<E>(self, value: u64) -> Result<Self::Value, E>"
+        )
+        .unwrap();
         writeln!(out, "            where").unwrap();
         writeln!(out, "                E: de::Error,").unwrap();
         writeln!(out, "            {{").unwrap();
         writeln!(out, "                match value {{").unwrap();
-        
+
         // Generate match arms for integer values
         for variant in &def.variants {
             let rust_name = &variant.name;
-            writeln!(out, "                    {} => Ok({}::{}),", variant.value, def.name, rust_name).unwrap();
+            writeln!(
+                out,
+                "                    {} => Ok({}::{}),",
+                variant.value, def.name, rust_name
+            )
+            .unwrap();
         }
         writeln!(out, "                    _ => Err(de::Error::invalid_value(de::Unexpected::Unsigned(value), &self)),").unwrap();
         writeln!(out, "                }}").unwrap();
         writeln!(out, "            }}").unwrap();
         writeln!(out, "        }}").unwrap();
         writeln!(out).unwrap();
-        writeln!(out, "        deserializer.deserialize_any({}Visitor)", def.name).unwrap();
+        writeln!(
+            out,
+            "        deserializer.deserialize_any({}Visitor)",
+            def.name
+        )
+        .unwrap();
         writeln!(out, "    }}").unwrap();
         writeln!(out, "}}").unwrap();
     }
-    
+
     writeln!(out).unwrap();
 }
 

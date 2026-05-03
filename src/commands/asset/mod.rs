@@ -46,9 +46,7 @@ use crate::{
 };
 
 /// Recursively find all `.json` files under `dir`. Returns empty vec if `dir` doesn't exist.
-pub(crate) fn find_json_files_recursive(
-    dir: &std::path::Path,
-) -> Result<Vec<std::path::PathBuf>> {
+pub(crate) fn find_json_files_recursive(dir: &std::path::Path) -> Result<Vec<std::path::PathBuf>> {
     let mut files = Vec::new();
     if !dir.exists() {
         return Ok(files);

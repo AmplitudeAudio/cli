@@ -234,7 +234,6 @@ impl DatabaseTransaction {
         self.committed = true;
         Ok(())
     }
-
 }
 
 impl Drop for DatabaseTransaction {
@@ -246,4 +245,3 @@ impl Drop for DatabaseTransaction {
         }
     }
 }
-

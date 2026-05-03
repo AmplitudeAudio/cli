@@ -181,9 +181,7 @@ pub fn output_path_for(
 
     // Strip only the trailing `.json` extension, keep everything else.
     let stem = relative.to_string_lossy();
-    let without_json = stem
-        .strip_suffix(".json")
-        .unwrap_or(&stem);
+    let without_json = stem.strip_suffix(".json").unwrap_or(&stem);
 
     build_dir.join(format!("{}{}", without_json, output_extension))
 }
@@ -258,11 +256,7 @@ pub fn compile_project(
         let schema_bytes = match fs::read(&schema_path) {
             Ok(b) => b,
             Err(e) => {
-                let msg = format!(
-                    "failed to read schema '{}': {}",
-                    schema_path.display(),
-                    e
-                );
+                let msg = format!("failed to read schema '{}': {}", schema_path.display(), e);
                 output.warning(&msg);
                 // Skip this entry entirely — schema not available.
                 continue;
@@ -291,9 +285,7 @@ pub fn compile_project(
                     if fail_fast {
                         return Err(e).context(msg);
                     }
-                    summary
-                        .errors
-                        .push((source.display().to_string(), msg));
+                    summary.errors.push((source.display().to_string(), msg));
                     continue;
                 }
             };
@@ -308,9 +300,8 @@ pub fn compile_project(
                     }
 
                     let bytes_written = binary.len() as u64;
-                    fs::write(&target, &binary).with_context(|| {
-                        format!("failed to write '{}'", target.display())
-                    })?;
+                    fs::write(&target, &binary)
+                        .with_context(|| format!("failed to write '{}'", target.display()))?;
 
                     summary.compiled += 1;
                     summary.total_bytes += bytes_written;
@@ -324,18 +315,12 @@ pub fn compile_project(
                     );
                 }
                 Err(e) => {
-                    let msg = format!(
-                        "failed to compile '{}': {}",
-                        source.display(),
-                        e
-                    );
+                    let msg = format!("failed to compile '{}': {}", source.display(), e);
                     if fail_fast {
                         anyhow::bail!("{}", msg);
                     }
                     log::error!("{}", msg);
-                    summary
-                        .errors
-                        .push((source.display().to_string(), msg));
+                    summary.errors.push((source.display().to_string(), msg));
                 }
             }
         }
@@ -406,7 +391,10 @@ mod tests {
         let source = Path::new("/project/sources/sounds/fx/boom.json");
 
         let result = output_path_for(source, sources, build, ".amsound");
-        assert_eq!(result, PathBuf::from("/project/build/sounds/fx/boom.amsound"));
+        assert_eq!(
+            result,
+            PathBuf::from("/project/build/sounds/fx/boom.amsound")
+        );
     }
 
     #[test]
@@ -416,10 +404,7 @@ mod tests {
         let source = Path::new("/project/sources/pc.config.json");
 
         let result = output_path_for(source, sources, build, ".amconfig");
-        assert_eq!(
-            result,
-            PathBuf::from("/project/build/pc.config.amconfig")
-        );
+        assert_eq!(result, PathBuf::from("/project/build/pc.config.amconfig"));
     }
 
     #[test]
@@ -438,7 +423,14 @@ mod tests {
 
         let files = discover_files(dir.path(), &entry);
         assert_eq!(files.len(), 1);
-        assert!(files[0].file_name().unwrap().to_str().unwrap().ends_with(".config.json"));
+        assert!(
+            files[0]
+                .file_name()
+                .unwrap()
+                .to_str()
+                .unwrap()
+                .ends_with(".config.json")
+        );
     }
 
     #[test]

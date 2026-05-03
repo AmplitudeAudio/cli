@@ -785,12 +785,12 @@ async fn test_p1_sound_list_invalid_json_warns_but_continues() {
         .as_array()
         .expect("Should have warnings array");
     assert!(!warnings.is_empty(), "Should have at least one warning");
-    
+
     // Check that at least one warning mentions invalid.json
     // (order depends on filesystem traversal, so check any warning)
-    let has_invalid_warning = warnings.iter().any(|w| {
-        w.as_str().unwrap().contains("invalid.json")
-    });
+    let has_invalid_warning = warnings
+        .iter()
+        .any(|w| w.as_str().unwrap().contains("invalid.json"));
     assert!(
         has_invalid_warning,
         "Should have a warning about invalid.json, got: {:?}",

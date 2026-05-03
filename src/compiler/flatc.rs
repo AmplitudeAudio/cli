@@ -22,9 +22,7 @@ use std::cell::Cell;
 
 use anyhow::{Context, Result, bail};
 use flatbuffers::{FlatBufferBuilder, PushAlignment, UOffsetT, VOffsetT, WIPOffset};
-use flatbuffers_reflection::reflection::{
-    BaseType, Enum, Field, Object, Schema, root_as_schema,
-};
+use flatbuffers_reflection::reflection::{BaseType, Enum, Field, Object, Schema, root_as_schema};
 use serde_json::Value;
 
 // Thread-local storage for passing dynamic struct size/alignment to the Push impl.
@@ -51,19 +49,15 @@ pub fn compile_json_to_binary(
     json_str: &str,
     output: &dyn crate::presentation::Output,
 ) -> Result<Vec<u8>> {
-    let schema = root_as_schema(schema_bytes)
-        .context("failed to parse .bfbs schema")?;
+    let schema = root_as_schema(schema_bytes).context("failed to parse .bfbs schema")?;
 
     let root_table = schema
         .root_table()
         .context("schema has no root table defined")?;
 
-    let json: Value = serde_json::from_str(json_str)
-        .context("failed to parse JSON input")?;
+    let json: Value = serde_json::from_str(json_str).context("failed to parse JSON input")?;
 
-    let json_obj = json
-        .as_object()
-        .context("JSON root must be an object")?;
+    let json_obj = json.as_object().context("JSON root must be an object")?;
 
     let mut builder = FlatBufferBuilder::with_capacity(1024);
 
@@ -108,11 +102,7 @@ struct DynStruct {
 impl DynStruct {
     /// Push this struct onto the builder, setting up thread-local size/alignment
     /// first so the Push trait implementation picks up the correct values.
-    fn push_to_builder<'a>(
-        self,
-        builder: &mut FlatBufferBuilder<'a>,
-        slot: VOffsetT,
-    ) {
+    fn push_to_builder<'a>(self, builder: &mut FlatBufferBuilder<'a>, slot: VOffsetT) {
         DYN_STRUCT_SIZE.set(self.data.len());
         DYN_STRUCT_ALIGN.set(self.align);
         builder.push_slot_always(slot, self);
@@ -405,13 +395,11 @@ fn build_table<'a>(
         if let Some(pre) = prebuilt[i] {
             match base_type {
                 BaseType::String | BaseType::Vector | BaseType::Vector64 => {
-                    let wip: WIPOffset<flatbuffers::ForwardsUOffset<&str>> =
-                        WIPOffset::new(pre.0);
+                    let wip: WIPOffset<flatbuffers::ForwardsUOffset<&str>> = WIPOffset::new(pre.0);
                     builder.push_slot_always(slot, wip);
                 }
                 BaseType::Obj => {
-                    let wip: WIPOffset<flatbuffers::ForwardsUOffset<&str>> =
-                        WIPOffset::new(pre.0);
+                    let wip: WIPOffset<flatbuffers::ForwardsUOffset<&str>> = WIPOffset::new(pre.0);
                     builder.push_slot_always(slot, wip);
                 }
                 BaseType::Union => {
@@ -517,74 +505,47 @@ fn build_vector<'a>(
 
     match element_type {
         BaseType::Bool => {
-            let items: Vec<bool> = arr
-                .iter()
-                .map(|v| v.as_bool().unwrap_or(false))
-                .collect();
+            let items: Vec<bool> = arr.iter().map(|v| v.as_bool().unwrap_or(false)).collect();
             let off = builder.create_vector(&items);
             Ok(PrebuiltOffset::from_wip(off))
         }
         BaseType::Byte => {
-            let items: Vec<i8> = arr
-                .iter()
-                .map(|v| v.as_i64().unwrap_or(0) as i8)
-                .collect();
+            let items: Vec<i8> = arr.iter().map(|v| v.as_i64().unwrap_or(0) as i8).collect();
             let off = builder.create_vector(&items);
             Ok(PrebuiltOffset::from_wip(off))
         }
         BaseType::UByte => {
-            let items: Vec<u8> = arr
-                .iter()
-                .map(|v| v.as_i64().unwrap_or(0) as u8)
-                .collect();
+            let items: Vec<u8> = arr.iter().map(|v| v.as_i64().unwrap_or(0) as u8).collect();
             let off = builder.create_vector(&items);
             Ok(PrebuiltOffset::from_wip(off))
         }
         BaseType::Short => {
-            let items: Vec<i16> = arr
-                .iter()
-                .map(|v| v.as_i64().unwrap_or(0) as i16)
-                .collect();
+            let items: Vec<i16> = arr.iter().map(|v| v.as_i64().unwrap_or(0) as i16).collect();
             let off = builder.create_vector(&items);
             Ok(PrebuiltOffset::from_wip(off))
         }
         BaseType::UShort => {
-            let items: Vec<u16> = arr
-                .iter()
-                .map(|v| v.as_i64().unwrap_or(0) as u16)
-                .collect();
+            let items: Vec<u16> = arr.iter().map(|v| v.as_i64().unwrap_or(0) as u16).collect();
             let off = builder.create_vector(&items);
             Ok(PrebuiltOffset::from_wip(off))
         }
         BaseType::Int => {
-            let items: Vec<i32> = arr
-                .iter()
-                .map(|v| v.as_i64().unwrap_or(0) as i32)
-                .collect();
+            let items: Vec<i32> = arr.iter().map(|v| v.as_i64().unwrap_or(0) as i32).collect();
             let off = builder.create_vector(&items);
             Ok(PrebuiltOffset::from_wip(off))
         }
         BaseType::UInt => {
-            let items: Vec<u32> = arr
-                .iter()
-                .map(|v| v.as_i64().unwrap_or(0) as u32)
-                .collect();
+            let items: Vec<u32> = arr.iter().map(|v| v.as_i64().unwrap_or(0) as u32).collect();
             let off = builder.create_vector(&items);
             Ok(PrebuiltOffset::from_wip(off))
         }
         BaseType::Long => {
-            let items: Vec<i64> = arr
-                .iter()
-                .map(|v| v.as_i64().unwrap_or(0))
-                .collect();
+            let items: Vec<i64> = arr.iter().map(|v| v.as_i64().unwrap_or(0)).collect();
             let off = builder.create_vector(&items);
             Ok(PrebuiltOffset::from_wip(off))
         }
         BaseType::ULong => {
-            let items: Vec<u64> = arr
-                .iter()
-                .map(|v| v.as_u64().unwrap_or(0))
-                .collect();
+            let items: Vec<u64> = arr.iter().map(|v| v.as_u64().unwrap_or(0)).collect();
             let off = builder.create_vector(&items);
             Ok(PrebuiltOffset::from_wip(off))
         }
@@ -597,10 +558,7 @@ fn build_vector<'a>(
             Ok(PrebuiltOffset::from_wip(off))
         }
         BaseType::Double => {
-            let items: Vec<f64> = arr
-                .iter()
-                .map(|v| v.as_f64().unwrap_or(0.0))
-                .collect();
+            let items: Vec<f64> = arr.iter().map(|v| v.as_f64().unwrap_or(0.0)).collect();
             let off = builder.create_vector(&items);
             Ok(PrebuiltOffset::from_wip(off))
         }
@@ -632,13 +590,12 @@ fn build_vector<'a>(
                 Ok(PrebuiltOffset::from_wip(off))
             } else {
                 // Vector of tables.
-                let mut offsets: Vec<WIPOffset<flatbuffers::TableFinishedWIPOffset>> = Vec::with_capacity(arr.len());
+                let mut offsets: Vec<WIPOffset<flatbuffers::TableFinishedWIPOffset>> =
+                    Vec::with_capacity(arr.len());
                 for v in arr {
-                    let child_json = v
-                        .as_object()
-                        .with_context(|| {
-                            format!("vector element in '{}' expected object", field.name())
-                        })?;
+                    let child_json = v.as_object().with_context(|| {
+                        format!("vector element in '{}' expected object", field.name())
+                    })?;
                     let off = build_table(builder, schema, &child_obj, child_json, output)?;
                     offsets.push(off);
                 }
@@ -665,9 +622,9 @@ fn build_vector<'a>(
                 // In FlatBuffers JSON, vector-of-union elements are just objects
                 // whose type is implied by the companion _type array.
                 // We need to try each non-NONE variant until one succeeds.
-                let child_json = v
-                    .as_object()
-                    .with_context(|| format!("union vector element in '{}' expected object", field.name()))?;
+                let child_json = v.as_object().with_context(|| {
+                    format!("union vector element in '{}' expected object", field.name())
+                })?;
 
                 let mut built = false;
                 let values = union_enum.values();
@@ -771,9 +728,12 @@ fn build_union_value(
     let union_enum = schema.enums().get(enum_idx as usize);
     let type_field_name = format!("{}_type", field_name);
 
-    let type_json = json_obj
-        .get(&type_field_name)
-        .with_context(|| format!("union field '{}' missing type discriminator '{}'", field_name, type_field_name))?;
+    let type_json = json_obj.get(&type_field_name).with_context(|| {
+        format!(
+            "union field '{}' missing type discriminator '{}'",
+            field_name, type_field_name
+        )
+    })?;
 
     let (type_val, variant) = resolve_union_variant(&union_enum, type_json)?;
 
@@ -859,11 +819,7 @@ fn find_union_type_value(
 }
 
 /// Resolve a UType field value from JSON when no pre-built union was found.
-fn resolve_utype_from_json(
-    schema: &Schema<'_>,
-    field: &Field<'_>,
-    json_val: &Value,
-) -> Result<u8> {
+fn resolve_utype_from_json(schema: &Schema<'_>, field: &Field<'_>, json_val: &Value) -> Result<u8> {
     if let Some(n) = json_val.as_i64() {
         return Ok(n as u8);
     }

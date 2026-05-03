@@ -361,7 +361,10 @@ fn find_switch_by_name(context: &ProjectContext, name: &str) -> Result<Option<Sw
 }
 
 /// Get all available switches in the project.
-fn get_available_switches(context: &ProjectContext, output: &dyn Output) -> Result<Vec<SwitchInfo>> {
+fn get_available_switches(
+    context: &ProjectContext,
+    output: &dyn Output,
+) -> Result<Vec<SwitchInfo>> {
     let sources_dir = resolve_sources_dir(&context.project_root);
     let switches_dir = sources_dir.join("switches");
 
@@ -402,11 +405,19 @@ fn get_available_switches(context: &ProjectContext, output: &dyn Output) -> Resu
                         });
                     }
                     Err(e) => {
-                        output.warning(&format!("Failed to parse switch file: {} - {}", path.display(), e));
+                        output.warning(&format!(
+                            "Failed to parse switch file: {} - {}",
+                            path.display(),
+                            e
+                        ));
                     }
                 },
                 Err(e) => {
-                    output.warning(&format!("Failed to read switch file: {} - {}", path.display(), e));
+                    output.warning(&format!(
+                        "Failed to read switch file: {} - {}",
+                        path.display(),
+                        e
+                    ));
                 }
             }
         }
@@ -417,7 +428,11 @@ fn get_available_switches(context: &ProjectContext, output: &dyn Output) -> Resu
 }
 
 /// Prompt user to select a switch in interactive mode.
-fn prompt_switch_selection(input: &dyn Input, output: &dyn Output, context: &ProjectContext) -> Result<SwitchInfo> {
+fn prompt_switch_selection(
+    input: &dyn Input,
+    output: &dyn Output,
+    context: &ProjectContext,
+) -> Result<SwitchInfo> {
     let switches = get_available_switches(context, output)?;
 
     if switches.is_empty() {
@@ -785,11 +800,19 @@ async fn list_switch_containers(output: &dyn Output) -> Result<()> {
                     }
                     Err(e) => {
                         let filename = path.file_name().unwrap_or_default().to_string_lossy();
-                        output.warning(&format!("Skipping invalid switch container file: {}", path.display()));
+                        output.warning(&format!(
+                            "Skipping invalid switch container file: {}",
+                            path.display()
+                        ));
                         // Provide more context for JSON errors
                         let error_msg = if let Some(line) = content.lines().next() {
                             if e.to_string().contains("column") {
-                                format!("Invalid JSON in {}: {}. First line: {}", filename, e, &line[..line.len().min(200)])
+                                format!(
+                                    "Invalid JSON in {}: {}. First line: {}",
+                                    filename,
+                                    e,
+                                    &line[..line.len().min(200)]
+                                )
                             } else {
                                 format!("Invalid JSON in {}: {}", filename, e)
                             }
@@ -801,7 +824,10 @@ async fn list_switch_containers(output: &dyn Output) -> Result<()> {
                 },
                 Err(e) => {
                     let filename = path.file_name().unwrap_or_default().to_string_lossy();
-                    output.warning(&format!("Failed to read switch container file: {}", path.display()));
+                    output.warning(&format!(
+                        "Failed to read switch container file: {}",
+                        path.display()
+                    ));
                     warnings.push(format!("Failed to read {}: {}", filename, e));
                 }
             }

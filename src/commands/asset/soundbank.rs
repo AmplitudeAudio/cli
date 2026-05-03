@@ -695,11 +695,19 @@ async fn list_soundbanks(output: &dyn Output) -> Result<()> {
                     }
                     Err(e) => {
                         let filename = path.file_name().unwrap_or_default().to_string_lossy();
-                        output.warning(&format!("Skipping invalid soundbank file: {}", path.display()));
+                        output.warning(&format!(
+                            "Skipping invalid soundbank file: {}",
+                            path.display()
+                        ));
                         // Provide more context for JSON errors
                         let error_msg = if let Some(line) = content.lines().next() {
                             if e.to_string().contains("column") {
-                                format!("Invalid JSON in {}: {}. First line: {}", filename, e, &line[..line.len().min(200)])
+                                format!(
+                                    "Invalid JSON in {}: {}. First line: {}",
+                                    filename,
+                                    e,
+                                    &line[..line.len().min(200)]
+                                )
                             } else {
                                 format!("Invalid JSON in {}: {}", filename, e)
                             }
@@ -711,7 +719,10 @@ async fn list_soundbanks(output: &dyn Output) -> Result<()> {
                 },
                 Err(e) => {
                     let filename = path.file_name().unwrap_or_default().to_string_lossy();
-                    output.warning(&format!("Failed to read soundbank file: {}", path.display()));
+                    output.warning(&format!(
+                        "Failed to read soundbank file: {}",
+                        path.display()
+                    ));
                     warnings.push(format!("Failed to read {}: {}", filename, e));
                 }
             }
