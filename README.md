@@ -59,3 +59,27 @@ Tests use priority tags (P0 = critical, P1 = high, P2 = medium, P3 = low) for se
 cargo test p0          # Critical tests only (fastest)
 cargo test p1          # High priority tests
 ```
+
+## Install from release
+
+Pre-built binaries are published on every release at
+<https://github.com/AmplitudeAudio/cli/releases>.
+
+Each release archive contains:
+
+- `am` (or `am.exe` on Windows)
+- Shell completion scripts under `completions/`
+- `README.md` and `LICENSE`
+
+### Supported targets
+
+- Linux x86_64 (`x86_64-unknown-linux-gnu`)
+- Linux aarch64 (`aarch64-unknown-linux-gnu`)
+- macOS Intel (`x86_64-apple-darwin`)
+- macOS Apple Silicon (`aarch64-apple-darwin`)
+- Windows x86_64 (`x86_64-pc-windows-msvc`)
+
+### Verification
+
+Each archive ships with a sibling `.sha256` file. SLSA build provenance
+attestations are attached to every release; verify with `gh attestation verify`.
