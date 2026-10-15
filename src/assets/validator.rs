@@ -39,7 +39,7 @@
 use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
-
+use log::{debug, info};
 use super::{AssetType, ValidationError, ValidationLayer};
 use crate::common::errors::codes;
 use crate::presentation::Output;
@@ -73,6 +73,10 @@ fn runtime_path_to_source(path: &str) -> String {
         }
     }
     path.to_string()
+}
+
+fn normalize_asset_path(path: &str) -> String {
+    path.replace('\\', "/")
 }
 
 /// Validates cross-asset references within an Amplitude project.
@@ -345,12 +349,13 @@ impl ProjectValidator {
     /// (`sounds/footstep.amsound`). Runtime extensions are mapped back to `.json` for
     /// lookup since the validator scans source files on disk.
     pub fn asset_exists_by_path(&self, path: &str) -> bool {
-        if self.asset_paths.contains(path) {
+        let path = normalize_asset_path(path);
+        if self.asset_paths.contains(&path) {
             return true;
         }
 
         // Map runtime binary extensions back to .json for source file lookup
-        let json_path = runtime_path_to_source(path);
+        let json_path = runtime_path_to_source(&path);
         if json_path != path {
             return self.asset_paths.contains(json_path.as_str());
         }
@@ -437,7 +442,7 @@ impl ProjectValidator {
             // Track the relative path from sources dir for path-based lookups
             if let Ok(relative) = path.strip_prefix(&self.sources_dir) {
                 self.asset_paths
-                    .insert(relative.to_string_lossy().into_owned());
+                    .insert(normalize_asset_path(&relative.to_string_lossy()));
             }
         }
 
@@ -463,7 +468,7 @@ impl ProjectValidator {
 
             if let Ok(relative) = path.strip_prefix(&self.sources_dir) {
                 self.asset_paths
-                    .insert(relative.to_string_lossy().into_owned());
+                    .insert(normalize_asset_path(&relative.to_string_lossy()));
             }
         }
     }
@@ -508,6 +513,38 @@ mod tests {
             serde_json::to_string_pretty(&json).unwrap(),
         )
         .unwrap();
+    }
+
+    #[test]
+    fn test_asset_exists_by_path_normalizes_path_separators() {
+        let dir = tempdir().unwrap();
+        let nested_sounds = dir.path().join("sources/sounds/nested");
+        let nested_attenuators = dir.path().join("sources/attenuators/nested");
+        fs::create_dir_all(&nested_sounds).unwrap();
+        fs::create_dir_all(&nested_attenuators).unwrap();
+        write_minimal_asset_json(&nested_sounds, "footstep.json", 42, "footstep");
+        write_minimal_asset_json(&nested_attenuators, "room.json", 43, "room");
+
+        let validator = ProjectValidator::new(
+            dir.path().to_path_buf(),
+            &crate::presentation::JsonOutput::new(),
+        )
+        .unwrap();
+
+        for separator in ["/", "\\"] {
+            assert!(validator.asset_exists_by_path(&format!(
+                "sounds{separator}nested{separator}footstep.json"
+            )));
+            assert!(validator.asset_exists_by_path(&format!(
+                "sounds{separator}nested{separator}footstep.amsound"
+            )));
+            assert!(validator.asset_exists_by_path(&format!(
+                "attenuators{separator}nested{separator}room.json"
+            )));
+            assert!(validator.asset_exists_by_path(&format!(
+                "attenuators{separator}nested{separator}room.amattenuation"
+            )));
+        }
     }
 
     // =========================================================================
