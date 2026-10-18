@@ -175,24 +175,32 @@ fn build_zone(shape: &str, inner: Values, outer: Values) -> ZoneDefinition {
     }
 }
 
-/// Dimensions must be finite and greater than 0: the SDK divides by cone
-/// height and capsule axis length, and a zero or negative extent is meaningless.
-fn check_dimension(name: &str, value: f32) -> Result<()> {
-    if value.is_finite() && value > 0.0 {
+/// Dimensions must be finite and not negative. Zero is valid (degenerate
+/// shapes are handled by the SDK) except for cone height, which the SDK
+/// divides by.
+fn check_dimension(name: &str, shape: &str, field: &str, value: f32) -> Result<()> {
+    let needs_positive = shape == "cone" && field == "height";
+    let ok = value.is_finite() && (value > 0.0 || (!needs_positive && value == 0.0));
+    if ok {
         return Ok(());
     }
+    let rule = if needs_positive {
+        "greater than 0 (the SDK divides by a cone's height)"
+    } else {
+        "finite and not negative"
+    };
     Err(error(
         format!("Invalid value for {name}"),
-        format!("zone dimensions must be finite numbers greater than 0 (got {value})"),
+        format!("zone dimensions must be {rule} (got {value})"),
     )
     .into())
 }
 
-fn check_dimensions(args: &ZoneArgs) -> Result<()> {
+fn check_dimensions(args: &ZoneArgs, shape: &str) -> Result<()> {
     for side in Side::BOTH {
         for field in ALL_FIELDS {
             if let Some(v) = args.get(side, field) {
-                check_dimension(&flag(side, field), v)?;
+                check_dimension(&flag(side, field), shape, field, v)?;
             }
         }
     }
@@ -212,7 +220,7 @@ pub fn zone_from_flags(args: &ZoneArgs) -> Result<ZoneDefinition> {
         .with_suggestion("Pass --shape box|capsule|cone|sphere")
     })?;
     let (shape, fields) = find_shape(shape_name)?;
-    check_dimensions(args)?;
+    check_dimensions(args, shape)?;
 
     let mut stray = Vec::new();
     let mut owners: Vec<&str> = Vec::new();
@@ -281,12 +289,12 @@ pub fn zone_from_flags(args: &ZoneArgs) -> Result<ZoneDefinition> {
 
 fn validate_number(text: &str) -> Result<Validation, inquire::CustomUserError> {
     Ok(match text.trim().parse::<f32>() {
-        Ok(v) if v.is_finite() && v > 0.0 => Validation::Valid,
-        _ => Validation::Invalid("Enter a number greater than 0".into()),
+        Ok(v) if v.is_finite() && v >= 0.0 => Validation::Valid,
+        _ => Validation::Invalid("Enter a number that is not negative".into()),
     })
 }
 
-fn prompt_side(input: &dyn Input, side: Side, fields: &[&'static str]) -> Result<Values> {
+fn prompt_side(input: &dyn Input, side: Side, shape: &str, fields: &[&'static str]) -> Result<Values> {
     let label_prefix = match side {
         Side::Inner => "Inner",
         Side::Outer => "Outer",
@@ -297,7 +305,7 @@ fn prompt_side(input: &dyn Input, side: Side, fields: &[&'static str]) -> Result
             let label = format!("{label_prefix} {}", field.replace('_', " "));
             let text = input.prompt_text(&label, None, None, Some(&validate_number))?;
             let value = text.trim().parse::<f32>().unwrap_or(f32::NAN);
-            check_dimension(&label, value)?;
+            check_dimension(&label, shape, field, value)?;
             Ok((*field, value))
         })
         .collect()
@@ -307,7 +315,7 @@ fn prompt_side(input: &dyn Input, side: Side, fields: &[&'static str]) -> Result
 pub fn prompt_zone(input: &dyn Input) -> Result<ZoneDefinition> {
     let chosen = input.select("Zone shape", &shape_names())?;
     let (shape, fields) = find_shape(&chosen)?;
-    let inner = prompt_side(input, Side::Inner, fields)?;
-    let outer = prompt_side(input, Side::Outer, fields)?;
+    let inner = prompt_side(input, Side::Inner, shape, fields)?;
+    let outer = prompt_side(input, Side::Outer, shape, fields)?;
     Ok(build_zone(shape, inner, outer))
 }

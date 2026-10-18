@@ -227,21 +227,70 @@ fn zone_from_flags_requires_both_sides() {
 }
 
 #[test]
-fn zone_from_flags_rejects_non_positive_dimensions() {
-    for bad in [-1.0_f32, 0.0] {
+fn zone_from_flags_rejects_negative_and_non_finite_dimensions() {
+    for bad in [-1.0_f32, f32::NAN, f32::INFINITY] {
         let args = ZoneArgs {
             inner_half_width: Some(bad),
             ..box_args()
         };
         let err = zone_from_flags(&args).unwrap_err().to_string();
-        assert!(err.contains("--inner-half-width") && err.contains("greater than 0"), "{err}");
+        assert!(err.contains("--inner-half-width"), "{err}");
     }
 }
 
 #[test]
-fn prompt_zone_rejects_non_positive_dimensions() {
-    let input = ScriptedInput::new(&["sphere"], &["-2", "3"]);
-    assert!(prompt_zone(&input).is_err());
+fn zone_from_flags_accepts_zero_except_cone_height() {
+    let zero_box = ZoneArgs {
+        inner_half_width: Some(0.0),
+        inner_half_height: Some(0.0),
+        inner_half_depth: Some(0.0),
+        ..box_args()
+    };
+    assert!(zone_from_flags(&zero_box).is_ok());
+    let sphere = ZoneArgs {
+        shape: Some("sphere".to_string()),
+        inner_radius: Some(0.0),
+        outer_radius: Some(5.0),
+        ..ZoneArgs::default()
+    };
+    assert!(zone_from_flags(&sphere).is_ok());
+    let capsule = ZoneArgs {
+        shape: Some("capsule".to_string()),
+        inner_radius: Some(0.0),
+        inner_half_height: Some(0.0),
+        outer_radius: Some(1.0),
+        outer_half_height: Some(2.0),
+        ..ZoneArgs::default()
+    };
+    assert!(zone_from_flags(&capsule).is_ok());
+    let cone = ZoneArgs {
+        shape: Some("cone".to_string()),
+        inner_radius: Some(0.0),
+        inner_height: Some(1.0),
+        outer_radius: Some(2.0),
+        outer_height: Some(3.0),
+        ..ZoneArgs::default()
+    };
+    assert!(zone_from_flags(&cone).is_ok());
+    for (inner_h, outer_h, flag) in [(0.0, 3.0, "--inner-height"), (1.0, 0.0, "--outer-height")] {
+        let bad = ZoneArgs {
+            inner_height: Some(inner_h),
+            outer_height: Some(outer_h),
+            ..cone.clone()
+        };
+        let err = zone_from_flags(&bad).unwrap_err().to_string();
+        assert!(err.contains(flag) && err.contains("greater than 0"), "{err}");
+    }
+}
+
+#[test]
+fn prompt_zone_accepts_zero_but_rejects_negative_and_zero_cone_height() {
+    let ok = ScriptedInput::new(&["sphere"], &["0", "3"]);
+    assert!(prompt_zone(&ok).is_ok());
+    let negative = ScriptedInput::new(&["sphere"], &["-2", "3"]);
+    assert!(prompt_zone(&negative).is_err());
+    let zero_height = ScriptedInput::new(&["cone"], &["1", "0", "2", "3"]);
+    assert!(prompt_zone(&zero_height).is_err());
 }
 
 #[test]
