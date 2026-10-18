@@ -28,6 +28,9 @@ mod bus_shared;
 mod collection;
 mod effect;
 mod event;
+mod pipeline;
+mod pipeline_args;
+mod pipeline_prompts;
 mod rtpc;
 mod rtpc_args;
 mod rtpc_prompts;
@@ -44,6 +47,7 @@ pub use bus_file::{BusFileCommands, handler as handle_bus_file_command};
 pub use collection::{CollectionCommands, handler as handle_collection_command};
 pub use effect::{EffectCommands, handler as handle_effect_command};
 pub use event::{EventCommands, handler as handle_event_command};
+pub use pipeline::{PipelineCommands, handler as handle_pipeline_command};
 pub use rtpc::{RtpcCommands, handler as handle_rtpc_command};
 pub use sound::{SoundCommands, handler as handle_sound_command};
 pub use soundbank::{SoundbankCommands, handler as handle_soundbank_command};
@@ -149,6 +153,11 @@ pub enum AssetCommands {
         #[command(subcommand)]
         command: RtpcCommands,
     },
+    /// Pipeline asset management (audio processing node graphs)
+    Pipeline {
+        #[command(subcommand)]
+        command: PipelineCommands,
+    },
     /// Bus asset management (buses inside '*.buses.json' files)
     Bus {
         #[command(subcommand)]
@@ -195,6 +204,9 @@ pub async fn handler(
         }
         AssetCommands::Rtpc { command } => {
             handle_rtpc_command(command, database, input, output).await
+        }
+        AssetCommands::Pipeline { command } => {
+            handle_pipeline_command(command, database, input, output).await
         }
         AssetCommands::Bus { command } => {
             handle_bus_command(command, database, input, output).await

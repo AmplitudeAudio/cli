@@ -29,6 +29,12 @@ fn flatc() -> Option<PathBuf> {
 /// Runs `flatc --binary` on `file` with `buses_definition.fbs`; skips (visibly)
 /// when flatc or the SDK schemas are not available.
 pub fn assert_flatc_accepts_buses(file: &Path) {
+    assert_flatc_accepts_schema("buses_definition.fbs", file);
+}
+
+/// Runs `flatc --binary` on `file` with the named SDK schema; skips (visibly)
+/// when flatc or the SDK schemas are not available.
+pub fn assert_flatc_accepts_schema(schema_name: &str, file: &Path) {
     let Some(flatc) = flatc() else {
         eprintln!("skipped flatc check: flatc is not installed");
         return;
@@ -40,10 +46,10 @@ pub fn assert_flatc_accepts_buses(file: &Path) {
     let sdk = PathBuf::from(sdk);
     let Some(schema) = [sdk.join("schemas"), sdk.join("../schemas")]
         .into_iter()
-        .map(|d| d.join("buses_definition.fbs"))
+        .map(|d| d.join(schema_name))
         .find(|p| p.exists())
     else {
-        eprintln!("skipped flatc check: buses_definition.fbs not found");
+        eprintln!("skipped flatc check: {schema_name} not found");
         return;
     };
     let out_dir = tempfile::tempdir().unwrap();

@@ -93,8 +93,7 @@ pub fn supported_fields(asset_type: AssetType) -> &'static [&'static str] {
             "default_value",
             "fade_settings",
         ],
-        // CRUD commands for this type arrive in a later task.
-        AssetType::Pipeline => &[],
+        AssetType::Pipeline => &["id", "name", "nodes"],
     }
 }
 
@@ -120,11 +119,13 @@ pub const KNOWN_GAPS: &[(AssetType, &str)] = &[
     (AssetType::SwitchContainer, "scope"),
     (AssetType::SwitchContainer, "fader"),
     (AssetType::SwitchContainer, "update_behavior"),
-    // Pipeline
-    (AssetType::Pipeline, "id"),
-    (AssetType::Pipeline, "name"),
-    (AssetType::Pipeline, "nodes"),
 ];
+
+/// Fields of `PipelineNodeDefinition` the `--node` flag syntax covers.
+pub const PIPELINE_NODE_SUPPORTED_FIELDS: &[&str] = &["id", "name", "consume", "parameters"];
+
+/// `PipelineNodeDefinition` fields not covered by any pipeline command (none today).
+pub const PIPELINE_NODE_KNOWN_GAPS: &[&str] = &[];
 
 /// Fields of `BusDefinition` the bus commands cover.
 ///

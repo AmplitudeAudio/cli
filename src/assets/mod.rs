@@ -69,6 +69,7 @@ mod event;
 /// FaderAlgorithm enum and convenience extension methods for generated SDK types.
 pub mod extensions;
 mod pipeline;
+mod pipeline_graph;
 mod rtpc;
 mod sound;
 mod soundbank;
@@ -101,6 +102,7 @@ pub use effect::{Effect, EffectBuilder};
 pub use event::{Event, EventBuilder};
 #[allow(unused_imports)]
 pub use pipeline::{Pipeline, PipelineBuilder};
+pub use pipeline_graph::{BUILTIN_NODES, InputArity, builtin_node};
 #[allow(unused_imports)]
 pub use rtpc::{Rtpc, RtpcBuilder};
 pub use sound::{Sound, SoundBuilder};

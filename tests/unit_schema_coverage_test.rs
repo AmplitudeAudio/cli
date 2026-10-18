@@ -18,7 +18,7 @@ use am::assets::AssetType;
 use am::config::sdk::discover_sdk;
 use am::forms::coverage::{
     BUS_KNOWN_GAPS, BUS_SUPPORTED_FIELDS, DUCK_BUS_KNOWN_GAPS, DUCK_BUS_SUPPORTED_FIELDS,
-    KNOWN_GAPS, supported_fields,
+    KNOWN_GAPS, PIPELINE_NODE_KNOWN_GAPS, PIPELINE_NODE_SUPPORTED_FIELDS, supported_fields,
 };
 use am::presentation::JsonOutput;
 use am::schema::loader::{SchemaRegistry, load_schemas, table_field_names};
@@ -128,6 +128,30 @@ fn test_every_bus_schema_field_is_supported_or_a_known_gap() {
         assert!(
             gaps.iter().all(|g| !supported.contains(g)),
             "{table}: a field is both supported and a known gap"
+        );
+    }
+}
+
+/// Pipeline nodes are a nested table, so their fields are checked separately.
+#[test]
+fn test_every_pipeline_node_schema_field_is_supported_or_a_known_gap() {
+    let sdk = discover_sdk().expect("AM_SDK_PATH must point at an SDK with schemas/*.bfbs");
+    let fields = table_field_names(&sdk, "pipeline_definition.bfbs", "PipelineNodeDefinition")
+        .expect("pipeline schema must load");
+    for field in &fields {
+        assert!(
+            PIPELINE_NODE_SUPPORTED_FIELDS.contains(&field.as_str())
+                || PIPELINE_NODE_KNOWN_GAPS.contains(&field.as_str()),
+            "PipelineNodeDefinition.{field} is neither supported nor a known gap"
+        );
+    }
+    for name in PIPELINE_NODE_SUPPORTED_FIELDS
+        .iter()
+        .chain(PIPELINE_NODE_KNOWN_GAPS)
+    {
+        assert!(
+            fields.iter().any(|f| f == name),
+            "PipelineNodeDefinition.{name} is not a schema field"
         );
     }
 }

@@ -16,5 +16,6 @@
 
 pub mod attenuation;
 pub mod bus;
+pub mod pipeline;
 pub mod rtpc;
 pub mod sound;

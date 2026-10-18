@@ -17,6 +17,7 @@
 //! A pipeline is a processing chain of nodes the SDK runs audio through.
 
 use super::generated::{PipelineDefinition, PipelineNodeDefinition};
+use super::pipeline_graph::{builtin_node, validate_graph};
 use super::{Asset, AssetType, ProjectContext, Schema, ValidationError};
 
 /// Pipeline definition.
@@ -107,6 +108,27 @@ impl Asset for Pipeline {
             .with_field("name"));
         }
 
-        Ok(())
+        validate_graph(self.nodes.as_deref())
+    }
+}
+
+impl Pipeline {
+    /// Node type names that are not SDK built-ins (for example plugin nodes).
+    ///
+    /// The SDK only finds them when the plugin is loaded, so they are accepted
+    /// but worth a warning.
+    pub fn unknown_node_types(&self) -> Vec<String> {
+        let mut names: Vec<String> = Vec::new();
+        for name in self
+            .nodes
+            .iter()
+            .flatten()
+            .filter_map(|n| n.name.as_deref())
+        {
+            if builtin_node(name).is_none() && !names.iter().any(|n| n == name) {
+                names.push(name.to_string());
+            }
+        }
+        names
     }
 }
