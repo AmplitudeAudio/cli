@@ -22,5 +22,6 @@ pub mod field_docs;
 pub mod pick;
 pub mod references;
 pub mod rtpc_value;
+pub mod soundbank_refs;
 pub mod validate_refs;
 pub mod zone;

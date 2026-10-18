@@ -182,6 +182,9 @@ pub fn rules_for(asset_type: AssetType) -> Vec<RefRule> {
         AssetType::Collection => COLLECTION_RULES.to_vec(),
         AssetType::SwitchContainer => SWITCH_CONTAINER_RULES.to_vec(),
         AssetType::Event => EVENT_RULES.to_vec(),
+        // Soundbanks name assets by runtime file name, not id, so `RefRule` cannot express
+        // them: see `assets::SoundbankList` (the name-based table) and
+        // `forms::soundbank_refs::soundbank_referrers`. Nothing references a soundbank by id.
         AssetType::Switch
         | AssetType::Soundbank
         | AssetType::Effect
