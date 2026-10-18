@@ -2394,7 +2394,7 @@ async fn test_p0_sound_create_json_output_never_prompts_even_with_interactive_in
 async fn test_p0_sound_create_in_project_without_buses_suggests_creating_one() {
     let fixture = AssetTestFixture::new("strict").unwrap();
     fixture.create_data_file("a.wav").unwrap();
-    fs::remove_file(fixture.project_root().join("main.buses.json")).unwrap();
+    fs::remove_file(fixture.sources_dir().join("main.buses.json")).unwrap();
     let output = CaptureOutput::interactive();
 
     let err = run_in(&fixture, &create_cmd(None), &output)

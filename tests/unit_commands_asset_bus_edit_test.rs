@@ -90,7 +90,7 @@ fn write_main(fx: &AssetTestFixture, buses: Value) {
 }
 
 fn file_path(fx: &AssetTestFixture, name: &str) -> PathBuf {
-    fx.project_root().join(format!("{name}.buses.json"))
+    fx.sources_dir().join(format!("{name}.buses.json"))
 }
 
 fn read_file(fx: &AssetTestFixture, name: &str) -> Value {

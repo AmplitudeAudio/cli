@@ -15,11 +15,13 @@
 //! Validation of the bus (`*.buses.json`) and engine config (`*.config.json`)
 //! files for `am project validate` and `am project build`.
 //!
-//! They are named files, not assets under `sources/`, so they are looked up
-//! next to the project file. The `sources/` directory is scanned too: the
-//! default project layout created by `am project init` keeps them there.
+//! They are named files, not assets under `sources/`. They live in the
+//! sources dir (where `am project init` and the build put them); the project
+//! root is scanned too for legacy layouts.
 
 use std::path::{Path, PathBuf};
+
+use crate::common::utils::config_write_dir;
 
 use serde_json::Value;
 
@@ -65,15 +67,6 @@ pub(super) struct RootFileReport {
     pub(super) engine_configs: usize,
 }
 
-/// The directories that can hold bus and engine config files, without duplicates.
-fn search_dirs(project_root: &Path, sources_dir: &Path) -> Vec<PathBuf> {
-    let mut dirs = vec![project_root.to_path_buf()];
-    if sources_dir != project_root && sources_dir.is_dir() {
-        dirs.push(sources_dir.to_path_buf());
-    }
-    dirs
-}
-
 fn relative(project_root: &Path, path: &Path) -> String {
     path.strip_prefix(project_root)
         .unwrap_or(path)
@@ -113,46 +106,41 @@ fn unreadable(
     }
 }
 
-/// Validates the bus and/or engine config files of the project.
+/// Validates the bus and/or engine config files of the project (sources dir
+/// and project root; a file is checked once).
 pub(super) fn validate_root_files(
     project_root: &Path,
-    sources_dir: &Path,
     buses: bool,
     engine_configs: bool,
 ) -> RootFileReport {
     let mut report = RootFileReport::default();
-    for dir in search_dirs(project_root, sources_dir) {
-        if buses {
-            check_dir(
-                &mut report,
-                project_root,
-                &dir,
-                RootFileKind::Buses,
-                validate_bus_file,
-            );
-        }
-        if engine_configs {
-            check_dir(
-                &mut report,
-                project_root,
-                &dir,
-                RootFileKind::EngineConfig,
-                validate_engine_config,
-            );
-        }
+    if buses {
+        check_files(
+            &mut report,
+            project_root,
+            RootFileKind::Buses,
+            validate_bus_file,
+        );
+    }
+    if engine_configs {
+        check_files(
+            &mut report,
+            project_root,
+            RootFileKind::EngineConfig,
+            validate_engine_config,
+        );
     }
     report
 }
 
-fn check_dir(
+fn check_files(
     report: &mut RootFileReport,
     project_root: &Path,
-    dir: &Path,
     kind: RootFileKind,
     rules: fn(&Value) -> Result<(), ValidationError>,
 ) {
     let (files, problems): (Vec<(PathBuf, Value)>, Vec<String>) = match kind {
-        RootFileKind::Buses => match scan_bus_files(dir) {
+        RootFileKind::Buses => match scan_bus_files(project_root) {
             Ok(scan) => (
                 scan.files.into_iter().map(|f| (f.path, f.value)).collect(),
                 // Id collisions are advice for `am asset bus`, not file errors.
@@ -163,7 +151,7 @@ fn check_dir(
             ),
             Err(e) => (Vec::new(), vec![e.to_string()]),
         },
-        RootFileKind::EngineConfig => match scan_engine_configs(dir) {
+        RootFileKind::EngineConfig => match scan_engine_configs(project_root) {
             Ok(scan) => (
                 scan.files.into_iter().map(|f| (f.path, f.value)).collect(),
                 scan.problems,
@@ -184,8 +172,11 @@ fn check_dir(
         }
     }
     for problem in problems {
-        report
-            .findings
-            .push(unreadable(project_root, dir, kind, &problem));
+        report.findings.push(unreadable(
+            project_root,
+            &config_write_dir(project_root),
+            kind,
+            &problem,
+        ));
     }
 }

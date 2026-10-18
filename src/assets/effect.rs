@@ -111,14 +111,12 @@ fn check_parameter(
     context: &ProjectContext,
 ) -> Result<(), ValidationError> {
     match param.kind {
-        ValueKind::Static if !param.value.is_finite() => {
-            Err(ValidationError::type_rule_violation(
-                format!("Parameter value is not finite at index {}", index),
-                "Parameter static values must be finite numbers",
-            )
-            .with_suggestion("Use a valid finite number for the parameter value")
-            .with_field("parameters"))
-        }
+        ValueKind::Static if !param.value.is_finite() => Err(ValidationError::type_rule_violation(
+            format!("Parameter value is not finite at index {}", index),
+            "Parameter static values must be finite numbers",
+        )
+        .with_suggestion("Use a valid finite number for the parameter value")
+        .with_field("parameters")),
         ValueKind::RTPC => {
             // `RtpcValue::Init` dereferences `rtpc()` of an RTPC-kind value.
             let Some(rtpc) = param.rtpc.as_ref() else {

@@ -91,7 +91,7 @@ fn fixture(name: &str) -> AssetTestFixture {
 }
 
 fn config_path(fx: &AssetTestFixture, name: &str) -> PathBuf {
-    fx.project_root().join(format!("{name}.config.json"))
+    fx.sources_dir().join(format!("{name}.config.json"))
 }
 
 fn read_config(fx: &AssetTestFixture, name: &str) -> Value {
@@ -721,7 +721,7 @@ mod carry_over {
             format!("{err:#} {}", as_cli_error(&err).unwrap().suggestion)
                 .contains("pc.config.json")
         );
-        assert!(fx.project_root().join("main.buses.json").exists());
+        assert!(fx.sources_dir().join("main.buses.json").exists());
 
         run_asset(&fx, &["bus-file", "delete", "extra", "--force"], &output)
             .await

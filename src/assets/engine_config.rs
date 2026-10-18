@@ -12,7 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Engine configs: `<name>.config.json` files in the project root.
+//! Engine configs: `<name>.config.json` files in the project's sources dir
+//! (the project root is read too, for legacy layouts).
 //!
 //! A project may keep several (one per platform, say). They name the pipeline
 //! and the bus file the engine loads by file name, so this module also answers
@@ -27,6 +28,7 @@ use serde_json::Value;
 
 use super::engine_config_fields::{ENGINE_CONFIG_SUFFIX, buses_ref_name, pipeline_ref_name};
 use crate::common::errors::{CliError, codes};
+use crate::common::utils::{config_write_dir, project_config_dirs};
 
 pub use super::engine_config_rules::validate_engine_config;
 
@@ -58,13 +60,30 @@ pub struct EngineConfigScan {
     pub problems: Vec<String>,
 }
 
-/// Path of the engine config called `name` in `root`.
-pub fn engine_config_path(root: &Path, name: &str) -> PathBuf {
-    root.join(format!("{name}{ENGINE_CONFIG_SUFFIX}"))
+/// Path where a new engine config called `name` is written (the sources dir).
+pub fn engine_config_path(project_root: &Path, name: &str) -> PathBuf {
+    config_write_dir(project_root).join(format!("{name}{ENGINE_CONFIG_SUFFIX}"))
 }
 
-/// Reads every `*.config.json` file of the project root, sorted by name.
-pub fn scan_engine_configs(root: &Path) -> Result<EngineConfigScan> {
+/// Reads every `*.config.json` file of the project (sources dir, then the
+/// project root when different), sorted by name. A name found in both
+/// places is read once, from the sources dir.
+pub fn scan_engine_configs(project_root: &Path) -> Result<EngineConfigScan> {
+    let mut scan = EngineConfigScan::default();
+    for dir in project_config_dirs(project_root) {
+        let found = scan_engine_config_dir(&dir)?;
+        for file in found.files {
+            if !scan.files.iter().any(|f| f.name == file.name) {
+                scan.files.push(file);
+            }
+        }
+        scan.problems.extend(found.problems);
+    }
+    scan.files.sort_by(|a, b| a.name.cmp(&b.name));
+    Ok(scan)
+}
+
+fn scan_engine_config_dir(root: &Path) -> Result<EngineConfigScan> {
     let mut scan = EngineConfigScan::default();
     let entries =
         fs::read_dir(root).with_context(|| format!("Failed to read {}", root.display()))?;

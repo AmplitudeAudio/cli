@@ -153,7 +153,9 @@ pub fn actions_from_json(
         Value::Object(map) => match map.get("actions") {
             Some(Value::Array(items)) => items,
             _ => {
-                return Err(json_error(path, "expected a list, or an object with 'actions'").into());
+                return Err(
+                    json_error(path, "expected a list, or an object with 'actions'").into(),
+                );
             }
         },
         _ => return Err(json_error(path, "expected a list of actions").into()),

@@ -14,7 +14,7 @@
 
 //! Bus commands: `am asset bus create|list|update|delete`.
 //!
-//! Buses are entries inside `*.buses.json` files of the project root. The
+//! Buses are entries inside `*.buses.json` files of the sources dir (the project root is read too). The
 //! handlers only gather values (flags, then prompts when the session is
 //! interactive); building and merging lives in `services::bus`, and every
 //! change rewrites the whole file atomically after it was validated.
@@ -167,7 +167,7 @@ fn resolve_file<'a>(
         [] => Err(CliError::new(
             codes::ERR_ASSET_NOT_FOUND,
             "The project has no bus file",
-            "Buses live in '<name>.buses.json' files of the project root",
+            "Buses live in '<name>.buses.json' files of the project (sources dir)",
         )
         .with_suggestion("Create one first with 'am asset bus-file create main'")
         .into()),

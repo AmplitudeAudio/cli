@@ -39,9 +39,7 @@ use crate::{
     forms::references::switch_state_referrers,
     input::Input,
     presentation::{Output, OutputMode},
-    services::switch::{
-        SwitchPatch, SwitchValues, apply_patch, build_switch, removed_state_ids,
-    },
+    services::switch::{SwitchPatch, SwitchValues, apply_patch, build_switch, removed_state_ids},
 };
 
 use super::switch_args::{SwitchEditArgs, SwitchExtraArgs, SwitchFlags, resolve_patch};

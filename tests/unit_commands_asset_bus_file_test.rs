@@ -76,7 +76,7 @@ async fn run(fx: &AssetTestFixture, args: &[&str]) -> (anyhow::Result<()>, Captu
 }
 
 fn bus_file_path(fx: &AssetTestFixture, name: &str) -> PathBuf {
-    fx.project_root().join(format!("{name}.buses.json"))
+    fx.sources_dir().join(format!("{name}.buses.json"))
 }
 
 fn read_json(path: &Path) -> Value {
@@ -141,7 +141,7 @@ async fn test_create_refuses_existing_file_and_bad_names() {
             "{bad}"
         );
     }
-    assert!(!fx.project_root().join("evil.buses.json").exists());
+    assert!(!fx.sources_dir().join("evil.buses.json").exists());
 }
 
 #[tokio::test]

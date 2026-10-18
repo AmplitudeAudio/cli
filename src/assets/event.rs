@@ -18,10 +18,10 @@
 //! Each event contains one or more actions that specify what to play, stop,
 //! or modify when the event is triggered.
 
+use super::event_actions::{validate_action_shape, validate_action_targets};
 use super::generated::{
     EventActionDefinition, EventActionRunningMode, EventActionType, EventDefinition, Scope,
 };
-use super::event_actions::{validate_action_shape, validate_action_targets};
 use super::{Asset, AssetType, ProjectContext, Schema, ValidationError};
 
 // =============================================================================

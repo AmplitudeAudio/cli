@@ -14,7 +14,7 @@
 
 //! Bus file commands: `am asset bus-file create|list|delete`.
 //!
-//! A bus file (`<name>.buses.json` in the project root) holds one complete bus
+//! A bus file (`<name>.buses.json` in the sources dir) holds one complete bus
 //! tree. A project may keep several; the engine configuration picks one.
 
 use std::fs;

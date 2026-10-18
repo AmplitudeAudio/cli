@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 //! Sound asset commands.
 //!
 //! Implements CRUD operations for Sound assets in Amplitude projects. The

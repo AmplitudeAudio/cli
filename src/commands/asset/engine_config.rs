@@ -14,7 +14,7 @@
 
 //! Engine config commands: `am asset engine-config create|list|update|delete`.
 //!
-//! An engine config is a `<name>.config.json` file in the project root; a
+//! An engine config is a `<name>.config.json` file in the sources dir (the project root is read too); a
 //! project may keep several (for example one per platform). The handlers only
 //! gather values (flags, `--from-json`, then prompts when the session can ask);
 //! building, merging and validation live in `services::engine_config`, and the
@@ -53,7 +53,7 @@ const ASSET_NAME: &str = "Engine config";
 /// Engine config subcommands.
 #[derive(Subcommand, Debug)]
 pub enum EngineConfigCommands {
-    /// Create an engine config file in the project root
+    /// Create an engine config file in the sources dir
     #[command(after_help = "Examples:
   am asset engine-config create pc --mixer-pipeline pc --mixer-active-channels 32 --buses-file main
   am asset engine-config create mobile --from-json template.json --output-buffer-size 512

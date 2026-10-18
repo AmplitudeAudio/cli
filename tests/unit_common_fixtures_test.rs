@@ -89,7 +89,7 @@ fn test_p1_create_test_sound_writes_valid_json() {
     assert_eq!(json["path"], "data/footstep.wav");
     // Bus 1 is the master bus written by the fixture's main.buses.json.
     assert_eq!(json["bus"], 1);
-    assert!(fixture.project_root().join("main.buses.json").is_file());
+    assert!(fixture.sources_dir().join("main.buses.json").is_file());
     assert_eq!(json["stream"], false);
     assert_eq!(json["spatialization"], "None");
     assert_eq!(json["scope"], "World");

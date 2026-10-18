@@ -22,6 +22,7 @@ use std::io::Write;
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use super::project_root_files::{RootFileFinding, validate_root_files};
 use crate::compiler;
 use crate::{
     app::Resource,
@@ -49,7 +50,6 @@ use crate::{
     presentation::{Output, OutputMode},
     schema::loader::load_schemas,
 };
-use super::project_root_files::{RootFileFinding, validate_root_files};
 use clap::{Subcommand, value_parser};
 use inquire::{CustomUserError, validator::Validation};
 use serde_json::json;
@@ -1225,10 +1225,7 @@ struct ValidationResult {
 }
 
 /// Validate all assets in the current project.
-async fn handle_validate_project_command(
-    scope: ValidateScope,
-    output: &dyn Output,
-) -> Result<()> {
+async fn handle_validate_project_command(scope: ValidateScope, output: &dyn Output) -> Result<()> {
     let current_dir = env::current_dir()?;
     let project_config = read_amproject_file(&current_dir)?;
 
@@ -1358,12 +1355,7 @@ async fn handle_validate_project_command(
         total_validated += type_count;
     }
 
-    let root_report = validate_root_files(
-        &current_dir,
-        &sources_dir,
-        scope.buses,
-        scope.engine_configs,
-    );
+    let root_report = validate_root_files(&current_dir, scope.buses, scope.engine_configs);
     if scope.buses {
         asset_summary.insert("buses".to_string(), root_report.bus_files);
         total_validated += root_report.bus_files;

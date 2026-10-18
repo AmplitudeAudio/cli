@@ -180,7 +180,9 @@ pub fn entries_from_json(path: &Path, validator: &ProjectValidator) -> Result<Ve
         Value::Object(map) => match map.get("entries") {
             Some(Value::Array(items)) => items,
             _ => {
-                return Err(json_error(path, "expected a list, or an object with 'entries'").into());
+                return Err(
+                    json_error(path, "expected a list, or an object with 'entries'").into(),
+                );
             }
         },
         _ => return Err(json_error(path, "expected a list of entries").into()),

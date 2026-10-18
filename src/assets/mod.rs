@@ -63,11 +63,11 @@ pub mod generated {
 // Submodules for each asset type
 mod attenuation;
 pub mod bus;
+mod collection;
+mod effect;
 pub mod engine_config;
 pub mod engine_config_fields;
 mod engine_config_rules;
-mod collection;
-mod effect;
 mod event;
 pub mod event_actions;
 /// FaderAlgorithm enum and convenience extension methods for generated SDK types.

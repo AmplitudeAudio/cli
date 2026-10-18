@@ -40,9 +40,7 @@ use crate::{
     forms::coverage::known_field_names,
     input::Input,
     presentation::{Output, OutputMode},
-    services::soundbank::{
-        Catalog, SoundbankPatch, SoundbankValues, apply_patch, build_soundbank,
-    },
+    services::soundbank::{Catalog, SoundbankPatch, SoundbankValues, apply_patch, build_soundbank},
 };
 
 use super::soundbank_args::{SoundbankEditArgs, SoundbankFlags, SoundbankListArgs, resolve_patch};
@@ -374,8 +372,8 @@ async fn update_soundbank(
         }
     }
     let merged = merge_update_unknown_only(&original, &updated, &known);
-    let json_content = serde_json::to_string_pretty(&merged)
-        .context("Failed to serialize soundbank to JSON")?;
+    let json_content =
+        serde_json::to_string_pretty(&merged).context("Failed to serialize soundbank to JSON")?;
     atomic_write(&soundbank_file_path, json_content.as_bytes())?;
 
     match output.mode() {

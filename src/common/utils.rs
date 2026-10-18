@@ -21,7 +21,7 @@ use std::collections::HashMap;
 use std::collections::hash_map::DefaultHasher;
 use std::fs;
 use std::hash::{Hash, Hasher};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use anyhow::Context;
@@ -212,6 +212,37 @@ pub fn read_amproject_file(path: &Path) -> anyhow::Result<ProjectConfiguration> 
     })?;
 
     Ok(config)
+}
+
+/// The sources directory of a project (`sources_dir` of `.amproject`; empty
+/// means the project root itself). Falls back to `<root>/sources` when the
+/// project file cannot be read.
+pub fn project_sources_dir(project_root: &Path) -> PathBuf {
+    match read_amproject_file(project_root) {
+        Ok(config) if config.sources_dir.is_empty() => project_root.to_path_buf(),
+        Ok(config) => project_root.join(&config.sources_dir),
+        Err(_) => project_root.join("sources"),
+    }
+}
+
+/// Where new `*.buses.json` / `*.config.json` files are written: the sources dir.
+pub fn config_write_dir(project_root: &Path) -> PathBuf {
+    project_sources_dir(project_root)
+}
+
+/// Every directory that can hold bus and engine config files, in priority
+/// order: the sources dir, then the project root when it is a different,
+/// existing directory (legacy and template layouts).
+pub fn project_config_dirs(project_root: &Path) -> Vec<PathBuf> {
+    let sources = project_sources_dir(project_root);
+    let mut dirs = Vec::new();
+    if sources.is_dir() {
+        dirs.push(sources.clone());
+    }
+    if sources != project_root && project_root.is_dir() {
+        dirs.push(project_root.to_path_buf());
+    }
+    dirs
 }
 
 /// Count assets by type in a project.

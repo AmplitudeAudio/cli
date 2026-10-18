@@ -248,7 +248,7 @@ impl AssetTestFixture {
 
         // SDK projects always have a bus hierarchy; the master bus id is 1.
         std::fs::write(
-            project_root.join("main.buses.json"),
+            project_root.join("sources").join("main.buses.json"),
             serde_json::to_string_pretty(&serde_json::json!({
                 "buses": [
                     { "id": 1, "name": "master", "gain": 1.0, "child_buses": [2], "fader": "Linear" },
@@ -356,13 +356,31 @@ impl AssetTestFixture {
         Ok(path)
     }
 
-    /// Write `<file_name>` (e.g. `main.buses.json`) in the project root with the given buses.
+    /// Write `<file_name>` (e.g. `main.buses.json`) in the sources dir with the given buses.
     pub fn write_buses_file(
         &self,
         file_name: &str,
         buses: serde_json::Value,
     ) -> anyhow::Result<PathBuf> {
-        let path = self.project_root.join(file_name);
+        self.write_buses_file_in(&self.sources_dir(), file_name, buses)
+    }
+
+    /// Write a bus file in the project root (legacy layout; read as a fallback).
+    pub fn write_root_buses_file(
+        &self,
+        file_name: &str,
+        buses: serde_json::Value,
+    ) -> anyhow::Result<PathBuf> {
+        self.write_buses_file_in(&self.project_root, file_name, buses)
+    }
+
+    fn write_buses_file_in(
+        &self,
+        dir: &Path,
+        file_name: &str,
+        buses: serde_json::Value,
+    ) -> anyhow::Result<PathBuf> {
+        let path = dir.join(file_name);
         std::fs::write(
             &path,
             serde_json::to_string_pretty(&serde_json::json!({ "buses": buses }))?,

@@ -38,9 +38,7 @@ use crate::{
     forms::coverage::known_field_names,
     input::Input,
     presentation::{Output, OutputMode},
-    services::effect::{
-        EffectPatch, EffectValues, apply_patch, build_effect, filter_warning,
-    },
+    services::effect::{EffectPatch, EffectValues, apply_patch, build_effect, filter_warning},
 };
 
 use super::effect_args::{

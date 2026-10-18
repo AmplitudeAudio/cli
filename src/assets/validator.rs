@@ -128,7 +128,7 @@ pub struct ProjectValidator {
     asset_refs: HashMap<AssetType, Vec<AssetRef>>,
     /// The states of each switch asset, by switch id, in file order.
     switch_states: HashMap<u64, Vec<AssetRef>>,
-    /// Buses defined in the `*.buses.json` files of the project root.
+    /// Buses defined in the `*.buses.json` files of the sources dir (project root accepted).
     buses: Vec<AssetRef>,
     /// The buses of each bus file, by file name (without `.buses.json`).
     bus_files: Vec<(String, Vec<AssetRef>)>,
@@ -441,7 +441,11 @@ impl ProjectValidator {
 
     /// The source files of `asset_type`, sorted by file path.
     pub fn source_assets(&self, asset_type: AssetType) -> Vec<SourceAsset> {
-        let mut sources = self.asset_sources.get(&asset_type).cloned().unwrap_or_default();
+        let mut sources = self
+            .asset_sources
+            .get(&asset_type)
+            .cloned()
+            .unwrap_or_default();
         sources.sort_by(|a, b| a.relative.cmp(&b.relative));
         sources
     }
@@ -452,9 +456,11 @@ impl ProjectValidator {
             .members()
             .into_iter()
             .flat_map(|member| match member {
-                RefTarget::Asset(asset_type) => {
-                    self.asset_refs.get(&asset_type).cloned().unwrap_or_default()
-                }
+                RefTarget::Asset(asset_type) => self
+                    .asset_refs
+                    .get(&asset_type)
+                    .cloned()
+                    .unwrap_or_default(),
                 RefTarget::SwitchState => self.switch_states.values().flatten().cloned().collect(),
                 _ => self.visible_buses().clone(),
             })
@@ -528,57 +534,21 @@ impl ProjectValidator {
         &self.sources_dir
     }
 
-    /// Indexes the buses of every `*.buses.json` file in the project root
-    /// (non-recursive). Unreadable or malformed files are skipped with a warning.
+    /// Indexes the buses of every `*.buses.json` file of the sources dir and
+    /// the project root. Unreadable or malformed files are skipped with a warning.
     fn scan_buses(&mut self, output: &dyn Output) {
-        let Ok(entries) = fs::read_dir(&self.project_root) else {
-            return;
+        let scan = match super::bus::scan_bus_files(&self.project_root) {
+            Ok(scan) => scan,
+            Err(_) => return,
         };
+        for problem in scan.problems.iter().filter(|p| p.starts_with("Invalid")) {
+            output.warning(problem);
+        }
 
-        let mut files: Vec<PathBuf> = entries
-            .flatten()
-            .map(|e| e.path())
-            .filter(|p| {
-                p.is_file()
-                    && p.file_name()
-                        .and_then(|n| n.to_str())
-                        .is_some_and(|n| n.ends_with(".buses.json"))
-            })
-            .collect();
-        files.sort();
-
-        for path in files {
-            let value = match fs::read_to_string(&path) {
-                Ok(content) => match serde_json::from_str::<serde_json::Value>(&content) {
-                    Ok(v) => v,
-                    Err(err) => {
-                        output.warning(&format!(
-                            "Malformed JSON in buses file {}: {}",
-                            path.display(),
-                            err
-                        ));
-                        continue;
-                    }
-                },
-                Err(err) => {
-                    output.warning(&format!(
-                        "Failed to read buses file {}: {}",
-                        path.display(),
-                        err
-                    ));
-                    continue;
-                }
-            };
-
-            let file_name = path
-                .file_name()
-                .and_then(|n| n.to_str())
-                .and_then(|n| n.strip_suffix(".buses.json"))
-                .unwrap_or_default()
-                .to_string();
+        for file in scan.files {
+            let file_name = file.name.clone();
             let mut file_buses = Vec::new();
-            let buses = value.get("buses").and_then(|b| b.as_array());
-            for bus in buses.into_iter().flatten() {
+            for bus in file.buses() {
                 if let (Some(id), Some(name)) = (
                     bus.get("id").and_then(|v| v.as_u64()),
                     bus.get("name").and_then(|v| v.as_str()),
@@ -662,10 +632,13 @@ impl ProjectValidator {
                 value.get("id").and_then(|v| v.as_u64()),
                 value.get("name").and_then(|v| v.as_str()),
             ) {
-                self.asset_refs.entry(asset_type).or_default().push(AssetRef {
-                    id,
-                    name: name.to_string(),
-                });
+                self.asset_refs
+                    .entry(asset_type)
+                    .or_default()
+                    .push(AssetRef {
+                        id,
+                        name: name.to_string(),
+                    });
             }
 
             if asset_type == AssetType::Switch

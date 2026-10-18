@@ -60,8 +60,6 @@ mod soundbank_list;
 mod soundbank_prompts;
 mod switch;
 mod switch_args;
-mod switch_list;
-mod switch_prompts;
 mod switch_container;
 mod switch_container_args;
 mod switch_container_entry_args;
@@ -69,6 +67,8 @@ mod switch_container_entry_json;
 mod switch_container_entry_prompts;
 mod switch_container_list;
 mod switch_container_prompts;
+mod switch_list;
+mod switch_prompts;
 
 pub use attenuation::{AttenuationCommands, handler as handle_attenuation_command};
 pub use bus::{BusCommands, handler as handle_bus_command};
@@ -193,12 +193,12 @@ pub enum AssetCommands {
         #[command(subcommand)]
         command: BusCommands,
     },
-    /// Bus file management ('<name>.buses.json' files in the project root)
+    /// Bus file management ('<name>.buses.json' files in the sources dir)
     BusFile {
         #[command(subcommand)]
         command: BusFileCommands,
     },
-    /// Engine config management ('<name>.config.json' files in the project root)
+    /// Engine config management ('<name>.config.json' files in the sources dir)
     EngineConfig {
         #[command(subcommand)]
         command: EngineConfigCommands,

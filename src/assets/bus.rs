@@ -12,7 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Bus files: `<name>.buses.json` in the project root.
+//! Bus files: `<name>.buses.json` in the project's sources dir (the project
+//! root is read too, for legacy layouts).
 //!
 //! Buses are not one-file-per-asset. Each file holds a complete bus tree
 //! (`BusDefinitionList`) and the engine configuration names exactly one such
@@ -32,6 +33,7 @@ use serde_json::Value;
 use crate::assets::ValidationError;
 use crate::assets::extensions::FADER_ALGORITHM_NAMES;
 use crate::common::errors::{CliError, codes};
+use crate::common::utils::{config_write_dir, project_config_dirs};
 
 /// ID of the root bus (`kAmMasterBusId` in the SDK).
 pub const MASTER_BUS_ID: u64 = 1;
@@ -73,13 +75,31 @@ pub fn buses_of(file: &Value) -> &[Value] {
         .unwrap_or(&[])
 }
 
-/// Path of the bus file called `name` in `root`.
-pub fn bus_file_path(root: &Path, name: &str) -> PathBuf {
-    root.join(format!("{name}{BUS_FILE_SUFFIX}"))
+/// Path where a new bus file called `name` is written (the sources dir).
+pub fn bus_file_path(project_root: &Path, name: &str) -> PathBuf {
+    config_write_dir(project_root).join(format!("{name}{BUS_FILE_SUFFIX}"))
 }
 
-/// Reads every `*.buses.json` file of the project root, sorted by name.
-pub fn scan_bus_files(root: &Path) -> Result<BusFileScan> {
+/// Reads every `*.buses.json` file of the project (sources dir, then the
+/// project root when different), sorted by name. A name found in both
+/// places is read once, from the sources dir.
+pub fn scan_bus_files(project_root: &Path) -> Result<BusFileScan> {
+    let mut scan = BusFileScan::default();
+    for dir in project_config_dirs(project_root) {
+        let found = scan_bus_dir(&dir)?;
+        for file in found.files {
+            if !scan.files.iter().any(|f| f.name == file.name) {
+                scan.files.push(file);
+            }
+        }
+        scan.problems.extend(found.problems);
+    }
+    scan.files.sort_by(|a, b| a.name.cmp(&b.name));
+    scan.problems.extend(id_collisions(&scan.files));
+    Ok(scan)
+}
+
+fn scan_bus_dir(root: &Path) -> Result<BusFileScan> {
     let mut scan = BusFileScan::default();
     let entries =
         fs::read_dir(root).with_context(|| format!("Failed to read {}", root.display()))?;
@@ -109,7 +129,6 @@ pub fn scan_bus_files(root: &Path) -> Result<BusFileScan> {
                 .push(format!("Invalid bus file {}: {reason}", path.display())),
         }
     }
-    scan.problems.extend(id_collisions(&scan.files));
     Ok(scan)
 }
 

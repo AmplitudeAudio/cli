@@ -33,7 +33,7 @@ pub use crate::assets::validator::AssetRef;
 pub enum RefTarget {
     /// An asset of the given type under `sources/`.
     Asset(AssetType),
-    /// A bus defined in a `*.buses.json` file of the project root.
+    /// A bus defined in a `*.buses.json` file of the sources dir (project root accepted).
     Bus,
     /// A state of some switch asset. A rule with this target only checks that the
     /// state exists in a switch; the owning asset checks that it belongs to the
