@@ -29,7 +29,10 @@ use colored::Colorize;
 use serde_json::json;
 
 use crate::{
-    assets::{Asset, AssetType, Pipeline, ProjectContext, ProjectValidator},
+    assets::{
+        Asset, AssetType, Pipeline, ProjectContext, ProjectValidator,
+        engine_config::pipeline_referrers,
+    },
     common::{
         errors::{CliError, asset_already_exists, asset_not_found, codes},
         files::atomic_write,
@@ -93,13 +96,13 @@ A pipeline needs exactly one Input and one Output node.
         args: UpdateArgs,
     },
 
-    /// Delete a pipeline asset (refused while an asset references it by id)
+    /// Delete a pipeline asset (refused while an asset or an engine config references it)
     #[command(after_help = "Examples:
   am asset pipeline delete main
   am asset pipeline delete main --force
 
-Note: references from engine config files are not checked yet; make sure no
-'*.config.json' still names this pipeline before deleting it.
+The delete is refused, even with --force, while an engine config
+('*.config.json') names the pipeline as its mixer pipeline.
 ")]
     Delete {
         /// Name of the pipeline asset to delete
@@ -448,13 +451,24 @@ fn delete_pipeline(name: &str, force: bool, input: &dyn Input, output: &dyn Outp
     let (current_dir, dir, _) = pipelines_dir()?;
     let (file_path, pipeline, _) = locate(name, &dir)?;
 
+    // Engine configs name their pipeline by file name (`mixer.pipeline` holds
+    // `<name>.ampipeline`), so a config pointing at this file would be left dangling.
+    // --force does not override this.
+    let configs = pipeline_referrers(&current_dir, name)?;
+    if !configs.is_empty() {
+        return Err(CliError::new(
+            codes::ERR_ASSET_IN_USE,
+            format!("Pipeline '{name}' is still referenced"),
+            format!("It is the mixer pipeline of: {}", configs.join(", ")),
+        )
+        .with_suggestion(
+            "Point those engine configs at another pipeline first (am asset engine-config update <file> --mixer-pipeline <name>), then delete this one",
+        )
+        .into());
+    }
+
     // Assets that reference the pipeline by id would be left dangling, so --force does
     // not override this. No asset type references pipelines by id today, so this finds nothing.
-    // TODO(engine-config task): engine config references pipelines by name, not id, and is
-    // NOT checked yet, so deleting a pipeline can orphan it. Add a name-based referrer:
-    // `mixer.pipeline` holds the binary file name `<name>.ampipeline`; scan every
-    // `*.config.json` in the project root, map back to `<name>.json`, and refuse with
-    // ERR_ASSET_IN_USE even with --force.
     let validator = ProjectValidator::new(current_dir, output)?;
     let users = referrers_with_type(
         &validator,

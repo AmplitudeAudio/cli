@@ -46,7 +46,10 @@ use crate::{
     services::sound::{SoundPatch, SoundValues, apply_patch, build_sound},
 };
 
-use super::sound_args::{SoundExtraArgs, SoundFlags, resolve_patch, validate_patch_references};
+use super::sound_args::{
+    SoundExtraArgs, SoundFlags, bus_warnings, resolve_patch, validate_patch_references,
+    with_warnings,
+};
 use super::sound_prompts::{
     complete_create_patch, prompt_audio_file, prompt_bus, prompt_update_patch,
 };
@@ -359,15 +362,19 @@ async fn create_sound(
     atomic_write(&sound_file_path, json_content.as_bytes())?;
 
     // Step 7: Output success
+    let warnings = bus_warnings(validator, Some(sound.bus), output);
     match output.mode() {
         OutputMode::Json => {
             output.success(
-                json!({
-                    "id": sound.id,
-                    "name": sound.name(),
-                    "path": sound_file_path.to_string_lossy(),
-                    "audio_file": sound.path.as_deref().unwrap_or(""),
-                }),
+                with_warnings(
+                    json!({
+                        "id": sound.id,
+                        "name": sound.name(),
+                        "path": sound_file_path.to_string_lossy(),
+                        "audio_file": sound.path.as_deref().unwrap_or(""),
+                    }),
+                    &warnings,
+                ),
                 None,
             );
         }
@@ -711,16 +718,20 @@ async fn update_sound(
     atomic_write(&sound_file_path, json_content.as_bytes())?;
 
     // Step 7: Output success
+    let warnings = bus_warnings(validator, patch.bus, output);
     match output.mode() {
         OutputMode::Json => {
             output.success(
-                json!({
-                    "id": sound.id,
-                    "name": sound.name(),
-                    "path": sound_file_path.to_string_lossy(),
-                    "audio_file": sound.path.as_deref().unwrap_or(""),
-                    "updated_fields": patch.changed_fields(),
-                }),
+                with_warnings(
+                    json!({
+                        "id": sound.id,
+                        "name": sound.name(),
+                        "path": sound_file_path.to_string_lossy(),
+                        "audio_file": sound.path.as_deref().unwrap_or(""),
+                        "updated_fields": patch.changed_fields(),
+                    }),
+                    &warnings,
+                ),
                 None,
             );
         }

@@ -31,8 +31,6 @@ pub const ENGINE_CONFIG_SUFFIX: &str = ".config.json";
 pub const PIPELINE_EXTENSION: &str = ".ampipeline";
 /// Runtime extension of bus files (`file_extension` of `buses_definition.fbs`).
 pub const BUSES_EXTENSION: &str = ".ambus";
-/// Source suffix of bus files.
-pub const BUSES_SOURCE_SUFFIX: &str = ".buses.json";
 /// Runtime suffix of bus files (`<name>.buses.json` compiles to `<name>.buses.ambus`).
 pub const BUSES_RUNTIME_SUFFIX: &str = ".buses.ambus";
 

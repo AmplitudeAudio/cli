@@ -31,6 +31,7 @@ use super::bus_shared::{
 use crate::assets::bus::{
     BusFile, BusFileScan, bus_file_path, normalize_file_name, scan_bus_files,
 };
+use crate::assets::engine_config::bus_file_referrers;
 use crate::common::errors::{CliError, asset_already_exists, asset_not_found, codes};
 use crate::database::Database;
 use crate::input::Input;
@@ -59,7 +60,7 @@ pub enum BusFileCommands {
 ")]
     List {},
 
-    /// Delete a bus file (refused for the last file or while its buses are used)
+    /// Delete a bus file (refused for the last file, while an engine config loads it, or while its buses are used)
     #[command(after_help = "Examples:
   am asset bus-file delete cutscenes
   am asset bus-file delete cutscenes --force
@@ -203,6 +204,21 @@ fn delete_file(file_name: &str, force: bool, input: &dyn Input, output: &dyn Out
             "The SDK engine needs a bus file to load; a project must keep at least one",
         )
         .with_suggestion("Create another file first with 'am asset bus-file create <file-name>'")
+        .into());
+    }
+
+    // An engine config names the bus file it loads; deleting it would leave the config
+    // dangling, so --force does not override this.
+    let configs = bus_file_referrers(&root, &name)?;
+    if !configs.is_empty() {
+        return Err(CliError::new(
+            codes::ERR_ASSET_IN_USE,
+            format!("Bus file '{name}' is still in use"),
+            format!("It is the buses file of: {}", configs.join(", ")),
+        )
+        .with_suggestion(
+            "Point those engine configs at another bus file first (am asset engine-config update <file> --buses-file <name>), then delete this one",
+        )
         .into());
     }
 

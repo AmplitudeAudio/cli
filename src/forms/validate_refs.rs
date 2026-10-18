@@ -22,7 +22,21 @@ use crate::assets::validator::ProjectValidator;
 use crate::assets::{ValidationError, ValidationLayer};
 use crate::common::errors::codes::{ERR_VALIDATION_EMPTY_REFERENCE, ERR_VALIDATION_REFERENCE};
 use crate::forms::pick::{create_command, target_label};
-use crate::forms::references::RefRule;
+use crate::forms::references::{RefRule, RefTarget};
+
+/// Warning for a bus that exists in the project but not in the bus file the engine
+/// configs load, or `None` when `bus_id` is fine (or no bus file is active).
+pub fn inactive_bus_warning(validator: &ProjectValidator, bus_id: u64) -> Option<String> {
+    if !validator.bus_outside_active(bus_id) {
+        return None;
+    }
+    let bus = validator.find_bus_anywhere(None, Some(bus_id))?;
+    let active = validator.active_bus_file()?;
+    Some(format!(
+        "Bus '{}' (ID {bus_id}) is not in '{active}.buses.json', the bus file your engine config loads; the engine will not find it at runtime",
+        bus.name
+    ))
+}
 
 fn capitalize(text: &str) -> String {
     let mut chars = text.chars();
@@ -60,6 +74,12 @@ pub fn validate_reference(
     }
 
     if validator.resolve(rule.target, id).is_some() {
+        return Ok(());
+    }
+    // A bus that exists only outside the active bus file is a warning for the
+    // caller (see `inactive_bus_warning`), not a failure: failing would break
+    // flows that predate the engine config and cannot know which file is active.
+    if rule.target == RefTarget::Bus && validator.bus_outside_active(id) {
         return Ok(());
     }
 

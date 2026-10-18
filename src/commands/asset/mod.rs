@@ -27,6 +27,9 @@ mod bus_prompts;
 mod bus_shared;
 mod collection;
 mod effect;
+mod engine_config;
+mod engine_config_args;
+mod engine_config_prompts;
 mod event;
 mod pipeline;
 mod pipeline_args;
@@ -46,6 +49,7 @@ pub use bus::{BusCommands, handler as handle_bus_command};
 pub use bus_file::{BusFileCommands, handler as handle_bus_file_command};
 pub use collection::{CollectionCommands, handler as handle_collection_command};
 pub use effect::{EffectCommands, handler as handle_effect_command};
+pub use engine_config::{EngineConfigCommands, handler as handle_engine_config_command};
 pub use event::{EventCommands, handler as handle_event_command};
 pub use pipeline::{PipelineCommands, handler as handle_pipeline_command};
 pub use rtpc::{RtpcCommands, handler as handle_rtpc_command};
@@ -168,6 +172,11 @@ pub enum AssetCommands {
         #[command(subcommand)]
         command: BusFileCommands,
     },
+    /// Engine config management ('<name>.config.json' files in the project root)
+    EngineConfig {
+        #[command(subcommand)]
+        command: EngineConfigCommands,
+    },
 }
 
 /// Handle asset commands by routing to the appropriate subcommand handler.
@@ -213,6 +222,9 @@ pub async fn handler(
         }
         AssetCommands::BusFile { command } => {
             handle_bus_file_command(command, database, input, output).await
+        }
+        AssetCommands::EngineConfig { command } => {
+            handle_engine_config_command(command, database, input, output).await
         }
     }
 }

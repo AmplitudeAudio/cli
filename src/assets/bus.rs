@@ -109,7 +109,41 @@ pub fn scan_bus_files(root: &Path) -> Result<BusFileScan> {
                 .push(format!("Invalid bus file {}: {reason}", path.display())),
         }
     }
+    scan.problems.extend(id_collisions(&scan.files));
     Ok(scan)
+}
+
+/// Notes for ids that name different buses in different files.
+///
+/// Assets reference buses by id and the SDK loads one file at a time, so the
+/// same id for two buses is ambiguous once the engine config switches files.
+/// The same id and name (an alternative copy of a tree) is fine. The root bus
+/// (id 1) is shared by design.
+fn id_collisions(files: &[BusFile]) -> Vec<String> {
+    let mut seen: HashMap<u64, (&str, &str)> = HashMap::new();
+    let mut notes = Vec::new();
+    for file in files {
+        for bus in file.buses() {
+            let (Some(id), Some(name)) = (id_of(bus), bus.get("name").and_then(Value::as_str))
+            else {
+                continue;
+            };
+            if id == MASTER_BUS_ID {
+                continue;
+            }
+            match seen.get(&id) {
+                Some((other_file, other_name)) if *other_name != name => notes.push(format!(
+                    "Bus id {id} is '{other_name}' in {other_file}{BUS_FILE_SUFFIX} but '{name}' in {}{BUS_FILE_SUFFIX}; assets reference buses by id, so give one of them a new id",
+                    file.name
+                )),
+                Some(_) => {}
+                None => {
+                    seen.insert(id, (file.name.as_str(), name));
+                }
+            }
+        }
+    }
+    notes
 }
 
 /// Checks a bus file name and strips an optional `.buses.json` suffix.

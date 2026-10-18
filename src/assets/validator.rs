@@ -117,6 +117,10 @@ pub struct ProjectValidator {
     asset_refs: HashMap<AssetType, Vec<AssetRef>>,
     /// Buses defined in the `*.buses.json` files of the project root.
     buses: Vec<AssetRef>,
+    /// The buses of each bus file, by file name (without `.buses.json`).
+    bus_files: Vec<(String, Vec<AssetRef>)>,
+    /// The bus file all engine configs load, when they agree on one.
+    active_bus_file: Option<String>,
 }
 
 // ValidationError is the project-wide error type for all validation methods.
@@ -162,6 +166,8 @@ impl ProjectValidator {
             asset_paths: HashSet::new(),
             asset_refs: HashMap::new(),
             buses: Vec::new(),
+            bus_files: Vec::new(),
+            active_bus_file: None,
         };
 
         // Scan all asset types
@@ -200,6 +206,8 @@ impl ProjectValidator {
             asset_paths: HashSet::new(),
             asset_refs: HashMap::new(),
             buses: Vec::new(),
+            bus_files: Vec::new(),
+            active_bus_file: None,
         }
     }
 
@@ -382,11 +390,44 @@ impl ProjectValidator {
     pub fn list(&self, target: RefTarget) -> Vec<AssetRef> {
         let source = match target {
             RefTarget::Asset(asset_type) => self.asset_refs.get(&asset_type),
-            RefTarget::Bus => Some(&self.buses),
+            RefTarget::Bus => Some(self.visible_buses()),
         };
         let mut refs = source.cloned().unwrap_or_default();
         refs.sort_by(|a, b| a.name.cmp(&b.name).then(a.id.cmp(&b.id)));
         refs
+    }
+
+    /// The buses a reference should offer: those of the active bus file when every
+    /// engine config loads the same known file, else those of all bus files.
+    fn visible_buses(&self) -> &Vec<AssetRef> {
+        self.active_bus_file
+            .as_deref()
+            .and_then(|active| self.bus_files.iter().find(|(name, _)| name == active))
+            .map_or(&self.buses, |(_, buses)| buses)
+    }
+
+    /// The bus file all engine configs agree on, if any (see [`Self::list`]).
+    pub fn active_bus_file(&self) -> Option<&str> {
+        self.active_bus_file
+            .as_deref()
+            .filter(|active| self.bus_files.iter().any(|(name, _)| name == active))
+    }
+
+    /// Finds a bus in any bus file, by name or by ID, ignoring the active bus file.
+    ///
+    /// Used to warn (rather than fail) about buses outside the active file.
+    pub fn find_bus_anywhere(&self, name: Option<&str>, id: Option<u64>) -> Option<AssetRef> {
+        self.buses
+            .iter()
+            .find(|b| name.is_some_and(|n| b.name == n) || id.is_some_and(|i| b.id == i))
+            .cloned()
+    }
+
+    /// Whether the bus `id` exists only outside the active bus file.
+    pub fn bus_outside_active(&self, id: u64) -> bool {
+        self.active_bus_file().is_some()
+            && self.resolve(RefTarget::Bus, id).is_none()
+            && self.find_bus_anywhere(None, Some(id)).is_some()
     }
 
     /// Finds the object `id` refers to. `id == 0` ("no reference") is never resolved.
@@ -396,7 +437,7 @@ impl ProjectValidator {
         }
         let source = match target {
             RefTarget::Asset(asset_type) => self.asset_refs.get(&asset_type)?,
-            RefTarget::Bus => &self.buses,
+            RefTarget::Bus => self.visible_buses(),
         };
         source.iter().find(|r| r.id == id).cloned()
     }
@@ -453,18 +494,32 @@ impl ProjectValidator {
                 }
             };
 
+            let file_name = path
+                .file_name()
+                .and_then(|n| n.to_str())
+                .and_then(|n| n.strip_suffix(".buses.json"))
+                .unwrap_or_default()
+                .to_string();
+            let mut file_buses = Vec::new();
             let buses = value.get("buses").and_then(|b| b.as_array());
             for bus in buses.into_iter().flatten() {
                 if let (Some(id), Some(name)) = (
                     bus.get("id").and_then(|v| v.as_u64()),
                     bus.get("name").and_then(|v| v.as_str()),
                 ) {
-                    self.buses.push(AssetRef {
+                    file_buses.push(AssetRef {
                         id,
                         name: name.to_string(),
                     });
                 }
             }
+            self.buses.extend(file_buses.iter().cloned());
+            self.bus_files.push((file_name, file_buses));
+        }
+
+        // Engine configs name the bus file the engine loads.
+        if let Ok(scan) = super::engine_config::scan_engine_configs(&self.project_root) {
+            self.active_bus_file = super::engine_config::active_bus_file(&scan.files);
         }
     }
 

@@ -23,9 +23,10 @@ use crate::assets::generated::Scope;
 use crate::assets::{AssetType, ProjectValidator};
 use crate::common::errors::{CliError, codes};
 use crate::forms::pick::{create_command, target_label};
-use crate::forms::references::{RefRule, rule_for};
+use crate::forms::references::{RefRule, RefTarget, rule_for};
 use crate::forms::rtpc_value::rtpc_value_from_flags;
-use crate::forms::validate_refs::validate_reference;
+use crate::forms::validate_refs::{inactive_bus_warning, validate_reference};
+use crate::presentation::Output;
 use crate::services::sound::SoundPatch;
 
 use super::parse_spatialization;
@@ -158,6 +159,12 @@ fn resolve_reference(
     if let Some(found) = candidates.iter().find(|c| c.name == raw) {
         return Ok(found.id);
     }
+    // A bus outside the active bus file is accepted (the caller warns).
+    if rule.target == RefTarget::Bus
+        && let Some(found) = validator.find_bus_anywhere(Some(raw), None)
+    {
+        return Ok(found.id);
+    }
     if !rule.required && raw.eq_ignore_ascii_case(NONE_KEYWORD) {
         return Ok(0);
     }
@@ -260,4 +267,29 @@ pub fn validate_patch_references(patch: &SoundPatch, validator: &ProjectValidato
         validate_reference(&rule, id, validator)?;
     }
     Ok(())
+}
+
+/// Warns (does not fail) when the sound's bus exists only outside the bus file
+/// the engine configs load. Prints each warning and returns them for the JSON result.
+pub fn bus_warnings(
+    validator: &ProjectValidator,
+    bus: Option<u64>,
+    output: &dyn Output,
+) -> Vec<String> {
+    let warnings: Vec<String> = bus
+        .and_then(|id| inactive_bus_warning(validator, id))
+        .into_iter()
+        .collect();
+    for warning in &warnings {
+        output.warning(warning);
+    }
+    warnings
+}
+
+/// Adds a `warnings` array to a JSON result when there are warnings.
+pub fn with_warnings(mut data: serde_json::Value, warnings: &[String]) -> serde_json::Value {
+    if let (false, Some(map)) = (warnings.is_empty(), data.as_object_mut()) {
+        map.insert("warnings".to_string(), serde_json::json!(warnings));
+    }
+    data
 }
