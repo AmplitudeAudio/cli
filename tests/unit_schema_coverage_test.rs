@@ -183,6 +183,32 @@ fn test_every_engine_config_schema_field_is_supported_or_a_known_gap() {
     }
 }
 
+/// The hand-copied enum member lists of the field table must match the schema's enums.
+#[test]
+fn test_engine_config_enum_lists_match_the_schema() {
+    use am::assets::engine_config_fields::{
+        HRIR_SAMPLING_MODES, LISTENER_FETCH_MODES, OUTPUT_CHANNELS, OUTPUT_FORMATS, PANNING_MODES,
+    };
+    use am::schema::loader::enum_members;
+    let sdk = discover_sdk().expect("AM_SDK_PATH must point at an SDK with schemas/*.bfbs");
+    let cases: [(&str, &[(&str, i64)]); 5] = [
+        ("ePlaybackOutputFormat", OUTPUT_FORMATS),
+        ("ePlaybackOutputChannels", OUTPUT_CHANNELS),
+        ("eListenerFetchMode", LISTENER_FETCH_MODES),
+        ("PanningMode", PANNING_MODES),
+        ("HRIRSphereSamplingMode", HRIR_SAMPLING_MODES),
+    ];
+    for (name, table) in cases {
+        let mut reflected = enum_members(&sdk, "engine_config_definition.bfbs", name)
+            .unwrap_or_else(|e| panic!("{e}"));
+        let mut ours: Vec<(String, i64)> =
+            table.iter().map(|(n, v)| (n.to_string(), *v)).collect();
+        reflected.sort();
+        ours.sort();
+        assert_eq!(ours, reflected, "enum {name} drifted from the schema");
+    }
+}
+
 /// Every flag of the engine config field table must be a real schema field.
 #[test]
 fn test_engine_config_flag_table_matches_the_schema() {

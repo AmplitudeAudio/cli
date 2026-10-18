@@ -250,6 +250,31 @@ pub fn table_field_names(
         .ok_or_else(|| format!("Table '{table}' not found in {file_name}"))
 }
 
+/// Returns the `(name, value)` members of the enum called `enum_name` in a binary schema.
+pub fn enum_members(
+    sdk: &SdkLocation,
+    file_name: &str,
+    enum_name: &str,
+) -> Result<Vec<(String, i64)>, String> {
+    use flatbuffers_reflection::reflection;
+
+    let path = sdk.schemas_dir().join(file_name);
+    let bytes = fs::read(&path).map_err(|e| format!("Failed to read {}: {e}", path.display()))?;
+    let schema = reflection::root_as_schema(&bytes)
+        .map_err(|e| format!("Failed to parse binary schema: {e}"))?;
+    let enums = schema.enums();
+    (0..enums.len())
+        .map(|i| enums.get(i))
+        .find(|e| leaf_name(e.name()) == enum_name)
+        .map(|e| {
+            let values = e.values();
+            (0..values.len())
+                .map(|j| (values.get(j).name().to_string(), values.get(j).value()))
+                .collect()
+        })
+        .ok_or_else(|| format!("Enum '{enum_name}' not found in {file_name}"))
+}
+
 /// Load and parse a single `.bfbs` schema file.
 ///
 /// Returns asset schemas for each top-level asset type table found in the file.

@@ -253,9 +253,89 @@ async fn test_create_missing_required_flag_names_it_and_writes_nothing() {
         .unwrap_err();
         let text = format!("{err:#} {}", as_cli_error(&err).unwrap().suggestion);
         assert!(text.contains("--mixer-pipeline"), "{text}");
-        assert!(text.contains("--mixer-active-channels"), "{text}");
+        assert!(!text.contains("--mixer-active-channels"), "{text}");
         assert!(!config_path(&fx, "pc").exists());
     }
+}
+
+#[tokio::test]
+async fn test_create_without_active_channels_succeeds_and_warns() {
+    let fx = fixture("ec_zero_channels");
+    let args = [
+        "create",
+        "pc",
+        "--mixer-pipeline",
+        "pc",
+        "--buses-file",
+        "main",
+    ];
+    let output = CaptureOutput::interactive();
+    run_with(&fx, &args, &NonInteractiveInput, &output)
+        .await
+        .unwrap();
+    assert_eq!(read_config(&fx, "pc")["mixer"]["active_channels"], json!(0));
+    assert!(
+        output
+            .all_warnings()
+            .iter()
+            .any(|w| w.contains("active_channels is 0"))
+    );
+
+    let fx = fixture("ec_zero_channels_json");
+    let output = CaptureOutput::json();
+    run_with(&fx, &args, &NonInteractiveInput, &output)
+        .await
+        .unwrap();
+    let data = output.last_success().unwrap();
+    assert!(
+        data["warnings"][0]
+            .as_str()
+            .unwrap()
+            .contains("active_channels is 0")
+    );
+}
+
+#[tokio::test]
+async fn test_create_from_json_without_active_channels_succeeds() {
+    let fx = fixture("ec_json_no_channels");
+    let mut base = template();
+    base["mixer"]
+        .as_object_mut()
+        .unwrap()
+        .remove("active_channels");
+    base["mixer"]["pipeline"] = json!("pc.ampipeline");
+    base["buses_file"] = json!("main.buses.ambus");
+    let file = fx.project_root().join("base.json");
+    std::fs::write(&file, base.to_string()).unwrap();
+    let (result, out) = run(
+        &fx,
+        &["create", "pc", "--from-json", file.to_str().unwrap()],
+    )
+    .await;
+    result.unwrap();
+    assert!(!out.all_warnings().is_empty());
+}
+
+#[tokio::test]
+async fn test_nonzero_active_channels_do_not_warn_on_create_or_update() {
+    let fx = fixture("ec_no_warning");
+    let (result, out) = run(&fx, &minimal("pc")).await;
+    result.unwrap();
+    assert!(out.all_warnings().is_empty());
+    let (result, out) = run(&fx, &["update", "pc", "--mixer-active-channels", "0"]).await;
+    result.unwrap();
+    assert!(
+        out.all_warnings()
+            .iter()
+            .any(|w| w.contains("active_channels is 0"))
+    );
+    let (result, out) = run(&fx, &["update", "pc", "--game-listeners", "2"]).await;
+    result.unwrap();
+    assert!(
+        out.all_warnings()
+            .iter()
+            .any(|w| w.contains("active_channels is 0"))
+    );
 }
 
 #[tokio::test]
@@ -352,7 +432,7 @@ async fn test_create_from_template_json_with_flag_override() {
 #[tokio::test]
 async fn test_create_interactive_picks_references_and_accepts_defaults() {
     let fx = fixture("ec_interactive");
-    let input = ScriptedInput::new(&["pc", "main"], &["16"]);
+    let input = ScriptedInput::new(&["pc", "main"], &[]);
     let output = CaptureOutput::interactive();
     run_with(&fx, &["create", "pc"], &input, &output)
         .await
@@ -361,7 +441,7 @@ async fn test_create_interactive_picks_references_and_accepts_defaults() {
     let config = read_config(&fx, "pc");
     assert_eq!(config["mixer"]["pipeline"], json!("pc.ampipeline"));
     assert_eq!(config["buses_file"], json!("main.buses.ambus"));
-    assert_eq!(config["mixer"]["active_channels"], json!(16));
+    assert_eq!(config["mixer"]["active_channels"], json!(0));
     assert!(input.saw_prompt("Accept defaults"));
     assert!(config.get("hrtf").is_none());
 }

@@ -274,6 +274,21 @@ fn list_or_none(names: &[String]) -> String {
     }
 }
 
+/// Non-blocking warnings about a valid config.
+pub fn config_warnings(config: &Value) -> Vec<String> {
+    let channels = config
+        .get("mixer")
+        .and_then(|m| m.get("active_channels"))
+        .and_then(Value::as_u64);
+    if channels.unwrap_or(0) == 0 {
+        return vec![
+            "mixer.active_channels is 0: the engine will have no audible channels (set --mixer-active-channels)"
+                .to_string(),
+        ];
+    }
+    Vec::new()
+}
+
 /// The key fields of a config, for listings.
 pub fn summarize(config: &Value) -> Value {
     let get = |path: &[&str]| {

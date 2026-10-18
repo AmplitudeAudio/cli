@@ -188,8 +188,8 @@ pub const FIELDS: &[FieldSpec] = &[
         MIX,
         "active_channels",
         Kind::Uint,
-        None,
-        Need::Always,
+        Some("0"),
+        Need::Optional,
         "Number of active mixer channels",
     ),
     spec(

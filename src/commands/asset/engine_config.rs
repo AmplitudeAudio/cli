@@ -44,7 +44,9 @@ use crate::database::Database;
 use crate::forms::references::RefTarget;
 use crate::input::Input;
 use crate::presentation::{Output, OutputMode};
-use crate::services::engine_config::{apply_update, build_config, check_references, summarize};
+use crate::services::engine_config::{
+    apply_update, build_config, check_references, config_warnings, summarize,
+};
 
 const ASSET_NAME: &str = "Engine config";
 
@@ -61,8 +63,9 @@ pub enum EngineConfigCommands {
 Every scalar or enum field of the schema has a flag named --<section>-<field>
 (for example --output-frequency, --game-track-rooms, --hrtf-hrir-sampling);
 --buses-file and --driver sit at the top level. Required, with no default:
---mixer-pipeline, --mixer-active-channels, --buses-file (and --hrtf-amir-file once
-HRTF is used). Everything else defaults to the schema default.
+--mixer-pipeline and --buses-file (and --hrtf-amir-file once HRTF is used).
+Everything else defaults to the schema default; note that --mixer-active-channels
+defaults to 0, which gives the engine no audible channels (a warning is printed).
 
 --mixer-pipeline and --buses-file take the NAME of an existing pipeline asset or
 bus file and are stored the way the SDK loads them ('<name>.ampipeline',
@@ -142,6 +145,23 @@ pub async fn handler(
     }
 }
 
+/// Prints the non-blocking warnings of `config` and returns them for the JSON result.
+fn report_warnings(config: &Value, output: &dyn Output) -> Vec<String> {
+    let warnings = config_warnings(config);
+    for warning in &warnings {
+        output.warning(warning);
+    }
+    warnings
+}
+
+/// Adds a `warnings` array to a JSON result when there are warnings.
+fn with_warnings(mut data: Value, warnings: &[String]) -> Value {
+    if let (false, Some(map)) = (warnings.is_empty(), data.as_object_mut()) {
+        map.insert("warnings".to_string(), json!(warnings));
+    }
+    data
+}
+
 fn write_config(path: &Path, value: &Value) -> Result<()> {
     let text = serde_json::to_string_pretty(value).context("Failed to serialize engine config")?;
     atomic_write(path, text.as_bytes())
@@ -218,14 +238,18 @@ fn create_config(
     check_references(&config, &existing.pipelines, &existing.bus_files)?;
     write_config(&path, &config)?;
 
+    let warnings = report_warnings(&config, output);
     match output.mode() {
         OutputMode::Json => output.success(
-            json!({
-                "file": name,
-                "path": path.to_string_lossy(),
-                "pipeline": config["mixer"]["pipeline"],
-                "buses_file": config["buses_file"],
-            }),
+            with_warnings(
+                json!({
+                    "file": name,
+                    "path": path.to_string_lossy(),
+                    "pipeline": config["mixer"]["pipeline"],
+                    "buses_file": config["buses_file"],
+                }),
+                &warnings,
+            ),
             None,
         ),
         OutputMode::Interactive => output.success(
@@ -332,13 +356,17 @@ fn update_config(
         .flat_map(|o| o.keys().cloned())
         .collect();
     changed.extend(set.iter().map(|(key, _)| key.clone()));
+    let warnings = report_warnings(&updated, output);
     match output.mode() {
         OutputMode::Json => output.success(
-            json!({
-                "file": name,
-                "path": file.path.to_string_lossy(),
-                "updated_fields": changed,
-            }),
+            with_warnings(
+                json!({
+                    "file": name,
+                    "path": file.path.to_string_lossy(),
+                    "updated_fields": changed,
+                }),
+                &warnings,
+            ),
             None,
         ),
         OutputMode::Interactive => output.success(

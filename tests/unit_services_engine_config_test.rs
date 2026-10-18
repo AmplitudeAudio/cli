@@ -17,7 +17,7 @@
 use am::assets::engine_config::validate_engine_config;
 use am::assets::engine_config_fields::{FIELDS, parse_value};
 use am::common::errors::codes;
-use am::services::engine_config::{apply_update, build_config, check_references};
+use am::services::engine_config::{apply_update, build_config, check_references, config_warnings};
 use serde_json::{Value, json};
 
 const TEMPLATE: &str = include_str!("../resources/default.config.json");
@@ -182,13 +182,24 @@ fn test_build_config_names_every_missing_required_flag() {
     let err = build_config(None, &[]).unwrap_err();
     assert_eq!(err.code, codes::ERR_VALIDATION_FIELD);
     let text = format!("{err} {}", err.suggestion);
-    for flag in [
-        "--mixer-pipeline",
-        "--mixer-active-channels",
-        "--buses-file",
-    ] {
+    for flag in ["--mixer-pipeline", "--buses-file"] {
         assert!(text.contains(flag), "{flag} missing from {text}");
     }
+    assert!(!text.contains("--mixer-active-channels"), "{text}");
+}
+
+#[test]
+fn test_active_channels_default_to_zero_and_warn() {
+    let set = [
+        ("mixer.pipeline", json!("pc.ampipeline")),
+        ("buses_file", json!("main.buses.ambus")),
+    ];
+    let config = build_config(None, &set).unwrap();
+    assert_eq!(config["mixer"]["active_channels"], json!(0));
+    let warnings = config_warnings(&config);
+    assert_eq!(warnings.len(), 1);
+    assert!(warnings[0].contains("active_channels is 0"));
+    assert!(config_warnings(&build_config(None, &minimal_overrides()).unwrap()).is_empty());
 }
 
 #[test]

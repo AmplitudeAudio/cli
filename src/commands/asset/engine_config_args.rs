@@ -58,7 +58,7 @@ pub struct EngineConfigArgs {
     #[arg(long, value_name = "LAYOUT")]
     pub output_channels: Option<String>,
 
-    /// Number of active mixer channels (required, no default)
+    /// Number of active mixer channels (default 0, which leaves the engine with no audible channels)
     #[arg(long, value_name = "UINT")]
     pub mixer_active_channels: Option<String>,
 
