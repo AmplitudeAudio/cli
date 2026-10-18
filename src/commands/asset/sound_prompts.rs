@@ -35,7 +35,11 @@ const KEEP_LABEL: &str = "(keep current)";
 
 const DEFAULT_PITCH: f32 = 1.0;
 const DEFAULT_NEAR_FIELD_GAIN: f32 = 1.0;
-const DEFAULT_SPREAD: f32 = 360.0;
+/// Fader written when none is chosen; matches the builder and the service default.
+const DEFAULT_FADER: &str = "Linear";
+/// Neutral suggestion only; an unset spread keeps the asset's native layout width.
+const SUGGESTED_SPREAD: f32 = 60.0;
+const SPREAD_LABEL: &str = "Spread in degrees (0-360)";
 
 const SCOPE_LABELS: [&str; 2] = ["World", "Entity"];
 const SCOPES: [Scope; 2] = [Scope::World, Scope::Entity];
@@ -203,7 +207,9 @@ pub fn complete_create_patch(
     let fader = match &patch.fader {
         Some(fader) => fader.clone(),
         None => {
-            let names = to_labels(FADER_ALGORITHM_NAMES);
+            // Linear first so accepting the first option matches the non-interactive default.
+            let mut names = to_labels(FADER_ALGORITHM_NAMES);
+            names.sort_by_key(|name| name != DEFAULT_FADER);
             names[select_index(input, "Fader", &names)?].clone()
         }
     };
@@ -240,8 +246,8 @@ pub fn complete_create_patch(
         None => prompt_optional_rtpc(
             input,
             validator,
-            "Spread",
-            DEFAULT_SPREAD,
+            SPREAD_LABEL,
+            SUGGESTED_SPREAD,
             Some((0.0, 360.0)),
         )?,
     };
@@ -290,7 +296,25 @@ pub fn complete_create_patch(
 /// Text prompt pre-filled with the current value; `None` when unchanged.
 fn ask_text(input: &dyn Input, label: &str, current: &str) -> Result<Option<String>> {
     let prompt = format!("{label} (current: {current}, Enter to keep)");
-    let value = input.prompt_text(&prompt, Some(current), None, None)?;
+    let value = input.prompt_text_with_default(
+        &prompt,
+        current,
+        Some(&|text: &str| {
+            Ok(if text.trim().is_empty() {
+                Validation::Invalid("The path cannot be empty".into())
+            } else {
+                Validation::Valid
+            })
+        }),
+    )?;
+    if value.trim().is_empty() {
+        return Err(CliError::new(
+            codes::ERR_VALIDATION_FIELD,
+            format!("{label} cannot be empty"),
+            "Sounds must reference an audio file in the data/ directory",
+        )
+        .into());
+    }
     Ok((value != current).then_some(value))
 }
 
@@ -404,9 +428,9 @@ pub fn prompt_update_patch(
     let spread = ask_rtpc(
         input,
         validator,
-        "Spread",
+        SPREAD_LABEL,
         &sound.spread,
-        DEFAULT_SPREAD,
+        SUGGESTED_SPREAD,
         Some((0.0, 360.0)),
     )?;
 

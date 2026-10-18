@@ -472,6 +472,67 @@ async fn test_interactive_create_walks_every_field() {
 }
 
 #[tokio::test]
+async fn test_interactive_walkthrough_fader_defaults_to_linear() {
+    let fx = fixture("create_fader_default");
+    // Accept the first fader option offered; everything else is the default.
+    let input = ScriptedInput::new(
+        &[
+            "sfx", "(none)", "(none)", "World", "Linear", "static", "static", "None",
+        ],
+        &["1.0", "128"],
+    )
+    .with_confirms(&[false, false, false, false, false, false]);
+    let (result, _out) = run(&fx, &["create", "boom", "--file", "a.wav"], &input).await;
+    result.unwrap();
+    input.assert_all_consumed();
+
+    let faders = input
+        .options_seen
+        .lock()
+        .unwrap()
+        .iter()
+        .find(|o| o.contains(&"SCurveSmooth".to_string()))
+        .cloned()
+        .expect("fader options were offered");
+    assert_eq!(faders[0], "Linear");
+    assert_eq!(read_sound(&fx, "boom").fader.as_deref(), Some("Linear"));
+}
+
+#[tokio::test]
+async fn test_interactive_spread_prompt_does_not_suggest_full_circle() {
+    let fx = fixture("create_spread_prompt");
+    let input = ScriptedInput::new(
+        &[
+            "sfx", "(none)", "(none)", "World", "Linear", "static", "static", "static", "None",
+        ],
+        &["1.0", "128", "60"],
+    )
+    .with_confirms(&[false, false, false, true, false, false]);
+    let (result, _out) = run(&fx, &["create", "boom", "--file", "a.wav"], &input).await;
+    result.unwrap();
+    input.assert_all_consumed();
+    assert!(input.saw_prompt("Spread in degrees (0-360)"));
+    let sound = read_sound(&fx, "boom");
+    assert_eq!(sound.spread.as_ref().and_then(|s| s.as_static()), Some(60.0));
+}
+
+#[tokio::test]
+async fn test_interactive_update_rejects_empty_audio_file() {
+    let fx = fixture("update_empty_file");
+    let (created, _) = run(
+        &fx,
+        &["create", "boom", "--file", "a.wav", "--bus", "sfx"],
+        &NonInteractiveInput,
+    )
+    .await;
+    created.unwrap();
+    let input = ScriptedInput::new(&[], &["  "]);
+    let (result, _) = run(&fx, &["update", "boom"], &input).await;
+    assert!(result.is_err());
+    assert_eq!(read_sound(&fx, "boom").path.as_deref(), Some("a.wav"));
+}
+
+#[tokio::test]
 async fn test_interactive_create_defaults_shortcut_yields_a_complete_sound() {
     let fx = fixture("create_shortcut");
     let input = ScriptedInput::new(&["sfx"], &[]).with_confirms(&[true]);
