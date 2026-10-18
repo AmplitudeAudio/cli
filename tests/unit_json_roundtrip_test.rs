@@ -347,3 +347,142 @@ async fn test_rtpc_update_keeps_unknown_field_and_changes_default_value() {
     assert_eq!(after["default_value"], json!(3.0));
     assert_eq!(sorted_keys(&after), sorted_keys(&before));
 }
+
+// ---------------------------------------------------------------------------
+// Key order: updates keep the order that create writes
+// ---------------------------------------------------------------------------
+
+fn keys_in_order(value: &Value) -> Vec<String> {
+    value.as_object().unwrap().keys().cloned().collect()
+}
+
+#[test]
+fn test_merge_update_orders_updated_keys_first_then_carried_keys() {
+    // Doc-comment promise: updated's keys in updated's order, then the carried-over
+    // keys of existing in existing's order.
+    let existing = json!({"z": 1, "x": 2, "y": 3, "a": 4});
+    let updated = json!({"b": 9, "a": 8, "c": 7});
+
+    let merged = merge_update(&existing, &updated);
+
+    assert_eq!(keys_in_order(&merged), vec!["b", "a", "c", "z", "x", "y"]);
+}
+
+#[tokio::test]
+async fn test_sound_update_keeps_create_key_order_with_unknown_key_last() {
+    let fx = sound_fixture("order_sound");
+    let _cwd = CwdGuard::enter(fx.project_root());
+    let input = NonInteractiveInput;
+    let output = CaptureOutput::interactive();
+
+    handle_sound_command(
+        &sound_command(&[
+            "create", "boom", "--file", "a.wav", "--bus", "sfx", "--gain", "0.4",
+        ]),
+        None,
+        &input,
+        &output,
+    )
+    .await
+    .unwrap();
+    let path = fx.project_root().join("sources/sounds/boom.json");
+    let created_keys = keys_in_order(&read_value(&path));
+    inject_unknown(&path, "x_custom", json!({"a": 1}));
+
+    handle_sound_command(
+        &sound_command(&["update", "boom", "--gain", "0.5"]),
+        None,
+        &input,
+        &output,
+    )
+    .await
+    .unwrap();
+    let updated_keys = keys_in_order(&read_value(&path));
+
+    let mut expected = created_keys;
+    expected.push("x_custom".to_string());
+    assert_eq!(updated_keys, expected);
+}
+
+#[tokio::test]
+async fn test_attenuation_update_keeps_create_key_order_with_unknown_key_last() {
+    let fx = AssetTestFixture::new("order_attenuation").unwrap();
+    let _cwd = CwdGuard::enter(fx.project_root());
+    let input = NonInteractiveInput;
+    let output = CaptureOutput::interactive();
+
+    handle_attenuation_command(
+        &attenuation_command(&[
+            "create",
+            "short",
+            "--max-distance",
+            "50",
+            "--shape",
+            "sphere",
+            "--inner-radius",
+            "5",
+            "--outer-radius",
+            "10",
+            "--curve-part",
+            "0,1,1,0,Linear",
+            "--curve-part",
+            "1,0,2,0,Linear",
+        ]),
+        None,
+        &input,
+        &output,
+    )
+    .await
+    .unwrap();
+    let path = fx.project_root().join("sources/attenuators/short.json");
+    let created_keys = keys_in_order(&read_value(&path));
+    inject_unknown(&path, "x_custom", json!({"a": 1}));
+
+    handle_attenuation_command(
+        &attenuation_command(&["update", "short", "--max-distance", "80"]),
+        None,
+        &input,
+        &output,
+    )
+    .await
+    .unwrap();
+    let updated_keys = keys_in_order(&read_value(&path));
+
+    let mut expected = created_keys;
+    expected.push("x_custom".to_string());
+    assert_eq!(updated_keys, expected);
+}
+
+#[tokio::test]
+async fn test_rtpc_update_keeps_create_key_order_with_unknown_key_last() {
+    let fx = AssetTestFixture::new("order_rtpc").unwrap();
+    let _cwd = CwdGuard::enter(fx.project_root());
+    let input = NonInteractiveInput;
+    let output = CaptureOutput::interactive();
+
+    handle_rtpc_command(
+        &rtpc_command(&["create", "speed", "--min-value", "0", "--max-value", "10"]),
+        None,
+        &input,
+        &output,
+    )
+    .await
+    .unwrap();
+    let path = fx.project_root().join("sources/rtpc/speed.json");
+    let created_keys = keys_in_order(&read_value(&path));
+    inject_unknown(&path, "x_custom", json!({"a": 1}));
+
+    handle_rtpc_command(
+        &rtpc_command(&["update", "speed", "--default-value", "3"]),
+        None,
+        &input,
+        &output,
+    )
+    .await
+    .unwrap();
+    let updated_keys = keys_in_order(&read_value(&path));
+
+    let mut expected = created_keys;
+    expected.push("x_custom".to_string());
+    assert_eq!(updated_keys, expected);
+}
