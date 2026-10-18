@@ -53,6 +53,7 @@ mod sound_prompts;
 mod soundbank;
 mod switch;
 mod switch_container;
+mod switch_container_list;
 
 pub use attenuation::{AttenuationCommands, handler as handle_attenuation_command};
 pub use bus::{BusCommands, handler as handle_bus_command};
