@@ -348,18 +348,7 @@ impl Asset for Soundbank {
             }
         }
 
-        // Validate at least one asset is included
-        let asset_count = self.asset_count();
-        if asset_count == 0 {
-            return Err(ValidationError::type_rule_violation(
-                "Soundbank has no assets",
-                "Soundbanks must contain at least one asset",
-            )
-            .with_suggestion(
-                "Add at least one asset (sound, collection, event, etc.) to the soundbank",
-            )
-            .with_field("assets"));
-        }
+        // An empty bank is valid: the SDK's load loops simply run zero times.
 
         // Entries are runtime file names (`explosion.amsound`, `fx/boom.amsound`): the
         // SDK loads `<type dir>/<entry>` from the build, and the validator maps them back
@@ -593,16 +582,12 @@ mod tests {
     }
 
     #[test]
-    fn test_soundbank_validate_rules_fails_no_assets() {
+    fn test_soundbank_validate_rules_accepts_an_empty_bank() {
+        // The SDK loads a bank whose lists are all empty (its loops run zero times).
         let context = ProjectContext::empty();
         let soundbank = Soundbank::builder(1, "empty_bank").build();
 
-        let result = soundbank.validate_rules(&context);
-        assert!(result.is_err());
-
-        let err = result.unwrap_err();
-        assert!(err.what().contains("no assets"));
-        assert_eq!(err.field, Some("assets".to_string()));
+        assert!(soundbank.validate_rules(&context).is_ok());
     }
 
     #[test]

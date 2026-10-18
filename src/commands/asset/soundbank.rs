@@ -63,8 +63,8 @@ pub enum SoundbankCommands {
 
 Assets are given by name. The soundbank stores the runtime file name the SDK loads
 (explosion -> explosion.amsound, a sound in sounds/fx/boom.json -> fx/boom.amsound).
-Every list flag takes comma-separated names and can be repeated. A soundbank needs at least
-one asset. --from-json reads an object of lists: {\"sounds\": [\"explosion\"], \"events\": [...]}.
+Every list flag takes comma-separated names and can be repeated. A soundbank may be empty
+(the SDK loads it). --from-json reads an object of lists: {\"sounds\": [\"explosion\"], \"events\": [...]}.
 ")]
     Create {
         /// Name of the soundbank asset

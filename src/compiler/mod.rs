@@ -134,7 +134,7 @@ pub fn get_conversion_entries() -> Vec<ConversionEntry> {
             subdir: "effects".into(),
             pattern_suffix: "**/*.json".into(),
             schema_file: "effect_definition.bfbs".into(),
-            output_extension: ".amenv".into(),
+            output_extension: ".amfx".into(),
         },
     ]
 }
@@ -352,7 +352,7 @@ mod tests {
 
         assert_eq!(entries[11].subdir, "effects");
         assert_eq!(entries[11].schema_file, "effect_definition.bfbs");
-        assert_eq!(entries[11].output_extension, ".amenv");
+        assert_eq!(entries[11].output_extension, ".amfx");
     }
 
     #[test]

@@ -200,8 +200,8 @@ pub struct SoundbankValues {
 }
 
 impl SoundbankValues {
-    /// Turns a patch into the values of a new soundbank. A bank without assets is an
-    /// error naming the flags that add them.
+    /// Turns a patch into the values of a new soundbank. A bank without assets is valid
+    /// (the SDK loads it), so an empty patch gives eight empty lists.
     pub fn from_patch(
         name: &str,
         patch: &SoundbankPatch,
@@ -214,18 +214,6 @@ impl SoundbankValues {
                 None => Vec::new(),
             };
             lists.insert(list, entries);
-        }
-        if lists.values().all(Vec::is_empty) {
-            return Err(ValidationError::new(
-                ValidationLayer::TypeRules,
-                ERR_VALIDATION_FIELD,
-                "Missing required assets: pass --sound, --collection, --event, --switch, --switch-container, --effect, --attenuator, --rtpc, --include or --from-json",
-                "A soundbank needs at least one asset and cannot prompt in non-interactive or JSON mode",
-            )
-            .with_suggestion(
-                "Example: am asset soundbank create main_bank --sound explosion,footstep --collection ambience",
-            )
-            .with_field("assets"));
         }
         Ok(Self {
             name: name.to_string(),

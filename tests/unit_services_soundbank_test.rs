@@ -112,13 +112,12 @@ fn test_duplicate_names_are_ambiguous() {
 }
 
 #[test]
-fn test_from_patch_needs_at_least_one_asset_and_names_the_flags() {
-    let err = SoundbankValues::from_patch("b", &SoundbankPatch::default(), &catalog()).unwrap_err();
-    let text = format!("{err:?}");
-    for flag in ["--sound", "--collection", "--include", "--from-json"] {
-        assert!(text.contains(flag), "{flag}: {text}");
+fn test_from_patch_without_assets_builds_an_empty_bank() {
+    let values = SoundbankValues::from_patch("b", &SoundbankPatch::default(), &catalog()).unwrap();
+    let bank = build_soundbank(values, &ProjectContext::empty()).unwrap();
+    for list in SoundbankList::ALL {
+        assert_eq!(bank.list_option(list), &Some(Vec::new()), "{}", list.field());
     }
-    assert_eq!(err.code(), codes::ERR_VALIDATION_FIELD);
 }
 
 #[test]

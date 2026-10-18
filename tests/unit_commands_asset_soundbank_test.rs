@@ -178,24 +178,33 @@ async fn test_unknown_include_type_is_rejected() {
 }
 
 #[tokio::test]
-async fn test_missing_assets_names_the_flags_and_writes_nothing() {
+async fn test_create_without_assets_writes_an_empty_bank() {
     let fx = fixture("sb_create_none");
-    let (result, _) = run(&fx, &["create", "bank"], &NonInteractiveInput).await;
-    let err = result.unwrap_err();
-    let text = format!("{err:#}");
-    assert!(text.contains("--sound") && text.contains("--include"), "{text}");
-    assert_eq!(as_cli_error(&err).unwrap().code, codes::ERR_VALIDATION_FIELD);
-    assert!(!bank_path(&fx, "bank").exists());
+    create_ok(&fx, &[]).await;
+    let raw = read_raw(&fx, "bank");
+    for field in [
+        "sounds", "collections", "events", "switches", "switch_containers", "effects",
+        "attenuators", "rtpc",
+    ] {
+        assert_eq!(raw[field], serde_json::json!([]), "{field}");
+    }
+    assert_flatc(&fx, "bank");
 }
 
 #[tokio::test]
 async fn test_json_mode_never_prompts() {
     let fx = fixture("sb_json_no_prompt");
     let input = ScriptedInput::new(&[], &[]);
-    let (result, _) = run_with(&fx, &["create", "bank"], &input, CaptureOutput::json()).await;
+    let (result, _) = run_with(&fx, &["create", "empty"], &input, CaptureOutput::json()).await;
+    result.unwrap();
+    assert!(input.prompts.lock().unwrap().is_empty());
+    assert!(bank_path(&fx, "empty").exists());
+    // a failing run in JSON mode does not prompt either
+    let (result, _) =
+        run_with(&fx, &["create", "bad", "--sound", "ghost"], &input, CaptureOutput::json()).await;
     assert!(result.is_err());
     assert!(input.prompts.lock().unwrap().is_empty());
-    assert!(!bank_path(&fx, "bank").exists());
+    assert!(!bank_path(&fx, "bad").exists());
 
     create_ok(&fx, &["--sound", "boom"]).await;
     let before = std::fs::read_to_string(bank_path(&fx, "bank")).unwrap();

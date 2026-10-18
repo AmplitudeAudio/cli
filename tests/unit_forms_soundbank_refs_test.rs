@@ -112,5 +112,6 @@ fn test_banks_in_subdirectories_and_without_lists_are_handled() {
     .unwrap();
     write_bank(&fx, "bare", 5, json!({}));
     std::fs::write(fx.sources_dir().join("soundbanks/broken.json"), "{").unwrap();
+    std::fs::write(fx.sources_dir().join("soundbanks/not_utf8.json"), [0xff, 0xfe, 0x00]).unwrap();
     assert_eq!(names(&fx, AssetType::Sound, "boom"), ["deep"]);
 }

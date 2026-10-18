@@ -27,7 +27,7 @@ use crate::services::soundbank::Catalog;
 /// Lists the soundbanks whose lists include the source asset named `name` of `asset_type`.
 ///
 /// Every source file of that type and name counts, under the runtime name its list gives
-/// it (`fx/boom.amsound`, and both `.amfx` and `.amenv` for effects). Types a soundbank
+/// it (`fx/boom.amsound`, and `.amfx`, and the legacy `.amenv`, for effects). Types a soundbank
 /// cannot hold (soundbanks, pipelines) and unknown names have no referrers.
 pub fn soundbank_referrers(
     validator: &ProjectValidator,

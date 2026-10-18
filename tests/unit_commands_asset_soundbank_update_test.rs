@@ -93,12 +93,18 @@ async fn test_update_removing_a_missing_entry_fails_and_writes_nothing() {
 }
 
 #[tokio::test]
-async fn test_update_cannot_empty_the_bank() {
+async fn test_update_can_clear_a_bank_to_empty() {
     let fx = fixture("sb_up_empty");
     create_ok(&fx, &["--sound", "boom"]).await;
-    let (result, _) = run(&fx, &["update", "bank", "--clear-sounds"], &NonInteractiveInput).await;
-    assert!(format!("{:#}", result.unwrap_err()).contains("no assets"));
-    assert_eq!(entries(&fx, "bank", "sounds"), ["boom.amsound"]);
+    update_ok(&fx, &["--clear-sounds"]).await;
+    let raw = read_raw(&fx, "bank");
+    for field in [
+        "sounds", "collections", "events", "switches", "switch_containers", "effects",
+        "attenuators", "rtpc",
+    ] {
+        assert_eq!(raw[field], json!([]), "{field}");
+    }
+    assert_flatc(&fx, "bank");
 }
 
 #[tokio::test]
@@ -236,12 +242,13 @@ async fn test_interactive_create_accepting_defaults_stops_after_the_first_pick()
 }
 
 #[tokio::test]
-async fn test_interactive_create_with_no_pick_fails_naming_the_flags() {
+async fn test_interactive_create_with_no_pick_writes_an_empty_bank() {
     let fx = fixture("sb_walk_nothing");
     let input = ScriptedInput::new(&[], &[]);
     let (result, _) = run(&fx, &["create", "bank"], &input).await;
-    assert!(format!("{:#}", result.unwrap_err()).contains("--sound"));
-    assert!(!bank_path(&fx, "bank").exists());
+    result.unwrap();
+    assert!(entries(&fx, "bank", "sounds").is_empty());
+    assert_flatc(&fx, "bank");
 }
 
 #[tokio::test]
@@ -315,4 +322,31 @@ async fn test_interactive_update_not_asked_when_flags_are_given() {
     let (result, _) = run(&fx, &["update", "bank", "--add-event", "hit"], &input).await;
     result.unwrap();
     assert!(input.prompts.lock().unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn test_project_validate_accepts_an_empty_bank() {
+    use am::commands::project::{ProjectCommands, handler};
+    let fx = fixture("sb_validate_empty");
+    std::fs::write(
+        bank_path(&fx, "hand"),
+        json!({
+            "id": 3, "name": "hand", "sounds": [], "collections": [], "events": [],
+            "switches": [], "switch_containers": [], "effects": [], "attenuators": [], "rtpc": []
+        })
+        .to_string(),
+    )
+    .unwrap();
+    let _cwd = common::collection_helpers::CwdGuard::enter(fx.project_root());
+    let out = CaptureOutput::interactive();
+    let command = ProjectCommands::Validate {
+        sounds_only: false,
+        collections_only: false,
+        effects_only: false,
+        switches_only: false,
+        switch_containers_only: false,
+        events_only: false,
+        soundbanks_only: true,
+    };
+    handler(&command, None, &NonInteractiveInput, &out).await.unwrap();
 }

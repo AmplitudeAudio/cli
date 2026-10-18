@@ -123,9 +123,8 @@ impl SoundbankList {
         }
     }
 
-    /// Extensions an existing entry may carry. `am build` writes compiled effects as
-    /// `.amenv`, so a bank built around those names is accepted next to the `.amfx` the
-    /// schema names.
+    /// Extensions an existing entry may carry. `am build` writes compiled effects as `.amfx`;
+    /// `.amenv` is what older CLI versions built, so banks that list it still validate.
     pub fn accepted_extensions(self) -> &'static [&'static str] {
         match self {
             Self::Effects => &[".amfx", ".amenv"],
