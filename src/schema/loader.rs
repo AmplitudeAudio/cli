@@ -41,6 +41,10 @@ pub struct SchemaField {
     pub type_desc: String,
     /// Whether this field is required (non-optional).
     pub required: bool,
+    /// Schema default for scalar fields (enums as their variant name), if any.
+    pub default: Option<serde_json::Value>,
+    /// Variant names when the field (or its vector element) is an enum or union.
+    pub enum_variants: Option<Vec<String>>,
 }
 
 /// Schema definition for a single asset type.
@@ -250,13 +254,17 @@ fn load_single_schema(path: &Path) -> Result<Vec<AssetSchema>, String> {
         for j in 0..obj_fields.len() {
             let field = obj_fields.get(j);
             let field_name = field.name().to_string();
-            let type_desc = describe_field_type(&field);
+            let type_desc = describe_field_type(&schema, &field);
             let required = field.required();
+            let default = field_default(&schema, &field);
+            let enum_variants = field_enum_variants(&schema, &field);
 
             fields.push(SchemaField {
                 name: field_name,
                 type_desc,
                 required,
+                default,
+                enum_variants,
             });
         }
 
@@ -271,11 +279,111 @@ fn load_single_schema(path: &Path) -> Result<Vec<AssetSchema>, String> {
     Ok(asset_schemas)
 }
 
-/// Produce a human-readable type description for a schema field.
-fn describe_field_type(field: &flatbuffers_reflection::reflection::Field) -> String {
+/// Returns the schema enum a field (or its vector element) refers to, if any.
+fn field_enum<'a>(
+    schema: &flatbuffers_reflection::reflection::Schema<'a>,
+    field: &flatbuffers_reflection::reflection::Field<'a>,
+) -> Option<flatbuffers_reflection::reflection::Enum<'a>> {
     use flatbuffers_reflection::reflection::BaseType;
 
+    let ty = field.type_();
+    let base = match ty.base_type() {
+        BaseType::Vector => ty.element(),
+        other => other,
+    };
+    let idx = ty.index();
+    let enum_like = matches!(base, BaseType::Union | BaseType::UType) || is_scalar_base(base);
+    if idx >= 0 && enum_like && (idx as usize) < schema.enums().len() {
+        Some(schema.enums().get(idx as usize))
+    } else {
+        None
+    }
+}
+
+fn is_scalar_base(base: flatbuffers_reflection::reflection::BaseType) -> bool {
+    use flatbuffers_reflection::reflection::BaseType;
+    matches!(
+        base,
+        BaseType::Bool
+            | BaseType::Byte
+            | BaseType::UByte
+            | BaseType::Short
+            | BaseType::UShort
+            | BaseType::Int
+            | BaseType::UInt
+            | BaseType::Long
+            | BaseType::ULong
+    )
+}
+
+/// Names of the variants of the enum/union a field refers to.
+///
+/// The implicit `NONE` member of unions is excluded.
+fn field_enum_variants(
+    schema: &flatbuffers_reflection::reflection::Schema,
+    field: &flatbuffers_reflection::reflection::Field,
+) -> Option<Vec<String>> {
+    let e = field_enum(schema, field)?;
+    let values = e.values();
+    let names = (0..values.len())
+        .map(|i| values.get(i))
+        .filter(|v| !(e.is_union() && v.value() == 0))
+        .map(|v| v.name().to_string())
+        .collect();
+    Some(names)
+}
+
+/// Schema default of a scalar field as JSON (enums as variant names).
+fn field_default(
+    schema: &flatbuffers_reflection::reflection::Schema,
+    field: &flatbuffers_reflection::reflection::Field,
+) -> Option<serde_json::Value> {
+    use flatbuffers_reflection::reflection::BaseType;
+    use serde_json::json;
+
+    if field.optional() {
+        return None;
+    }
     let base = field.type_().base_type();
+    if let Some(e) = field_enum(schema, field).filter(|_| is_scalar_base(base)) {
+        let wanted = field.default_integer();
+        let values = e.values();
+        return Some(
+            (0..values.len())
+                .map(|i| values.get(i))
+                .find(|v| v.value() == wanted)
+                .map(|v| json!(v.name()))
+                .unwrap_or_else(|| json!(wanted)),
+        );
+    }
+    match base {
+        BaseType::Bool => Some(json!(field.default_integer() != 0)),
+        BaseType::Float | BaseType::Double => Some(json!(field.default_real())),
+        b if is_scalar_base(b) => {
+            if matches!(b, BaseType::ULong) {
+                Some(json!(field.default_integer() as u64))
+            } else {
+                Some(json!(field.default_integer()))
+            }
+        }
+        _ => None,
+    }
+}
+
+/// Describes a non-vector base type, naming enums, unions and tables.
+fn describe_base(
+    schema: &flatbuffers_reflection::reflection::Schema,
+    field: &flatbuffers_reflection::reflection::Field,
+    base: flatbuffers_reflection::reflection::BaseType,
+) -> String {
+    use flatbuffers_reflection::reflection::BaseType;
+
+    if let Some(e) = field_enum(schema, field) {
+        return match base {
+            BaseType::UType => "union_type".to_string(),
+            _ => leaf_name(e.name()).to_string(),
+        };
+    }
     match base {
         BaseType::Bool => "bool".to_string(),
         BaseType::Byte => "i8".to_string(),
@@ -289,22 +397,30 @@ fn describe_field_type(field: &flatbuffers_reflection::reflection::Field) -> Str
         BaseType::Float => "f32".to_string(),
         BaseType::Double => "f64".to_string(),
         BaseType::String => "String".to_string(),
-        BaseType::Vector => {
-            let element = field.type_().element();
-            let inner = match element {
-                BaseType::String => "String".to_string(),
-                BaseType::Bool => "bool".to_string(),
-                BaseType::Int => "i32".to_string(),
-                BaseType::UInt => "u32".to_string(),
-                BaseType::Long => "i64".to_string(),
-                BaseType::ULong => "u64".to_string(),
-                BaseType::Float => "f32".to_string(),
-                BaseType::Double => "f64".to_string(),
-                _ => "unknown".to_string(),
-            };
-            format!("Vec<{}>", inner)
+        BaseType::UType => "union_type".to_string(),
+        BaseType::Obj => {
+            let idx = field.type_().index();
+            if idx >= 0 && (idx as usize) < schema.objects().len() {
+                leaf_name(schema.objects().get(idx as usize).name()).to_string()
+            } else {
+                "unknown".to_string()
+            }
         }
         _ => "unknown".to_string(),
+    }
+}
+
+/// Produce a human-readable type description for a schema field.
+fn describe_field_type(
+    schema: &flatbuffers_reflection::reflection::Schema,
+    field: &flatbuffers_reflection::reflection::Field,
+) -> String {
+    use flatbuffers_reflection::reflection::BaseType;
+
+    let ty = field.type_();
+    match ty.base_type() {
+        BaseType::Vector => format!("Vec<{}>", describe_base(schema, field, ty.element())),
+        base => describe_base(schema, field, base),
     }
 }
 
@@ -369,16 +485,22 @@ mod tests {
                     name: "id".to_string(),
                     type_desc: "u64".to_string(),
                     required: true,
+                    default: None,
+                    enum_variants: None,
                 },
                 SchemaField {
                     name: "name".to_string(),
                     type_desc: "String".to_string(),
                     required: false,
+                    default: None,
+                    enum_variants: None,
                 },
                 SchemaField {
                     name: "path".to_string(),
                     type_desc: "String".to_string(),
                     required: true,
+                    default: None,
+                    enum_variants: None,
                 },
             ],
             source_file: PathBuf::from("test.bfbs"),
@@ -424,6 +546,8 @@ mod tests {
                     name: "id".to_string(),
                     type_desc: "u64".to_string(),
                     required: true,
+                    default: None,
+                    enum_variants: None,
                 }],
                 source_file: PathBuf::from("sound.bfbs"),
             },

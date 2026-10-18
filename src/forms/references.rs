@@ -90,7 +90,12 @@ const SWITCH_CONTAINER_RULES: &[RefRule] = &[
         true,
     ),
     rule(AssetType::SwitchContainer, "effect", EFFECT, false),
-    rule(AssetType::SwitchContainer, "attenuation", ATTENUATION, false),
+    rule(
+        AssetType::SwitchContainer,
+        "attenuation",
+        ATTENUATION,
+        false,
+    ),
 ];
 
 /// Returns every reference rule of `asset_type` (empty if it has none).

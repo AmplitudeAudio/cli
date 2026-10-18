@@ -60,7 +60,11 @@ fn test_switch_container_references() {
     let sg = rule_for(AssetType::SwitchContainer, "switch_group").expect("rule");
     assert_eq!(sg.target, RefTarget::Asset(AssetType::Switch));
     assert!(sg.required);
-    assert!(rule_for(AssetType::SwitchContainer, "bus").expect("rule").required);
+    assert!(
+        rule_for(AssetType::SwitchContainer, "bus")
+            .expect("rule")
+            .required
+    );
 }
 
 #[test]
