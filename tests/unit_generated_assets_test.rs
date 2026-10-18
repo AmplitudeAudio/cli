@@ -352,3 +352,55 @@ fn test_generated_event_definition_roundtrip() {
         generated::EventActionType::Play
     );
 }
+
+// =============================================================================
+// New asset types: Attenuation, Rtpc, Pipeline
+// =============================================================================
+
+#[test]
+fn test_new_asset_types_directory_names() {
+    use am::assets::AssetType;
+
+    assert_eq!(AssetType::Attenuation.directory_name(), "attenuators");
+    assert_eq!(AssetType::Rtpc.directory_name(), "rtpc");
+    assert_eq!(AssetType::Pipeline.directory_name(), "pipelines");
+}
+
+#[test]
+fn test_attenuation_builder_serializes_max_distance() {
+    use am::assets::Attenuation;
+
+    let attenuation = Attenuation::builder(1, "short").max_distance(50.0).build();
+    let json = serde_json::to_string(&attenuation).unwrap();
+    assert!(json.contains("\"max_distance\":50.0"), "{json}");
+    assert!(json.contains("\"name\":\"short\""), "{json}");
+}
+
+#[test]
+fn test_rtpc_and_pipeline_builders() {
+    use am::assets::{Asset, AssetType, Pipeline, Rtpc};
+
+    let rtpc = Rtpc::builder(2, "speed").build();
+    assert_eq!(rtpc.id(), 2);
+    assert_eq!(rtpc.name(), "speed");
+    assert_eq!(rtpc.asset_type(), AssetType::Rtpc);
+
+    let pipeline = Pipeline::builder(3, "main").build();
+    assert_eq!(pipeline.id(), 3);
+    assert_eq!(pipeline.name(), "main");
+    assert_eq!(pipeline.asset_type(), AssetType::Pipeline);
+}
+
+#[test]
+fn test_schema_registry_has_new_asset_types() {
+    use am::assets::AssetType;
+    use am::config::sdk::discover_sdk;
+    use am::presentation::JsonOutput;
+    use am::schema::loader::load_schemas;
+
+    let sdk = discover_sdk().expect("AM_SDK_PATH must point at an SDK");
+    let registry = load_schemas(&sdk, &JsonOutput::new()).unwrap();
+    for t in [AssetType::Attenuation, AssetType::Rtpc, AssetType::Pipeline] {
+        assert!(registry.has(t), "missing schema for {t:?}");
+    }
+}

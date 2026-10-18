@@ -1412,6 +1412,15 @@ fn validate_asset_file(
         AssetType::Soundbank => {
             validate_typed_asset::<Soundbank>(asset_type, content, file_path, context)
         }
+        AssetType::Attenuation => validate_typed_asset::<crate::assets::Attenuation>(
+            asset_type, content, file_path, context,
+        ),
+        AssetType::Rtpc => {
+            validate_typed_asset::<crate::assets::Rtpc>(asset_type, content, file_path, context)
+        }
+        AssetType::Pipeline => {
+            validate_typed_asset::<crate::assets::Pipeline>(asset_type, content, file_path, context)
+        }
     }
 }
 

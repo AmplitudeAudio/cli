@@ -134,6 +134,9 @@ fn table_name_to_asset_type(table_name: &str) -> Option<AssetType> {
         "SoundBankDefinition" => Some(AssetType::Soundbank),
         "EventDefinition" => Some(AssetType::Event),
         "EffectDefinition" => Some(AssetType::Effect),
+        "AttenuationDefinition" => Some(AssetType::Attenuation),
+        "RtpcDefinition" => Some(AssetType::Rtpc),
+        "PipelineDefinition" => Some(AssetType::Pipeline),
         _ => None,
     }
 }

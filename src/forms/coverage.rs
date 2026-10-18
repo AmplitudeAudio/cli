@@ -70,6 +70,8 @@ pub fn supported_fields(asset_type: AssetType) -> &'static [&'static str] {
         ],
         AssetType::Event => &["id", "name", "run_mode", "actions"],
         AssetType::Effect => &["id", "name", "effect", "parameters"],
+        // CRUD commands for these types arrive in later tasks.
+        AssetType::Attenuation | AssetType::Rtpc | AssetType::Pipeline => &[],
     }
 }
 
@@ -102,4 +104,23 @@ pub const KNOWN_GAPS: &[(AssetType, &str)] = &[
     (AssetType::SwitchContainer, "scope"),
     (AssetType::SwitchContainer, "fader"),
     (AssetType::SwitchContainer, "update_behavior"),
+    // Attenuation
+    (AssetType::Attenuation, "id"),
+    (AssetType::Attenuation, "name"),
+    (AssetType::Attenuation, "max_distance"),
+    (AssetType::Attenuation, "shape"),
+    (AssetType::Attenuation, "gain_curve"),
+    (AssetType::Attenuation, "spread_curve"),
+    (AssetType::Attenuation, "air_absorption"),
+    // Rtpc
+    (AssetType::Rtpc, "id"),
+    (AssetType::Rtpc, "name"),
+    (AssetType::Rtpc, "min_value"),
+    (AssetType::Rtpc, "max_value"),
+    (AssetType::Rtpc, "default_value"),
+    (AssetType::Rtpc, "fade_settings"),
+    // Pipeline
+    (AssetType::Pipeline, "id"),
+    (AssetType::Pipeline, "name"),
+    (AssetType::Pipeline, "nodes"),
 ];

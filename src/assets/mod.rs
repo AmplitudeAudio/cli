@@ -59,11 +59,14 @@ pub mod generated {
 }
 
 // Submodules for each asset type
+mod attenuation;
 mod collection;
 mod effect;
 mod event;
 /// FaderAlgorithm enum and convenience extension methods for generated SDK types.
 pub mod extensions;
+mod pipeline;
+mod rtpc;
 mod sound;
 mod soundbank;
 mod switch;
@@ -87,10 +90,16 @@ pub use extensions::{COLLECTION_PLAY_MODE_NAMES, FaderAlgorithm, SOUND_SCHEDULER
 // Note: Some types are currently unused but are part of the public API for future asset type
 // implementations. These will be used when Collection, Effect, Event, etc. CRUD commands are added.
 #[allow(unused_imports)]
+pub use attenuation::{Attenuation, AttenuationBuilder};
+#[allow(unused_imports)]
 pub use collection::{Collection, CollectionBuilder};
 #[allow(unused_imports)]
 pub use effect::{Effect, EffectBuilder};
 pub use event::{Event, EventBuilder};
+#[allow(unused_imports)]
+pub use pipeline::{Pipeline, PipelineBuilder};
+#[allow(unused_imports)]
+pub use rtpc::{Rtpc, RtpcBuilder};
 pub use sound::{Sound, SoundBuilder};
 pub use soundbank::{Soundbank, SoundbankBuilder};
 #[allow(unused_imports)]
@@ -100,8 +109,9 @@ pub use switch_container::SwitchContainer;
 pub use validator::ProjectValidator;
 
 use crate::common::utils::{
-    ASSET_DIR_COLLECTIONS, ASSET_DIR_EFFECTS, ASSET_DIR_EVENTS, ASSET_DIR_SOUNDBANKS,
-    ASSET_DIR_SOUNDS, ASSET_DIR_SWITCH_CONTAINERS, ASSET_DIR_SWITCHES,
+    ASSET_DIR_ATTENUATORS, ASSET_DIR_COLLECTIONS, ASSET_DIR_EFFECTS, ASSET_DIR_EVENTS,
+    ASSET_DIR_PIPELINES, ASSET_DIR_RTPC, ASSET_DIR_SOUNDBANKS, ASSET_DIR_SOUNDS,
+    ASSET_DIR_SWITCH_CONTAINERS, ASSET_DIR_SWITCHES,
 };
 
 // =============================================================================
@@ -208,6 +218,12 @@ pub enum AssetType {
     Event,
     /// Audio effects (reverb, EQ, etc.)
     Effect,
+    /// Distance-based volume falloff curves
+    Attenuation,
+    /// Real-Time Parameter Controls
+    Rtpc,
+    /// Audio processing chains
+    Pipeline,
 }
 
 impl AssetType {
@@ -232,6 +248,9 @@ impl AssetType {
             Self::Soundbank => ASSET_DIR_SOUNDBANKS,
             Self::Event => ASSET_DIR_EVENTS,
             Self::Effect => ASSET_DIR_EFFECTS,
+            Self::Attenuation => ASSET_DIR_ATTENUATORS,
+            Self::Rtpc => ASSET_DIR_RTPC,
+            Self::Pipeline => ASSET_DIR_PIPELINES,
         }
     }
 
@@ -260,6 +279,9 @@ impl fmt::Display for AssetType {
             Self::Soundbank => write!(f, "Soundbank"),
             Self::Event => write!(f, "Event"),
             Self::Effect => write!(f, "Effect"),
+            Self::Attenuation => write!(f, "Attenuation"),
+            Self::Rtpc => write!(f, "RTPC"),
+            Self::Pipeline => write!(f, "Pipeline"),
         }
     }
 }

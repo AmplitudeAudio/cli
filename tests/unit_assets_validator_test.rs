@@ -349,3 +349,37 @@ fn test_p2_validation_error_message_quality() {
     assert!(err.what().contains("Collection"));
     assert!(err.what().contains("77"));
 }
+
+#[test]
+fn test_validator_indexes_new_asset_type_directories() {
+    let dir = tempdir().unwrap();
+    let sources = dir.path().join("sources");
+    for (sub, id, name) in [
+        ("attenuators", 11u64, "short"),
+        ("rtpc", 12, "speed"),
+        ("pipelines", 13, "main"),
+    ] {
+        let d = sources.join(sub);
+        fs::create_dir_all(&d).unwrap();
+        write_minimal_asset_json(&d, &format!("{name}.json"), id, name);
+    }
+
+    let output = am::presentation::JsonOutput::new();
+    let validator = ProjectValidator::new(dir.path().to_path_buf(), &output).unwrap();
+    assert!(
+        validator
+            .validate_asset_exists(AssetType::Attenuation, 11)
+            .is_ok()
+    );
+    assert!(validator.validate_asset_exists(AssetType::Rtpc, 12).is_ok());
+    assert!(
+        validator
+            .validate_asset_exists(AssetType::Pipeline, 13)
+            .is_ok()
+    );
+    assert!(
+        validator
+            .validate_asset_exists(AssetType::Rtpc, 11)
+            .is_err()
+    );
+}

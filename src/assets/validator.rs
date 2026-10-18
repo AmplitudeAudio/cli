@@ -159,16 +159,13 @@ impl ProjectValidator {
             AssetType::SwitchContainer,
             AssetType::Soundbank,
             AssetType::Event,
+            AssetType::Attenuation,
+            AssetType::Rtpc,
+            AssetType::Pipeline,
         ];
 
         for asset_type in &asset_types {
             validator.scan_assets_of_type(*asset_type, output)?;
-        }
-
-        // Scan additional directories that don't have AssetType variants
-        // but are referenced by soundbanks (attenuators, pipelines, rtpc)
-        for extra_dir in &["attenuators", "pipelines", "rtpc"] {
-            validator.scan_directory_paths(extra_dir);
         }
 
         Ok(validator)
@@ -447,30 +444,6 @@ impl ProjectValidator {
         }
 
         Ok(())
-    }
-
-    /// Scan a directory by name for path-based lookups only (no id/name extraction).
-    ///
-    /// Used for asset types that don't have `AssetType` variants (attenuators,
-    /// pipelines, rtpc) but are referenced by soundbanks.
-    fn scan_directory_paths(&mut self, dir_name: &str) {
-        let dir = self.sources_dir.join(dir_name);
-
-        if !dir.exists() {
-            return;
-        }
-
-        for entry in walkdir::WalkDir::new(&dir).into_iter().flatten() {
-            let path = entry.into_path();
-            if !path.is_file() || path.extension().is_none_or(|ext| ext != "json") {
-                continue;
-            }
-
-            if let Ok(relative) = path.strip_prefix(&self.sources_dir) {
-                self.asset_paths
-                    .insert(normalize_asset_path(&relative.to_string_lossy()));
-            }
-        }
     }
 }
 

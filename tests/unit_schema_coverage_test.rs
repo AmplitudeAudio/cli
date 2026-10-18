@@ -20,7 +20,10 @@ use am::forms::coverage::{KNOWN_GAPS, supported_fields};
 use am::presentation::JsonOutput;
 use am::schema::loader::{SchemaRegistry, load_schemas};
 
-const ALL_TYPES: [AssetType; 7] = [
+const ALL_TYPES: [AssetType; 10] = [
+    AssetType::Attenuation,
+    AssetType::Rtpc,
+    AssetType::Pipeline,
     AssetType::Sound,
     AssetType::Collection,
     AssetType::Switch,
@@ -40,7 +43,9 @@ fn test_every_schema_field_is_supported_or_a_known_gap() {
     let registry = registry();
     let mut missing = Vec::new();
     for t in ALL_TYPES {
-        let schema = registry.get(t).unwrap_or_else(|| panic!("no schema for {t:?}"));
+        let schema = registry
+            .get(t)
+            .unwrap_or_else(|| panic!("no schema for {t:?}"));
         for field in &schema.fields {
             let name = field.name.as_str();
             if !supported_fields(t).contains(&name) && !KNOWN_GAPS.contains(&(t, name)) {
@@ -58,7 +63,9 @@ fn test_every_schema_field_is_supported_or_a_known_gap() {
 fn test_known_gaps_are_real_schema_fields() {
     let registry = registry();
     for (t, name) in KNOWN_GAPS {
-        let schema = registry.get(*t).unwrap_or_else(|| panic!("no schema for {t:?}"));
+        let schema = registry
+            .get(*t)
+            .unwrap_or_else(|| panic!("no schema for {t:?}"));
         assert!(
             schema.has_field(name),
             "KNOWN_GAPS entry {t:?}.{name} is not a schema field"
