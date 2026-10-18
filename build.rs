@@ -70,6 +70,9 @@ struct FieldDef {
     rust_type: String,
     is_optional: bool,
     default_value: Option<String>,
+    /// A plain numeric/bool scalar whose schema default is zero: an absent JSON key
+    /// deserializes to `Default::default()` (what the SDK's flatc loader does).
+    implicit_default: bool,
     serde_rename: Option<String>,
     union_kind: UnionKind,
 }
@@ -330,11 +333,17 @@ fn process_schema(
                 );
             }
 
+            let implicit_default = default_value.is_none()
+                && !is_optional
+                && base_type_to_rust(base) == Some(rust_type.as_str())
+                && rust_type != "String";
+
             fields.push(FieldDef {
                 name: final_name,
                 rust_type,
                 is_optional,
                 default_value,
+                implicit_default,
                 serde_rename: final_rename,
                 union_kind,
             });
@@ -843,6 +852,8 @@ fn write_wire_field(
         let fn_name = format!("default_{}_{}", def.name, field.name);
         writeln!(out, "    #[serde(default = \"{}\")]", fn_name).unwrap();
         default_fns.push((fn_name, field.rust_type.clone(), default_val.clone()));
+    } else if field.implicit_default {
+        writeln!(out, "    #[serde(default)]").unwrap();
     }
     if field.is_optional {
         writeln!(
@@ -1044,8 +1055,8 @@ fn generate_struct(out: &mut String, def: &StructDef, _fqn: &str) {
             let fn_name = format!("default_{}_{}", def.name, field.name);
             writeln!(out, "    #[serde(default = \"{}\")]", fn_name).unwrap();
             default_fns.push((fn_name, field.rust_type.clone(), default_val.clone()));
-        } else if field.is_optional {
-            // Optional fields with no default get serde default (produces None/empty)
+        } else if field.implicit_default {
+            writeln!(out, "    #[serde(default)]").unwrap();
         }
 
         // Add skip_serializing_if for Option fields to produce cleaner JSON

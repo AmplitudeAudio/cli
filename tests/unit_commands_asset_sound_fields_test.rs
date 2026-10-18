@@ -803,3 +803,34 @@ async fn test_interactive_update_repairs_a_sound_without_fader_and_bus() {
     let sound = read_sound(&fx, "old");
     assert_eq!((sound.bus, sound.fader.as_deref()), (2, Some("Constant")));
 }
+
+// ---------------------------------------------------------------------------
+// Hand-written RTPC binding without a static `value`
+// ---------------------------------------------------------------------------
+
+#[tokio::test]
+async fn test_update_keeps_a_hand_written_rtpc_gain_without_value() {
+    let fx = fixture("rtpc_without_value");
+    let path = fx
+        .write_asset_json(
+            "sounds",
+            "wind",
+            json!({
+                "id": 9, "name": "wind", "path": "a.wav", "bus": 2,
+                "gain": {"kind": "RTPC", "rtpc": {"id": 77}},
+                "priority": {"kind": "Static", "value": 128.0},
+                "stream": false, "loop": {"enabled": false, "loop_count": 0},
+                "spatialization": "None", "attenuation": 0, "scope": "World",
+                "fader": "Linear", "effect": 0
+            }),
+        )
+        .unwrap();
+
+    let (result, _) = run(&fx, &["update", "wind", "--priority", "10"], &NonInteractiveInput).await;
+    result.unwrap_or_else(|e| panic!("{e:#}"));
+    let sound = read_sound(&fx, "wind");
+    let gain = sound.gain.expect("gain stays");
+    assert_eq!(gain.kind, ValueKind::RTPC);
+    assert_eq!(gain.rtpc.unwrap().id, 77);
+    assert!(path.exists());
+}

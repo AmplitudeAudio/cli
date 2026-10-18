@@ -404,3 +404,29 @@ fn test_schema_registry_has_new_asset_types() {
         assert!(registry.has(t), "missing schema for {t:?}");
     }
 }
+
+// =============================================================================
+// Absent scalar fields default like the SDK's flatc loader
+// =============================================================================
+
+#[test]
+fn test_rtpc_bound_value_without_value_deserializes() {
+    let parsed: generated::RtpcCompatibleValue =
+        serde_json::from_str(r#"{"kind": "RTPC", "rtpc": {"id": 77}}"#).unwrap();
+    assert_eq!(parsed.kind, generated::ValueKind::RTPC);
+    assert_eq!(parsed.value, 0.0);
+    assert_eq!(parsed.rtpc.unwrap().id, 77);
+}
+
+#[test]
+fn test_implicit_scalar_defaults_do_not_change_serialization() {
+    let value = generated::RtpcCompatibleValue {
+        kind: generated::ValueKind::Static,
+        rtpc: None,
+        value: 0.0,
+    };
+    let json = serde_json::to_value(&value).unwrap();
+    assert_eq!(json["value"], 0.0, "zero values are still written");
+    let back: generated::RtpcCompatibleValue = serde_json::from_value(json).unwrap();
+    assert_eq!(back, value);
+}
