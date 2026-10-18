@@ -104,18 +104,23 @@ impl SoundValues {
     }
 }
 
-fn id_collision_error(name: &str, id: u64) -> ValidationError {
+fn id_collision_error(kind: &str, name: &str, id: u64) -> ValidationError {
     ValidationError::new(
         ValidationLayer::IdUniqueness,
         ERR_ASSET_ALREADY_EXISTS,
-        format!("Generated ID {id} for sound '{name}' collides with an existing asset"),
+        format!("Generated ID {id} for {kind} '{name}' collides with an existing asset"),
         "All generated ID attempts collided with existing assets in the project",
     )
     .with_suggestion("Try a different name or wait a moment and retry")
     .with_field("id")
 }
 
-fn unique_id(name: &str, ctx: &ProjectContext) -> Result<u64, ValidationError> {
+/// Generates an id for a new `kind` asset called `name` that no asset of the project uses.
+pub(crate) fn unique_id(
+    kind: &str,
+    name: &str,
+    ctx: &ProjectContext,
+) -> Result<u64, ValidationError> {
     let mut id = generate_unique_id(name);
     for attempt in 0..ID_COLLISION_RETRIES {
         if !ctx.has_id(id) {
@@ -124,27 +129,27 @@ fn unique_id(name: &str, ctx: &ProjectContext) -> Result<u64, ValidationError> {
         id = generate_unique_id(&format!("{name}{attempt}"));
     }
     if ctx.has_id(id) {
-        return Err(id_collision_error(name, id));
+        return Err(id_collision_error(kind, name, id));
     }
     Ok(id)
 }
 
 /// Rejects the "unset" bus even when the context has no validator to resolve ids with.
 ///
-/// Non-zero ids are resolved by `Sound::validate_rules` when a validator is present.
-fn require_bus(bus: u64) -> Result<(), ValidationError> {
+/// Non-zero ids are resolved by the asset's `validate_rules` when a validator is present.
+pub(crate) fn require_bus(asset_type: AssetType, bus: u64) -> Result<(), ValidationError> {
     if bus != 0 {
         return Ok(());
     }
-    let rule = rule_for(AssetType::Sound, "bus")
-        .expect("the reference table must describe the sound bus field");
+    let rule = rule_for(asset_type, "bus")
+        .expect("the reference table must describe the bus field of the asset type");
     validate_reference(&rule, 0, &ProjectValidator::empty())
 }
 
 /// Builds a validated sound from `values`, generating a unique id.
 pub fn build_sound(values: SoundValues, ctx: &ProjectContext) -> Result<Sound, ValidationError> {
-    require_bus(values.bus)?;
-    let id = unique_id(&values.name, ctx)?;
+    require_bus(AssetType::Sound, values.bus)?;
+    let id = unique_id("sound", &values.name, ctx)?;
 
     let mut sound = Sound::builder(id, &values.name)
         .path(&values.audio_file)

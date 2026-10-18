@@ -20,10 +20,12 @@
 //! but add collection-specific playback configuration (play_mode, scheduler).
 
 use super::generated::{
-    CollectionDefinition, CollectionPlayMode, RtpcCompatibleValue, Scope, SoundSchedulerMode,
-    SoundSchedulerSettings, Spatialization,
+    CollectionDefinition, CollectionEntry, CollectionPlayMode, RtpcCompatibleValue, Scope,
+    SoundSchedulerMode, SoundSchedulerSettings, Spatialization,
 };
 use super::{Asset, AssetType, FaderAlgorithm, ProjectContext, Schema, ValidationError};
+use crate::forms::references::rules_for;
+use crate::forms::validate_refs::validate_reference;
 
 // =============================================================================
 // Collection Type Alias
@@ -50,6 +52,43 @@ impl Collection {
     /// Creates a builder for constructing a Collection with optional fields.
     pub fn builder(id: u64, name: impl Into<String>) -> CollectionBuilder {
         CollectionBuilder::new(id, name)
+    }
+}
+
+impl CollectionEntry {
+    /// The ID of the sound this entry plays.
+    pub fn sound(&self) -> u64 {
+        match self {
+            Self::Default(e) => e.sound,
+            Self::Random(e) => e.sound,
+            Self::Sequence(e) => e.sound,
+        }
+    }
+
+    /// The entry-specific gain, if set.
+    pub fn gain(&self) -> Option<&RtpcCompatibleValue> {
+        match self {
+            Self::Default(e) => e.gain.as_ref(),
+            Self::Random(e) => e.gain.as_ref(),
+            Self::Sequence(e) => e.gain.as_ref(),
+        }
+    }
+
+    /// The entry-specific pitch, if set.
+    pub fn pitch(&self) -> Option<&RtpcCompatibleValue> {
+        match self {
+            Self::Default(e) => e.pitch.as_ref(),
+            Self::Random(e) => e.pitch.as_ref(),
+            Self::Sequence(e) => e.pitch.as_ref(),
+        }
+    }
+
+    /// The selection weight; only Random entries have one.
+    pub fn weight(&self) -> Option<f32> {
+        match self {
+            Self::Random(e) => Some(e.weight),
+            Self::Default(_) | Self::Sequence(_) => None,
+        }
     }
 }
 
@@ -181,6 +220,48 @@ impl CollectionBuilder {
 // Asset Trait Implementation
 // =============================================================================
 
+fn finite_value_error(field: String, value: f32) -> ValidationError {
+    ValidationError::type_rule_violation(
+        format!("Invalid {field} value: {value}"),
+        "Numeric values must be finite",
+    )
+    .with_suggestion("Use an ordinary number")
+    .with_field(field)
+}
+
+fn check_finite(field: String, value: Option<&RtpcCompatibleValue>) -> Result<(), ValidationError> {
+    match value.and_then(|v| v.as_static()) {
+        Some(v) if !v.is_finite() => Err(finite_value_error(field, v)),
+        _ => Ok(()),
+    }
+}
+
+impl Collection {
+    /// Checks the numeric values the scheduler and the mixer compute with.
+    ///
+    /// `RandomScheduler::Select` sums the entry weights and walks them with a
+    /// random point, so a negative or NaN weight corrupts the pick; gains and
+    /// pitches feed `RtpcValue::Init` and must be finite numbers.
+    fn validate_values(&self) -> Result<(), ValidationError> {
+        check_finite("pitch".to_string(), self.pitch.as_ref())?;
+        for (index, entry) in self.sounds.iter().flatten().enumerate() {
+            if let Some(weight) = entry.weight()
+                && (!weight.is_finite() || weight < 0.0)
+            {
+                return Err(ValidationError::type_rule_violation(
+                    format!("Invalid weight: {weight}"),
+                    "Entry weights must be finite and not negative",
+                )
+                .with_suggestion("Use 0 to keep an entry out of the rotation, or a positive weight relative to the other entries")
+                .with_field(format!("sounds[{index}].weight")));
+            }
+            check_finite(format!("sounds[{index}].gain"), entry.gain())?;
+            check_finite(format!("sounds[{index}].pitch"), entry.pitch())?;
+        }
+        Ok(())
+    }
+}
+
 impl Asset for Collection {
     fn id(&self) -> u64 {
         self.id
@@ -251,14 +332,27 @@ impl Asset for Collection {
             .with_field("scheduler"));
         }
 
-        // Cross-asset reference checks (only if validator is available)
-        if let Some(validator) = &context.validator {
-            // Validate effect reference (zero IDs handled internally as no-op)
-            validator
-                .validate_effect_exists(self.effect)
-                .map_err(|e| e.with_field("effect"))?;
+        self.validate_values()?;
 
-            // Attenuation validation deferred — Attenuator asset type not yet implemented.
+        // Cross-asset reference checks (only if validator is available).
+        // `Collection.cpp` rejects a collection whose bus is 0 or unknown, and an
+        // entry whose sound is 0 or unknown; effect and attenuation may be unset
+        // but must resolve when set.
+        if let Some(validator) = &context.validator {
+            for rule in rules_for(AssetType::Collection) {
+                match rule.field {
+                    "bus" => validate_reference(&rule, self.bus, validator)?,
+                    "effect" => validate_reference(&rule, self.effect, validator)?,
+                    "attenuation" => validate_reference(&rule, self.attenuation, validator)?,
+                    "sounds.sound" => {
+                        for (index, entry) in self.sounds.iter().flatten().enumerate() {
+                            validate_reference(&rule, entry.sound(), validator)
+                                .map_err(|e| e.with_field(format!("sounds[{index}].sound")))?;
+                        }
+                    }
+                    _ => {}
+                }
+            }
         }
 
         Ok(())

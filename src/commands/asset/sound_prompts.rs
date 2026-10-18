@@ -30,28 +30,28 @@ use crate::forms::rtpc_value::prompt_rtpc_value;
 use crate::input::{Input, select_index};
 use crate::services::sound::{DEFAULT_GAIN, DEFAULT_PRIORITY, SoundPatch};
 
-const ACCEPT_DEFAULTS_PROMPT: &str = "Accept defaults for remaining optional fields?";
+pub(super) const ACCEPT_DEFAULTS_PROMPT: &str = "Accept defaults for remaining optional fields?";
 const KEEP_LABEL: &str = "(keep current)";
 
-const DEFAULT_PITCH: f32 = 1.0;
+pub(super) const DEFAULT_PITCH: f32 = 1.0;
 const DEFAULT_NEAR_FIELD_GAIN: f32 = 1.0;
 /// Fader written when none is chosen; matches the builder and the service default.
-const DEFAULT_FADER: &str = "Linear";
+pub(super) const DEFAULT_FADER: &str = "Linear";
 /// Neutral suggestion only; an unset spread keeps the asset's native layout width.
 const SUGGESTED_SPREAD: f32 = 60.0;
 const SPREAD_LABEL: &str = "Spread in degrees (0-360)";
 
-const SCOPE_LABELS: [&str; 2] = ["World", "Entity"];
-const SCOPES: [Scope; 2] = [Scope::World, Scope::Entity];
-const SPATIALIZATION_LABELS: [&str; 4] = ["None", "Position", "Position + Orientation", "HRTF"];
-const SPATIALIZATIONS: [Spatialization; 4] = [
+pub(super) const SCOPE_LABELS: [&str; 2] = ["World", "Entity"];
+pub(super) const SCOPES: [Scope; 2] = [Scope::World, Scope::Entity];
+pub(super) const SPATIALIZATION_LABELS: [&str; 4] = ["None", "Position", "Position + Orientation", "HRTF"];
+pub(super) const SPATIALIZATIONS: [Spatialization; 4] = [
     Spatialization::None,
     Spatialization::Position,
     Spatialization::PositionOrientation,
     Spatialization::HRTF,
 ];
 
-fn to_labels(labels: &[&str]) -> Vec<String> {
+pub(super) fn to_labels(labels: &[&str]) -> Vec<String> {
     labels.iter().map(|l| l.to_string()).collect()
 }
 
@@ -109,14 +109,19 @@ pub fn prompt_bus(input: &dyn Input, validator: &ProjectValidator) -> Result<u64
         .ok_or_else(|| anyhow::anyhow!("A required reference cannot be left unset"))
 }
 
-fn pick_optional(input: &dyn Input, validator: &ProjectValidator, field: &str) -> Result<u64> {
-    let rule = rule_for(AssetType::Sound, field)
-        .ok_or_else(|| anyhow::anyhow!("Sound has no reference rule for '{field}'"))?;
+pub(super) fn pick_optional(
+    input: &dyn Input,
+    validator: &ProjectValidator,
+    asset_type: AssetType,
+    field: &str,
+) -> Result<u64> {
+    let rule = rule_for(asset_type, field)
+        .ok_or_else(|| anyhow::anyhow!("{asset_type} has no reference rule for '{field}'"))?;
     Ok(pick_reference(input, validator, &rule)?.unwrap_or(0))
 }
 
 /// An RTPC-capable value that may stay unset: asks first, then for the value.
-fn prompt_optional_rtpc(
+pub(super) fn prompt_optional_rtpc(
     input: &dyn Input,
     validator: &ProjectValidator,
     label: &str,
@@ -129,7 +134,7 @@ fn prompt_optional_rtpc(
     prompt_checked_rtpc(input, validator, label, default, range).map(Some)
 }
 
-fn prompt_checked_rtpc(
+pub(super) fn prompt_checked_rtpc(
     input: &dyn Input,
     validator: &ProjectValidator,
     label: &str,
@@ -194,11 +199,11 @@ pub fn complete_create_patch(
 
     let attenuation = match patch.attenuation {
         Some(id) => id,
-        None => pick_optional(input, validator, "attenuation")?,
+        None => pick_optional(input, validator, AssetType::Sound, "attenuation")?,
     };
     let effect = match patch.effect {
         Some(id) => id,
-        None => pick_optional(input, validator, "effect")?,
+        None => pick_optional(input, validator, AssetType::Sound, "effect")?,
     };
     let scope = match patch.scope {
         Some(scope) => scope,
@@ -319,14 +324,14 @@ fn ask_text(input: &dyn Input, label: &str, current: &str) -> Result<Option<Stri
 }
 
 /// Yes/no prompt defaulting to the current value; `None` when unchanged.
-fn ask_bool(input: &dyn Input, label: &str, current: bool) -> Result<Option<bool>> {
+pub(super) fn ask_bool(input: &dyn Input, label: &str, current: bool) -> Result<Option<bool>> {
     let prompt = format!("{label} (current: {})", if current { "yes" } else { "no" });
     let value = input.confirm(&prompt, Some(current))?;
     Ok((value != current).then_some(value))
 }
 
 /// Choice among fixed options; `None` when the current one is chosen again.
-fn ask_choice(
+pub(super) fn ask_choice(
     input: &dyn Input,
     label: &str,
     options: &[String],
@@ -338,14 +343,15 @@ fn ask_choice(
 }
 
 /// Reference chooser with a "(keep current)" entry; `None` when unchanged.
-fn ask_reference(
+pub(super) fn ask_reference(
     input: &dyn Input,
     validator: &ProjectValidator,
+    asset_type: AssetType,
     field: &str,
     current: u64,
 ) -> Result<Option<u64>> {
-    let rule = rule_for(AssetType::Sound, field)
-        .ok_or_else(|| anyhow::anyhow!("Sound has no reference rule for '{field}'"))?;
+    let rule = rule_for(asset_type, field)
+        .ok_or_else(|| anyhow::anyhow!("{asset_type} has no reference rule for '{field}'"))?;
     let candidates = validator.list(rule.target);
     let current_name = validator
         .resolve(rule.target, current)
@@ -369,7 +375,7 @@ fn ask_reference(
 }
 
 /// RTPC-capable value: asks whether to change it, then for the new value.
-fn ask_rtpc(
+pub(super) fn ask_rtpc(
     input: &dyn Input,
     validator: &ProjectValidator,
     label: &str,
@@ -392,9 +398,9 @@ pub fn prompt_update_patch(
     sound: &Sound,
 ) -> Result<SoundPatch> {
     let audio_file = ask_text(input, "Audio file path", sound.path.as_deref().unwrap_or(""))?;
-    let bus = ask_reference(input, validator, "bus", sound.bus)?;
-    let attenuation = ask_reference(input, validator, "attenuation", sound.attenuation)?;
-    let effect = ask_reference(input, validator, "effect", sound.effect)?;
+    let bus = ask_reference(input, validator, AssetType::Sound, "bus", sound.bus)?;
+    let attenuation = ask_reference(input, validator, AssetType::Sound, "attenuation", sound.attenuation)?;
+    let effect = ask_reference(input, validator, AssetType::Sound, "effect", sound.effect)?;
 
     let current_scope = SCOPES.iter().position(|s| *s == sound.scope).unwrap_or(0);
     let scope = ask_choice(input, "Scope", &to_labels(&SCOPE_LABELS), current_scope)?

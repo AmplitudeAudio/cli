@@ -14,7 +14,9 @@
 
 //! Collection asset commands.
 //!
-//! Implements CRUD operations for Collection assets in Amplitude projects.
+//! Implements CRUD operations for Collection assets in Amplitude projects. The
+//! create/update handlers only gather values (flags, then prompts when the
+//! session is interactive); building and merging lives in `services::collection`.
 
 use std::env;
 use std::fs;
@@ -22,41 +24,45 @@ use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use clap::Subcommand;
-use colored::Colorize;
-use inquire::validator::Validation;
 use serde_json::json;
 
-use crate::common::utils::generate_unique_id;
 use crate::{
-    assets::{
-        Asset, Collection, CollectionPlayMode, ProjectContext, ProjectValidator,
-        RtpcCompatibleValue, SoundSchedulerMode, Spatialization,
-    },
+    assets::{Asset, AssetType, Collection, ProjectContext, ProjectValidator},
     common::{
         errors::{CliError, asset_already_exists, asset_not_found, codes},
         files::atomic_write,
+        json_merge::merge_update_unknown_only,
         utils::read_amproject_file,
     },
     database::Database,
-    input::{Input, select_index},
+    forms::coverage::known_field_names,
+    input::Input,
     presentation::{Output, OutputMode},
+    services::collection::{CollectionPatch, CollectionValues, apply_patch, build_collection},
 };
 
-use super::{find_json_files_recursive, parse_spatialization};
+use super::collection_args::{
+    CollectionEntryEditArgs, CollectionExtraArgs, CollectionFlags, resolve_patch,
+    validate_patch_references,
+};
+use super::collection_list::{delete_collection, list_collections};
+use super::collection_prompts::{complete_create_patch, prompt_bus, prompt_update_patch};
+use super::sound_args::{bus_warnings, with_warnings};
 
 /// The name of the current asset.
 const ASSET_NAME: &str = "Collection";
-
-/// Maximum number of ID generation retries before giving up.
-const MAX_ID_RETRIES: u32 = 3;
 
 /// Collection asset subcommands.
 #[derive(Subcommand, Debug)]
 pub enum CollectionCommands {
     /// Create a new collection asset
     #[command(after_help = "Examples:
-  am asset collection create footsteps
-  am asset collection create ambience --play-mode PlayAll --gain 0.7
+  am asset collection create footsteps --bus sfx --entry step1 --entry step2
+  am asset collection create ambience --bus sfx --play-mode PlayAll --gain 0.7
+  am asset collection create hits --bus sfx --avoid-repeat true --repeat-count 2 \\
+      --entry hit1,weight=3 --entry hit2,gain=0.8,pitch-rtpc=speed
+  am asset collection create stairs --bus sfx --scheduler-mode Sequence --end-behavior Reverse \\
+      --entries-from-json stairs.json
 ")]
     Create {
         /// Name of the collection asset
@@ -74,9 +80,9 @@ pub enum CollectionCommands {
         #[arg(short, long)]
         gain: Option<f32>,
 
-        /// Bus ID for audio routing (default: 0 = master)
+        /// Bus to route the collection to, by name or ID (required; see 'am asset bus list')
         #[arg(short, long)]
-        bus: Option<u64>,
+        bus: Option<String>,
 
         /// Playback priority (0-255, default: 128)
         #[arg(short, long)]
@@ -85,6 +91,9 @@ pub enum CollectionCommands {
         /// Spatialization mode: none, position, position_orientation, hrtf (default: none)
         #[arg(short, long)]
         spatialization: Option<String>,
+
+        #[command(flatten)]
+        extra: CollectionExtraArgs,
     },
 
     /// List all collection assets in the project
@@ -97,7 +106,9 @@ pub enum CollectionCommands {
     /// Update an existing collection asset
     #[command(after_help = "Examples:
   am asset collection update footsteps --play-mode PlayAll
-  am asset collection update ambience --gain 0.5
+  am asset collection update ambience --gain 0.5 --effect echo
+  am asset collection update hits --add-entry hit3,weight=2 --remove-entry hit1
+  am asset collection update hits --scheduler-mode Sequence --end-behavior Reverse
 ")]
     Update {
         /// Name of the collection asset to update
@@ -107,7 +118,7 @@ pub enum CollectionCommands {
         #[arg(long)]
         play_mode: Option<String>,
 
-        /// New scheduler mode: Random or Sequence
+        /// New scheduler mode: Random or Sequence (re-tags the entries and drops the old scheduler's settings)
         #[arg(long)]
         scheduler_mode: Option<String>,
 
@@ -115,9 +126,9 @@ pub enum CollectionCommands {
         #[arg(short, long)]
         gain: Option<f32>,
 
-        /// New bus ID for audio routing
+        /// New bus, by name or ID
         #[arg(short, long)]
-        bus: Option<u64>,
+        bus: Option<String>,
 
         /// New playback priority (0-255)
         #[arg(short, long)]
@@ -126,6 +137,12 @@ pub enum CollectionCommands {
         /// New spatialization mode: none, position, position_orientation, hrtf
         #[arg(short, long)]
         spatialization: Option<String>,
+
+        #[command(flatten)]
+        extra: CollectionExtraArgs,
+
+        #[command(flatten)]
+        edit: CollectionEntryEditArgs,
     },
 
     /// Delete a collection asset
@@ -159,19 +176,19 @@ pub async fn handler(
             bus,
             priority,
             spatialization,
+            extra,
         } => {
-            create_collection(
-                name,
-                play_mode.clone(),
-                scheduler_mode.clone(),
-                *gain,
-                *bus,
-                *priority,
-                spatialization.clone(),
-                input,
-                output,
-            )
-            .await
+            let flags = CollectionFlags {
+                play_mode: play_mode.clone(),
+                scheduler_mode: scheduler_mode.clone(),
+                gain: *gain,
+                bus: bus.clone(),
+                priority: *priority,
+                spatialization: spatialization.clone(),
+                extra: extra.clone(),
+                edit: CollectionEntryEditArgs::default(),
+            };
+            create_collection(name, flags, input, output).await
         }
         CollectionCommands::List {} => list_collections(output).await,
         CollectionCommands::Update {
@@ -182,19 +199,20 @@ pub async fn handler(
             bus,
             priority,
             spatialization,
+            extra,
+            edit,
         } => {
-            update_collection(
-                name,
-                play_mode.clone(),
-                scheduler_mode.clone(),
-                *gain,
-                *bus,
-                *priority,
-                spatialization.clone(),
-                input,
-                output,
-            )
-            .await
+            let flags = CollectionFlags {
+                play_mode: play_mode.clone(),
+                scheduler_mode: scheduler_mode.clone(),
+                gain: *gain,
+                bus: bus.clone(),
+                priority: *priority,
+                spatialization: spatialization.clone(),
+                extra: extra.clone(),
+                edit: edit.clone(),
+            };
+            update_collection(name, flags, input, output).await
         }
         CollectionCommands::Delete { name, force } => {
             delete_collection(name, *force, input, output).await
@@ -202,20 +220,30 @@ pub async fn handler(
     }
 }
 
+/// Whether this session may ask the user questions (never in JSON or non-interactive runs).
+fn can_prompt(input: &dyn Input, output: &dyn Output) -> bool {
+    input.is_interactive() && output.mode() != OutputMode::Json
+}
+
+fn missing_bus_error() -> CliError {
+    CliError::new(
+        codes::ERR_VALIDATION_EMPTY_REFERENCE,
+        "Missing required --bus",
+        "Collections must be routed to a bus and cannot prompt in non-interactive or JSON mode",
+    )
+    .with_suggestion(
+        "Pass --bus <name|id> (see 'am asset bus list'); if the project has no bus yet, create a bus first",
+    )
+}
+
 // =============================================================================
 // Create
 // =============================================================================
 
 /// Create a new collection asset.
-#[allow(clippy::too_many_arguments)]
 async fn create_collection(
     name: &str,
-    play_mode: Option<String>,
-    scheduler_mode: Option<String>,
-    gain: Option<f32>,
-    bus: Option<u64>,
-    priority: Option<u8>,
-    spatialization: Option<String>,
+    flags: CollectionFlags,
     input: &dyn Input,
     output: &dyn Output,
 ) -> Result<()> {
@@ -239,7 +267,7 @@ async fn create_collection(
         name, project_config.name
     ));
 
-    // Step 3: Validate collection name doesn't already exist (filesystem + registry)
+    // Step 3: Validate the name is free (filesystem + registry)
     let sources_base = if project_config.sources_dir.is_empty() {
         current_dir.clone()
     } else {
@@ -247,125 +275,77 @@ async fn create_collection(
     };
     let collections_dir = sources_base.join("collections");
     let collection_file_path = collections_dir.join(format!("{}.json", name));
+    let already_exists = || {
+        asset_already_exists(ASSET_NAME, name).with_suggestion(format!(
+            "Use 'am asset collection update {}' to modify it, or choose a different name",
+            name
+        ))
+    };
 
     if collection_file_path.exists() {
-        return Err(asset_already_exists(ASSET_NAME, name)
-            .with_suggestion(format!(
-                "Use 'am asset collection update {}' to modify it, or choose a different name",
-                name
-            ))
-            .into());
+        return Err(already_exists().into());
     }
 
-    // Build populated ProjectContext for validation
     let validator = ProjectValidator::new(current_dir.clone(), output)?;
     let context = ProjectContext::new(current_dir.clone()).with_validator(validator);
-
-    // Check name uniqueness via ProjectContext registry
-    if context.has_name(crate::assets::AssetType::Collection, name) {
-        return Err(asset_already_exists(ASSET_NAME, name)
-            .with_suggestion(format!(
-                "Use 'am asset collection update {}' to modify it, or choose a different name",
-                name
-            ))
-            .into());
+    let validator = context
+        .validator
+        .as_ref()
+        .context("Project validator is unavailable")?;
+    if context.has_name(AssetType::Collection, name) {
+        return Err(already_exists().into());
     }
 
-    // Step 3: Get play mode
-    let play_mode_value = if let Some(pm) = play_mode {
-        CollectionPlayMode::from_str(&pm)
-            .map_err(|e| CliError::new(codes::ERR_VALIDATION_FIELD, e, "Invalid play mode value"))?
-    } else {
-        prompt_play_mode(input)?
+    // Step 4: Resolve flags; unknown names and dangling ids fail before any prompt
+    let patch = resolve_patch(&flags, validator)?;
+    validate_patch_references(&patch, validator)?;
+    let interactive = can_prompt(input, output);
+
+    // Step 5: The bus is the one required field
+    let bus = match (patch.bus, interactive) {
+        (Some(bus), _) => bus,
+        (None, true) => prompt_bus(input, validator)?,
+        (None, false) => return Err(missing_bus_error().into()),
+    };
+    let patch = CollectionPatch {
+        bus: Some(bus),
+        ..patch
     };
 
-    // Step 4: Get scheduler mode
-    let scheduler_mode_value = if let Some(sm) = scheduler_mode {
-        SoundSchedulerMode::from_str(&sm).map_err(|e| {
-            CliError::new(
-                codes::ERR_VALIDATION_FIELD,
-                e,
-                "Invalid scheduler mode value",
-            )
-        })?
+    // Step 6: Optional fields, interactive only
+    let patch = if interactive {
+        complete_create_patch(input, validator, patch)?
     } else {
-        prompt_scheduler_mode(input)?
+        patch
     };
 
-    // Step 5: Get gain value
-    let gain_value = if let Some(g) = gain {
-        validate_gain(g)?;
-        g
-    } else {
-        prompt_gain(input)?
-    };
-
-    // Step 6: Get priority value
-    let priority_value = if let Some(p) = priority {
-        p
-    } else {
-        prompt_priority(input)?
-    };
-
-    // Step 7: Get spatialization mode
-    let spatialization_mode = if let Some(s) = spatialization {
-        parse_spatialization(&s)?
-    } else {
-        prompt_spatialization(input)?
-    };
-
-    // Step 8: Get bus ID
-    let bus_id = bus.unwrap_or(0);
-
-    // Step 9: Generate unique ID with collision check
-    let mut id = generate_unique_id(name);
-    let mut retries = 0;
-    while context.has_id(id) && retries < MAX_ID_RETRIES {
-        id = generate_unique_id(&format!("{}{}", name, retries));
-        retries += 1;
-    }
-    if context.has_id(id) {
-        return Err(CliError::new(
-            codes::ERR_ASSET_ALREADY_EXISTS,
-            format!("Generated ID {} collides with an existing asset", id),
-            "All generated ID attempts collided with existing assets in the project",
-        )
-        .with_suggestion("Try a different name or wait a moment and retry")
-        .into());
-    }
-
-    // Step 10: Build the Collection asset
-    let collection = Collection::builder(id, name)
-        .play_mode(play_mode_value)
-        .scheduler_mode(scheduler_mode_value)
-        .gain(gain_value)
-        .priority(priority_value)
-        .spatialization(spatialization_mode)
-        .bus(bus_id)
-        .build();
-
-    // Step 11: Validate
-    collection.validate_rules(&context)?;
-
-    // Step 12: Serialize to JSON
+    // Step 7: Build and validate through the service, then write atomically
+    let collection = build_collection(CollectionValues::from_patch(name, &patch)?, &context)?;
     let json_content = serde_json::to_string_pretty(&collection)
         .context("Failed to serialize collection to JSON")?;
-
-    // Step 13: Ensure directory exists and write atomically
     fs::create_dir_all(&collections_dir)?;
     atomic_write(&collection_file_path, json_content.as_bytes())?;
 
-    // Step 14: Output success
+    // Step 8: Output success
+    let warnings = bus_warnings(validator, Some(collection.bus), output);
+    let scheduler_mode = collection
+        .scheduler
+        .as_ref()
+        .map(|s| s.mode.to_string())
+        .unwrap_or_default();
     match output.mode() {
         OutputMode::Json => {
             output.success(
-                json!({
-                    "id": collection.id,
-                    "name": collection.name(),
-                    "path": collection_file_path.to_string_lossy(),
-                    "play_mode": play_mode_value.to_string(),
-                    "scheduler_mode": scheduler_mode_value.to_string(),
-                }),
+                with_warnings(
+                    json!({
+                        "id": collection.id,
+                        "name": collection.name(),
+                        "path": collection_file_path.to_string_lossy(),
+                        "play_mode": collection.play_mode.to_string(),
+                        "scheduler_mode": scheduler_mode,
+                    }),
+                    &warnings,
+                ),
                 None,
             );
         }
@@ -385,228 +365,13 @@ async fn create_collection(
 }
 
 // =============================================================================
-// List
-// =============================================================================
-
-/// Format gain value for JSON output.
-fn gain_to_json(gain: &Option<RtpcCompatibleValue>) -> serde_json::Value {
-    match gain {
-        Some(g) => match g.as_static() {
-            Some(v) => json!(v),
-            None => json!("RTPC"),
-        },
-        None => serde_json::Value::Null,
-    }
-}
-
-/// Format spatialization mode as a stable string for JSON output.
-fn spatialization_to_string(spatialization: &Spatialization) -> &'static str {
-    match spatialization {
-        Spatialization::None => "None",
-        Spatialization::Position => "Position",
-        Spatialization::PositionOrientation => "PositionOrientation",
-        Spatialization::HRTF => "HRTF",
-    }
-}
-
-/// List all collection assets in the current project.
-async fn list_collections(output: &dyn Output) -> Result<()> {
-    // Step 1: Detect project
-    let current_dir = env::current_dir()?;
-    let project_config = read_amproject_file(&current_dir)?;
-
-    // Step 2: Scan collections directory
-    let sources_base = if project_config.sources_dir.is_empty() {
-        current_dir.clone()
-    } else {
-        current_dir.join(&project_config.sources_dir)
-    };
-    let collections_dir = sources_base.join("collections");
-
-    // Step 3: Handle missing directory
-    if !collections_dir.exists() {
-        match output.mode() {
-            OutputMode::Json => {
-                output.success(
-                    json!({
-                        "collections": [],
-                        "count": 0,
-                        "warnings": ["No collections directory found. Create collections with 'am asset collection create'."]
-                    }),
-                    None,
-                );
-            }
-            OutputMode::Interactive => {
-                output.progress("No collections directory found.");
-                output.progress(&format!(
-                    "Create collections with '{}'.",
-                    "am asset collection create <name>".green()
-                ));
-            }
-        }
-        return Ok(());
-    }
-
-    // Step 4: Read and parse all .json files recursively
-    let mut collections: Vec<Collection> = Vec::new();
-    let mut warnings: Vec<String> = Vec::new();
-
-    let json_files = match find_json_files_recursive(&collections_dir) {
-        Ok(files) => files,
-        Err(e) => {
-            return Err(CliError::new(
-                codes::ERR_VALIDATION_FIELD,
-                "Cannot read collections directory",
-                format!("Permission denied on {}", collections_dir.display()),
-            )
-            .with_suggestion("Check directory permissions")
-            .with_context(format!("I/O error: {}", e))
-            .into());
-        }
-    };
-
-    for path in json_files {
-        if path.extension().map(|e| e == "json").unwrap_or(false) {
-            match fs::read_to_string(&path) {
-                Ok(content) => match serde_json::from_str::<Collection>(&content) {
-                    Ok(collection) => {
-                        collections.push(collection);
-                    }
-                    Err(e) => {
-                        let filename = path.file_name().unwrap_or_default().to_string_lossy();
-                        output.warning(&format!(
-                            "Skipping invalid collection file: {}",
-                            path.display()
-                        ));
-                        // Provide more context for JSON errors
-                        let error_msg = if let Some(line) = content.lines().next() {
-                            if e.to_string().contains("column") {
-                                format!(
-                                    "Invalid JSON in {}: {}. First line: {}",
-                                    filename,
-                                    e,
-                                    &line[..line.len().min(200)]
-                                )
-                            } else {
-                                format!("Invalid JSON in {}: {}", filename, e)
-                            }
-                        } else {
-                            format!("Invalid JSON in {}: {}", filename, e)
-                        };
-                        warnings.push(error_msg);
-                    }
-                },
-                Err(e) => {
-                    let filename = path.file_name().unwrap_or_default().to_string_lossy();
-                    output.warning(&format!(
-                        "Failed to read collection file: {}",
-                        path.display()
-                    ));
-                    warnings.push(format!("Failed to read {}: {}", filename, e));
-                }
-            }
-        }
-    }
-
-    // Step 5: Sort by name
-    collections.sort_by(|a, b| a.name().cmp(b.name()));
-
-    // Step 6: Handle empty
-    if collections.is_empty() {
-        match output.mode() {
-            OutputMode::Json => {
-                output.success(
-                    json!({
-                        "collections": [],
-                        "count": 0,
-                        "warnings": warnings
-                    }),
-                    None,
-                );
-            }
-            OutputMode::Interactive => {
-                for warning in &warnings {
-                    output.progress(&format!("{} {}", "Warning:".yellow(), warning));
-                }
-                if !warnings.is_empty() {
-                    output.progress("");
-                }
-                output.progress("No collections found in this project.");
-                output.progress(&format!(
-                    "Use '{}' to add one.",
-                    "am asset collection create <name>".green()
-                ));
-            }
-        }
-        return Ok(());
-    }
-
-    // Step 7: Output
-    match output.mode() {
-        OutputMode::Json => {
-            let collection_data: Vec<serde_json::Value> = collections
-                .iter()
-                .map(|c| {
-                    json!({
-                        "id": c.id,
-                        "name": c.name(),
-                        "play_mode": c.play_mode.to_string(),
-                        "scheduler_mode": c.scheduler.as_ref().map(|s| s.mode.to_string()).unwrap_or_default(),
-                        "gain": gain_to_json(&c.gain),
-                        "spatialization": spatialization_to_string(&c.spatialization)
-                    })
-                })
-                .collect();
-
-            output.success(
-                json!({
-                    "collections": collection_data,
-                    "count": collections.len(),
-                    "warnings": warnings
-                }),
-                None,
-            );
-        }
-        OutputMode::Interactive => {
-            for warning in &warnings {
-                output.progress(&format!("{} {}", "Warning:".yellow(), warning));
-            }
-
-            let table_data: Vec<serde_json::Value> = collections
-                .iter()
-                .map(|c| {
-                    json!({
-                        "id": c.id,
-                        "name": c.name(),
-                        "play_mode": c.play_mode.to_string(),
-                        "scheduler": c.scheduler.as_ref().map(|s| s.mode.to_string()).unwrap_or_default()
-                    })
-                })
-                .collect();
-
-            output.table(None, json!(table_data));
-            output.progress("");
-            output.progress(&format!("{} collection(s) found", collections.len()));
-        }
-    }
-
-    Ok(())
-}
-
-// =============================================================================
 // Update
 // =============================================================================
 
 /// Update an existing collection asset.
-#[allow(clippy::too_many_arguments)]
 async fn update_collection(
     name: &str,
-    play_mode: Option<String>,
-    scheduler_mode: Option<String>,
-    gain: Option<f32>,
-    bus: Option<u64>,
-    priority: Option<u8>,
-    spatialization: Option<String>,
+    flags: CollectionFlags,
     input: &dyn Input,
     output: &dyn Output,
 ) -> Result<()> {
@@ -625,8 +390,9 @@ async fn update_collection(
     } else {
         current_dir.join(&project_config.sources_dir)
     };
-    let collections_dir = sources_base.join("collections");
-    let collection_file_path = collections_dir.join(format!("{}.json", name));
+    let collection_file_path = sources_base
+        .join("collections")
+        .join(format!("{}.json", name));
 
     if !collection_file_path.exists() {
         return Err(asset_not_found(ASSET_NAME, name)
@@ -637,59 +403,71 @@ async fn update_collection(
             .into());
     }
 
-    // Step 3: Parse existing collection
+    // Step 3: Parse existing collection (typed, and raw to keep unknown keys)
     let content = fs::read_to_string(&collection_file_path).context(format!(
         "Failed to read collection file: {}",
         collection_file_path.display()
     ))?;
-    let mut collection: Collection = serde_json::from_str(&content).context(format!(
+    let existing: Collection = serde_json::from_str(&content).context(format!(
+        "Failed to parse collection file: {}",
+        collection_file_path.display()
+    ))?;
+    let original: serde_json::Value = serde_json::from_str(&content).context(format!(
         "Failed to parse collection file: {}",
         collection_file_path.display()
     ))?;
 
-    // Step 4: Determine if we have any flag values (non-interactive mode)
-    let has_any_flag = play_mode.is_some()
-        || scheduler_mode.is_some()
-        || gain.is_some()
-        || bus.is_some()
-        || priority.is_some()
-        || spatialization.is_some();
-
-    // Step 5: Apply updates
-    let updated_fields: Vec<String> = if has_any_flag {
-        apply_flag_updates(
-            &mut collection,
-            play_mode,
-            scheduler_mode,
-            gain,
-            bus,
-            priority,
-            spatialization,
-        )?
-    } else {
-        prompt_collection_updates(&mut collection, input)?
-    };
-
-    // Step 6: Validate
     let validator = ProjectValidator::new(current_dir.clone(), output)?;
     let context = ProjectContext::new(current_dir.clone()).with_validator(validator);
-    collection.validate_rules(&context)?;
+    let validator = context
+        .validator
+        .as_ref()
+        .context("Project validator is unavailable")?;
 
-    // Step 7: Serialize and write atomically
-    let json_content = serde_json::to_string_pretty(&collection)
-        .context("Failed to serialize collection to JSON")?;
+    // Step 4: Flags win; with none, an interactive session is offered every field
+    let mut patch = resolve_patch(&flags, validator)?;
+    validate_patch_references(&patch, validator)?;
+    if patch.is_empty() && can_prompt(input, output) {
+        patch = prompt_update_patch(input, validator, &existing)?;
+    }
+
+    // Step 5: Merge into a copy and validate the new state
+    let collection = apply_patch(&existing, &patch)?;
+    collection.validate_rules(&context).map_err(|e| {
+        if e.field.as_deref() == Some("bus") {
+            let suggestion = format!(
+                "Run 'am asset collection update {name} --bus <name|id>' with an existing bus (see 'am asset bus list')"
+            );
+            e.with_suggestion(suggestion)
+        } else {
+            e
+        }
+    })?;
+
+    // Step 6: Serialize over the original file, keeping keys the CLI does not model
+    let known = known_field_names(AssetType::Collection);
+    let known: Vec<&str> = known.iter().map(String::as_str).collect();
+    let updated =
+        serde_json::to_value(&collection).context("Failed to serialize collection to JSON")?;
+    let merged = merge_update_unknown_only(&original, &updated, &known);
+    let json_content =
+        serde_json::to_string_pretty(&merged).context("Failed to serialize collection to JSON")?;
     atomic_write(&collection_file_path, json_content.as_bytes())?;
 
-    // Step 8: Output success
+    // Step 7: Output success
+    let warnings = bus_warnings(validator, patch.bus, output);
     match output.mode() {
         OutputMode::Json => {
             output.success(
-                json!({
-                    "id": collection.id,
-                    "name": collection.name(),
-                    "path": collection_file_path.to_string_lossy(),
-                    "updated_fields": updated_fields,
-                }),
+                with_warnings(
+                    json!({
+                        "id": collection.id,
+                        "name": collection.name(),
+                        "path": collection_file_path.to_string_lossy(),
+                        "updated_fields": patch.changed_fields(),
+                    }),
+                    &warnings,
+                ),
                 None,
             );
         }
@@ -706,457 +484,4 @@ async fn update_collection(
     }
 
     Ok(())
-}
-
-/// Apply flag updates to a collection (non-interactive mode).
-fn apply_flag_updates(
-    collection: &mut Collection,
-    play_mode: Option<String>,
-    scheduler_mode: Option<String>,
-    gain: Option<f32>,
-    bus: Option<u64>,
-    priority: Option<u8>,
-    spatialization: Option<String>,
-) -> Result<Vec<String>> {
-    let mut updated_fields = Vec::new();
-
-    if let Some(pm) = play_mode {
-        collection.play_mode = CollectionPlayMode::from_str(&pm).map_err(|e| {
-            CliError::new(codes::ERR_VALIDATION_FIELD, e, "Invalid play mode value")
-        })?;
-        updated_fields.push("play_mode".to_string());
-    }
-
-    if let Some(sm) = scheduler_mode {
-        let mode = SoundSchedulerMode::from_str(&sm).map_err(|e| {
-            CliError::new(
-                codes::ERR_VALIDATION_FIELD,
-                e,
-                "Invalid scheduler mode value",
-            )
-        })?;
-        collection.scheduler = Some(crate::assets::SoundSchedulerSettings { mode, config: None });
-        updated_fields.push("scheduler_mode".to_string());
-    }
-
-    if let Some(g) = gain {
-        validate_gain(g)?;
-        collection.gain = Some(RtpcCompatibleValue::static_value(g));
-        updated_fields.push("gain".to_string());
-    }
-
-    if let Some(b) = bus {
-        collection.bus = b;
-        updated_fields.push("bus".to_string());
-    }
-
-    if let Some(p) = priority {
-        collection.priority = Some(RtpcCompatibleValue::static_value(p as f32));
-        updated_fields.push("priority".to_string());
-    }
-
-    if let Some(s) = spatialization {
-        collection.spatialization = parse_spatialization(&s)?;
-        updated_fields.push("spatialization".to_string());
-    }
-
-    Ok(updated_fields)
-}
-
-/// Prompt for collection updates in interactive mode.
-fn prompt_collection_updates(
-    collection: &mut Collection,
-    input: &dyn Input,
-) -> Result<Vec<String>> {
-    let mut updated_fields = Vec::new();
-
-    // Prompt for play mode
-    if let Some(new_pm) = prompt_update_play_mode(input, &collection.play_mode)? {
-        collection.play_mode = new_pm;
-        updated_fields.push("play_mode".to_string());
-    }
-
-    // Prompt for scheduler mode
-    let current_scheduler = collection
-        .scheduler
-        .as_ref()
-        .map(|s| s.mode)
-        .unwrap_or(SoundSchedulerMode::Random);
-    if let Some(new_sm) = prompt_update_scheduler_mode(input, &current_scheduler)? {
-        collection.scheduler = Some(crate::assets::SoundSchedulerSettings {
-            mode: new_sm,
-            config: None,
-        });
-        updated_fields.push("scheduler_mode".to_string());
-    }
-
-    // Prompt for gain
-    let current_gain = collection
-        .gain
-        .as_ref()
-        .and_then(|g| g.as_static())
-        .unwrap_or(1.0);
-    if let Some(new_gain) = prompt_update_number(
-        input,
-        "Volume gain [0.0-1.0]",
-        current_gain,
-        |v| (0.0..=1.0).contains(&v),
-        "Gain must be between 0.0 and 1.0",
-    )? {
-        collection.gain = Some(RtpcCompatibleValue::static_value(new_gain));
-        updated_fields.push("gain".to_string());
-    }
-
-    // Prompt for priority
-    let current_priority = collection
-        .priority
-        .as_ref()
-        .and_then(|p| p.as_static())
-        .unwrap_or(128.0);
-    if let Some(new_priority) = prompt_update_number(
-        input,
-        "Playback priority [0-255]",
-        current_priority,
-        |v| (0.0..=255.0).contains(&v) && v == v.floor(),
-        "Priority must be an integer between 0 and 255",
-    )? {
-        collection.priority = Some(RtpcCompatibleValue::static_value(new_priority));
-        updated_fields.push("priority".to_string());
-    }
-
-    // Prompt for spatialization
-    if let Some(new_spat) = prompt_update_spatialization(input, &collection.spatialization)? {
-        collection.spatialization = new_spat;
-        updated_fields.push("spatialization".to_string());
-    }
-
-    // Prompt for bus
-    let current_bus = collection.bus;
-    if let Some(new_bus) = prompt_update_number(
-        input,
-        "Bus ID",
-        current_bus as f32,
-        |v| v >= 0.0 && v == v.floor(),
-        "Bus ID must be a non-negative integer",
-    )? {
-        collection.bus = new_bus as u64;
-        updated_fields.push("bus".to_string());
-    }
-
-    Ok(updated_fields)
-}
-
-// =============================================================================
-// Delete
-// =============================================================================
-
-/// Delete a collection asset.
-async fn delete_collection(
-    name: &str,
-    force: bool,
-    input: &dyn Input,
-    output: &dyn Output,
-) -> Result<()> {
-    // Step 1: Detect project
-    let current_dir = env::current_dir()?;
-    let project_config = read_amproject_file(&current_dir)?;
-
-    // Step 2: Locate collection file
-    let sources_base = if project_config.sources_dir.is_empty() {
-        current_dir.clone()
-    } else {
-        current_dir.join(&project_config.sources_dir)
-    };
-    let collections_dir = sources_base.join("collections");
-    let collection_file_path = collections_dir.join(format!("{}.json", name));
-
-    if !collection_file_path.exists() {
-        return Err(asset_not_found(ASSET_NAME, name)
-            .with_suggestion("Use 'am asset collection list' to see available collections")
-            .into());
-    }
-
-    // Step 3: Read collection for response data
-    let content = fs::read_to_string(&collection_file_path).context(format!(
-        "Failed to read collection file: {}",
-        collection_file_path.display()
-    ))?;
-    let collection: Collection = serde_json::from_str(&content).context(format!(
-        "Failed to parse collection file: {}",
-        collection_file_path.display()
-    ))?;
-
-    // Step 4: Confirm deletion
-    let confirmed = if force {
-        true
-    } else {
-        match input.confirm(
-            &format!("Delete collection '{}'? This cannot be undone.", name),
-            Some(false),
-        ) {
-            Ok(value) => value,
-            Err(_) => {
-                // Non-interactive mode without --force
-                return Err(CliError::new(
-                    codes::ERR_VALIDATION_FIELD,
-                    "Deletion requires confirmation",
-                    "In non-interactive mode, use --force to confirm deletion",
-                )
-                .with_suggestion(format!(
-                    "Use 'am asset collection delete {} --force' to delete without prompting",
-                    name
-                ))
-                .into());
-            }
-        }
-    };
-
-    if !confirmed {
-        output.progress("Deletion cancelled.");
-        return Ok(());
-    }
-
-    // Step 5: Remove file
-    fs::remove_file(&collection_file_path).context(format!(
-        "Failed to delete collection file: {}",
-        collection_file_path.display()
-    ))?;
-
-    // Step 6: Output success
-    match output.mode() {
-        OutputMode::Json => {
-            output.success(
-                json!({
-                    "id": collection.id,
-                    "name": collection.name(),
-                    "deleted": true,
-                }),
-                None,
-            );
-        }
-        OutputMode::Interactive => {
-            output.success(
-                json!(format!("Collection '{}' deleted successfully", name)),
-                None,
-            );
-        }
-    }
-
-    Ok(())
-}
-
-// =============================================================================
-// Shared prompt/validation helpers
-// =============================================================================
-
-/// Validate gain is in valid range.
-fn validate_gain(gain: f32) -> Result<()> {
-    if !(0.0..=1.0).contains(&gain) {
-        return Err(CliError::new(
-            codes::ERR_VALIDATION_FIELD,
-            format!("Invalid gain value: {}", gain),
-            "Gain must be between 0.0 and 1.0",
-        )
-        .with_suggestion("Set gain to a value between 0.0 (silent) and 1.0 (full volume)")
-        .into());
-    }
-    Ok(())
-}
-
-/// Prompt for play mode selection.
-///
-/// In non-interactive mode, defaults to PlayOne (per AC2: "all fields use defaults or provided flags").
-fn prompt_play_mode(input: &dyn Input) -> Result<CollectionPlayMode> {
-    let options = crate::assets::extensions::COLLECTION_PLAY_MODE_NAMES;
-    let modes = [CollectionPlayMode::PlayOne, CollectionPlayMode::PlayAll];
-
-    match select_index(input, "Play mode:", options) {
-        Ok(idx) => Ok(modes[idx]),
-        Err(_) => {
-            log::debug!("Non-interactive mode: using default play mode PlayOne");
-            Ok(CollectionPlayMode::PlayOne)
-        }
-    }
-}
-
-/// Prompt for scheduler mode selection.
-///
-/// In non-interactive mode, defaults to Random (per AC2: "all fields use defaults or provided flags").
-fn prompt_scheduler_mode(input: &dyn Input) -> Result<SoundSchedulerMode> {
-    let options = crate::assets::extensions::SOUND_SCHEDULER_MODE_NAMES;
-    let modes = [SoundSchedulerMode::Random, SoundSchedulerMode::Sequence];
-
-    match select_index(input, "Scheduler mode:", options) {
-        Ok(idx) => Ok(modes[idx]),
-        Err(_) => {
-            log::debug!("Non-interactive mode: using default scheduler mode Random");
-            Ok(SoundSchedulerMode::Random)
-        }
-    }
-}
-
-/// Prompt for gain value.
-///
-/// In non-interactive mode, defaults to 1.0 (per AC2: "all fields use defaults or provided flags").
-fn prompt_gain(input: &dyn Input) -> Result<f32> {
-    let result = input.prompt_text(
-        "Volume gain [0.0-1.0]",
-        Some("1.0"),
-        None,
-        Some(&|value: &str| match value.trim().parse::<f32>() {
-            Ok(g) if (0.0..=1.0).contains(&g) => Ok(Validation::Valid),
-            Ok(g) => Ok(Validation::Invalid(
-                format!("Gain must be between 0.0 and 1.0, got {}", g).into(),
-            )),
-            Err(_) => Ok(Validation::Invalid("Must be a number".into())),
-        }),
-    );
-
-    match result {
-        Ok(value) => Ok(value.trim().parse().unwrap_or(1.0)),
-        Err(_) => Ok(1.0), // Default in non-interactive mode
-    }
-}
-
-/// Prompt for priority value.
-fn prompt_priority(input: &dyn Input) -> Result<u8> {
-    let result = input.prompt_text(
-        "Playback priority [0-255]",
-        Some("128"),
-        None,
-        Some(&|value: &str| match value.trim().parse::<u8>() {
-            Ok(_) => Ok(Validation::Valid),
-            Err(_) => Ok(Validation::Invalid(
-                "Must be a number between 0 and 255".into(),
-            )),
-        }),
-    );
-
-    match result {
-        Ok(value) => Ok(value.trim().parse().unwrap_or(128)),
-        Err(_) => Ok(128), // Default in non-interactive mode
-    }
-}
-
-/// Prompt for spatialization mode.
-fn prompt_spatialization(input: &dyn Input) -> Result<Spatialization> {
-    let options = vec![
-        "None".to_string(),
-        "Position".to_string(),
-        "Position + Orientation".to_string(),
-        "HRTF".to_string(),
-    ];
-
-    let modes = [
-        Spatialization::None,
-        Spatialization::Position,
-        Spatialization::PositionOrientation,
-        Spatialization::HRTF,
-    ];
-
-    match select_index(input, "Spatialization mode:", &options) {
-        Ok(idx) => Ok(modes[idx]),
-        Err(_) => Ok(Spatialization::None), // Default in non-interactive mode
-    }
-}
-
-/// Prompt for an optional numeric field update.
-fn prompt_update_number(
-    input: &dyn Input,
-    label: &str,
-    current_value: f32,
-    validator: impl Fn(f32) -> bool,
-    error_msg: &str,
-) -> Result<Option<f32>> {
-    let current_str = format!("{}", current_value);
-    let prompt = format!("{} (current: {}, Enter to keep)", label, current_value);
-
-    let error_msg = error_msg.to_string();
-    let result = input.prompt_text(
-        &prompt,
-        Some(&current_str),
-        None,
-        Some(&move |value: &str| match value.trim().parse::<f32>() {
-            Ok(v) if validator(v) => Ok(Validation::Valid),
-            Ok(_) => Ok(Validation::Invalid(error_msg.clone().into())),
-            Err(_) => Ok(Validation::Invalid("Must be a number".into())),
-        }),
-    );
-
-    match result {
-        Ok(value) => {
-            let parsed: f32 = value.trim().parse().unwrap_or(current_value);
-            if (parsed - current_value).abs() < f32::EPSILON {
-                Ok(None)
-            } else {
-                Ok(Some(parsed))
-            }
-        }
-        Err(_) => Ok(None), // Non-interactive, keep current
-    }
-}
-
-/// Prompt for play mode update.
-fn prompt_update_play_mode(
-    input: &dyn Input,
-    current: &CollectionPlayMode,
-) -> Result<Option<CollectionPlayMode>> {
-    let options = crate::assets::extensions::COLLECTION_PLAY_MODE_NAMES;
-    let modes = [CollectionPlayMode::PlayOne, CollectionPlayMode::PlayAll];
-
-    let current_idx = modes.iter().position(|m| m == current).unwrap_or(0);
-    let prompt = format!("Play mode (current: {}):", options[current_idx]);
-
-    match select_index(input, &prompt, options) {
-        Ok(idx) if idx == current_idx => Ok(None),
-        Ok(idx) => Ok(Some(modes[idx])),
-        Err(_) => Ok(None), // Non-interactive, keep current
-    }
-}
-
-/// Prompt for scheduler mode update.
-fn prompt_update_scheduler_mode(
-    input: &dyn Input,
-    current: &SoundSchedulerMode,
-) -> Result<Option<SoundSchedulerMode>> {
-    let options = crate::assets::extensions::SOUND_SCHEDULER_MODE_NAMES;
-    let modes = [SoundSchedulerMode::Random, SoundSchedulerMode::Sequence];
-
-    let current_idx = modes.iter().position(|m| m == current).unwrap_or(0);
-    let prompt = format!("Scheduler mode (current: {}):", options[current_idx]);
-
-    match select_index(input, &prompt, options) {
-        Ok(idx) if idx == current_idx => Ok(None),
-        Ok(idx) => Ok(Some(modes[idx])),
-        Err(_) => Ok(None), // Non-interactive, keep current
-    }
-}
-
-/// Prompt for spatialization update.
-fn prompt_update_spatialization(
-    input: &dyn Input,
-    current: &Spatialization,
-) -> Result<Option<Spatialization>> {
-    let options = vec![
-        "None".to_string(),
-        "Position".to_string(),
-        "Position + Orientation".to_string(),
-        "HRTF".to_string(),
-    ];
-
-    let modes = [
-        Spatialization::None,
-        Spatialization::Position,
-        Spatialization::PositionOrientation,
-        Spatialization::HRTF,
-    ];
-
-    let current_idx = modes.iter().position(|m| m == current).unwrap_or(0);
-    let prompt = format!("Spatialization mode (current: {}):", options[current_idx]);
-
-    match select_index(input, &prompt, &options) {
-        Ok(idx) if idx == current_idx => Ok(None),
-        Ok(idx) => Ok(Some(modes[idx])),
-        Err(_) => Ok(None), // Non-interactive, keep current
-    }
 }

@@ -49,10 +49,17 @@ pub fn supported_fields(asset_type: AssetType) -> &'static [&'static str] {
             "name",
             "priority",
             "gain",
+            "pitch",
             "bus",
+            "effect",
+            "attenuation",
             "spatialization",
             "play_mode",
             "scheduler",
+            "scope",
+            "fader",
+            "sounds",
+            "sounds_type",
         ],
         AssetType::Switch => &["id", "name", "states"],
         AssetType::SwitchContainer => &[
@@ -99,15 +106,6 @@ pub fn supported_fields(asset_type: AssetType) -> &'static [&'static str] {
 
 /// Schema fields deliberately not yet covered by any create/update flow.
 pub const KNOWN_GAPS: &[(AssetType, &str)] = &[
-    // Collection
-    (AssetType::Collection, "effect"),
-    (AssetType::Collection, "pitch"),
-    (AssetType::Collection, "sounds"),
-    // Union discriminator vector that accompanies `sounds`; closes with it.
-    (AssetType::Collection, "sounds_type"),
-    (AssetType::Collection, "attenuation"),
-    (AssetType::Collection, "scope"),
-    (AssetType::Collection, "fader"),
     // Switch container
     (AssetType::SwitchContainer, "effect"),
     (AssetType::SwitchContainer, "priority"),
@@ -119,6 +117,37 @@ pub const KNOWN_GAPS: &[(AssetType, &str)] = &[
     (AssetType::SwitchContainer, "scope"),
     (AssetType::SwitchContainer, "fader"),
     (AssetType::SwitchContainer, "update_behavior"),
+];
+
+/// Tables of `collection_definition.fbs` below the collection itself, as
+/// `(table, supported fields, known gaps)`.
+///
+/// `--avoid-repeat` / `--repeat-count` / `--end-behavior` cover the scheduler
+/// configs and `--entry` / `--entries-from-json` the three entry variants.
+/// `unit_schema_coverage_test` checks every list against the schema.
+pub const COLLECTION_TABLES: &[(&str, &[&str], &[&str])] = &[
+    (
+        "SoundSchedulerSettings",
+        &["mode", "config", "config_type"],
+        &[],
+    ),
+    (
+        "RandomSoundSchedulerConfig",
+        &["avoid_repeat", "repeat_count"],
+        &[],
+    ),
+    ("SequenceSoundSchedulerConfig", &["end_behavior"], &[]),
+    ("DefaultCollectionEntry", &["sound", "gain", "pitch"], &[]),
+    (
+        "RandomSchedulerCollectionEntry",
+        &["sound", "gain", "pitch", "weight"],
+        &[],
+    ),
+    (
+        "SequenceSchedulerCollectionEntry",
+        &["sound", "gain", "pitch"],
+        &[],
+    ),
 ];
 
 /// Fields of `PipelineNodeDefinition` the `--node` flag syntax covers.

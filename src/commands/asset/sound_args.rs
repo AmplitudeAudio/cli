@@ -150,7 +150,7 @@ pub fn parse_fader(value: &str) -> Result<String> {
 ///
 /// Optional references accept `none` (and `0`) to mean "unset". A name that
 /// matches no object is a reference error that lists what exists.
-fn resolve_reference(
+pub(super) fn resolve_reference(
     validator: &ProjectValidator,
     rule: &RefRule,
     raw: &str,

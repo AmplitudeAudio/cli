@@ -17,7 +17,7 @@
 use am::assets::AssetType;
 use am::config::sdk::discover_sdk;
 use am::forms::coverage::{
-    BUS_KNOWN_GAPS, BUS_SUPPORTED_FIELDS, DUCK_BUS_KNOWN_GAPS, DUCK_BUS_SUPPORTED_FIELDS,
+    BUS_KNOWN_GAPS, BUS_SUPPORTED_FIELDS, COLLECTION_TABLES, DUCK_BUS_KNOWN_GAPS, DUCK_BUS_SUPPORTED_FIELDS,
     ENGINE_CONFIG_TABLES, KNOWN_GAPS, PIPELINE_NODE_KNOWN_GAPS, PIPELINE_NODE_SUPPORTED_FIELDS,
     supported_fields,
 };
@@ -155,6 +155,33 @@ fn test_every_pipeline_node_schema_field_is_supported_or_a_known_gap() {
             "PipelineNodeDefinition.{name} is not a schema field"
         );
     }
+}
+
+/// Collection scheduler and entry tables are nested tables of one file, so they are checked separately.
+#[test]
+fn test_every_collection_nested_schema_field_is_supported_or_a_known_gap() {
+    let sdk = discover_sdk().expect("AM_SDK_PATH must point at an SDK with schemas/*.bfbs");
+    for (table, supported, gaps) in COLLECTION_TABLES {
+        let fields = table_field_names(&sdk, "collection_definition.bfbs", table)
+            .expect("collection schema must load");
+        for field in &fields {
+            assert!(
+                supported.contains(&field.as_str()) || gaps.contains(&field.as_str()),
+                "{table}.{field} is neither supported nor a known gap"
+            );
+        }
+        for name in supported.iter().chain(gaps.iter()) {
+            assert!(
+                fields.iter().any(|f| f == name),
+                "{table}.{name} is not a schema field"
+            );
+        }
+    }
+}
+
+#[test]
+fn test_collection_has_no_known_gaps_left() {
+    assert!(KNOWN_GAPS.iter().all(|(t, _)| *t != AssetType::Collection));
 }
 
 /// Engine config tables are nested tables of one file, so they are checked separately.

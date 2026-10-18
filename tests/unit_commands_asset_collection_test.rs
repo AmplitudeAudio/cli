@@ -86,6 +86,7 @@ fn test_p0_collection_create_command_parses_with_all_flags() {
                             bus,
                             priority,
                             spatialization,
+                            ..
                         },
                 },
         } => {
@@ -93,7 +94,7 @@ fn test_p0_collection_create_command_parses_with_all_flags() {
             assert_eq!(play_mode, Some("PlayAll".to_string()));
             assert_eq!(scheduler_mode, Some("Sequence".to_string()));
             assert_eq!(gain, Some(0.8));
-            assert_eq!(bus, Some(100));
+            assert_eq!(bus.as_deref(), Some("100"));
             assert_eq!(priority, Some(200));
             assert_eq!(spatialization, Some("position".to_string()));
         }
@@ -137,7 +138,7 @@ fn test_p1_collection_create_command_short_flags() {
         } => {
             assert_eq!(name, "footsteps");
             assert_eq!(gain, Some(0.75));
-            assert_eq!(bus, Some(50));
+            assert_eq!(bus.as_deref(), Some("50"));
             assert_eq!(priority, Some(100));
             assert_eq!(spatialization, Some("hrtf".to_string()));
         }
@@ -238,6 +239,7 @@ fn test_p0_collection_update_command_parses_with_all_flags() {
                             bus,
                             priority,
                             spatialization,
+                            ..
                         },
                 },
         } => {
@@ -245,7 +247,7 @@ fn test_p0_collection_update_command_parses_with_all_flags() {
             assert_eq!(play_mode, Some("PlayAll".to_string()));
             assert_eq!(scheduler_mode, Some("Sequence".to_string()));
             assert_eq!(gain, Some(0.5));
-            assert_eq!(bus, Some(42));
+            assert_eq!(bus.as_deref(), Some("42"));
             assert_eq!(priority, Some(255));
             assert_eq!(spatialization, Some("hrtf".to_string()));
         }
@@ -388,6 +390,16 @@ fn create_amproject(path: &std::path::Path, name: &str) -> anyhow::Result<()> {
         path.join(".amproject"),
         serde_json::to_string_pretty(&config)?,
     )?;
+    // Collections must be routed to an existing bus.
+    std::fs::write(
+        path.join("main.buses.json"),
+        serde_json::to_string_pretty(&serde_json::json!({
+            "buses": [
+                { "id": 1, "name": "master", "gain": 1.0, "child_buses": [2], "fader": "Linear" },
+                { "id": 2, "name": "sfx", "gain": 1.0, "fader": "Linear" }
+            ]
+        }))?,
+    )?;
     Ok(())
 }
 
@@ -402,7 +414,7 @@ fn create_collection_file(
     let collection = serde_json::json!({
         "id": id,
         "name": name,
-        "bus": 0,
+        "bus": 1,
         "attenuation": 0,
         "effect": 0,
         "gain": { "kind": "Static", "value": 1.0 },
@@ -446,9 +458,10 @@ async fn test_p0_collection_create_with_defaults() {
             play_mode: None,
             scheduler_mode: None,
             gain: None,
-            bus: None,
+            bus: Some("master".to_string()),
             priority: None,
             spatialization: None,
+            extra: Default::default(),
         },
         None,
         &input,
@@ -504,9 +517,10 @@ async fn test_p0_collection_create_with_all_flags() {
             play_mode: Some("PlayAll".to_string()),
             scheduler_mode: Some("Sequence".to_string()),
             gain: Some(0.8),
-            bus: Some(42),
+            bus: Some("sfx".to_string()),
             priority: Some(200),
             spatialization: Some("position".to_string()),
+            extra: Default::default(),
         },
         None,
         &input,
@@ -529,7 +543,7 @@ async fn test_p0_collection_create_with_all_flags() {
     assert_eq!(parsed["name"], "explosions");
     assert_eq!(parsed["play_mode"], "PlayAll");
     assert_eq!(parsed["scheduler"]["mode"], "Sequence");
-    assert_eq!(parsed["bus"], 42);
+    assert_eq!(parsed["bus"], 2);
     assert_eq!(parsed["spatialization"], "Position");
 
     let success_data = output.last_success().expect("Should have success output");
@@ -565,6 +579,7 @@ async fn test_p1_collection_create_duplicate_name_fails() {
             bus: None,
             priority: None,
             spatialization: None,
+            extra: Default::default(),
         },
         None,
         &input,
@@ -700,6 +715,8 @@ async fn test_p0_collection_update_with_flags() {
             bus: None,
             priority: None,
             spatialization: None,
+            extra: Default::default(),
+            edit: Default::default(),
         },
         None,
         &input,
@@ -762,6 +779,8 @@ async fn test_p1_collection_update_nonexistent_fails() {
             bus: None,
             priority: None,
             spatialization: None,
+            extra: Default::default(),
+            edit: Default::default(),
         },
         None,
         &input,
@@ -996,9 +1015,10 @@ async fn test_p1_collection_create_json_output_format() {
             play_mode: Some("PlayOne".to_string()),
             scheduler_mode: Some("Random".to_string()),
             gain: Some(0.9),
-            bus: None,
+            bus: Some("master".to_string()),
             priority: None,
             spatialization: None,
+            extra: Default::default(),
         },
         None,
         &input,
@@ -1093,6 +1113,7 @@ async fn test_p1_collection_create_empty_name_fails() {
             bus: None,
             priority: None,
             spatialization: None,
+            extra: Default::default(),
         },
         None,
         &input,
@@ -1137,6 +1158,7 @@ async fn test_p1_collection_create_whitespace_name_fails() {
             bus: None,
             priority: None,
             spatialization: None,
+            extra: Default::default(),
         },
         None,
         &input,

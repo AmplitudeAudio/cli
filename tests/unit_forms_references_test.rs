@@ -209,3 +209,78 @@ fn test_rtpc_value_field_table_matches_the_schema() {
         assert_eq!(from_schema, from_table, "{t:?}");
     }
 }
+
+#[test]
+fn test_collection_entry_sound_is_a_required_sound_reference() {
+    let rule = rule_for(AssetType::Collection, "sounds.sound").expect("collection entry rule");
+    assert_eq!(rule.target, RefTarget::Asset(AssetType::Sound));
+    assert!(rule.required);
+}
+
+#[test]
+fn test_referrers_follow_dotted_rules_through_lists() {
+    let fx = common::fixtures::AssetTestFixture::new("referrers_nested").unwrap();
+    fx.create_test_sound("step", 101).unwrap();
+    fx.write_asset_json(
+        "collections",
+        "steps",
+        serde_json::json!({
+            "id": 5, "name": "steps", "bus": 2,
+            "sounds_type": ["Random", "Random"],
+            "sounds": [{"sound": 101, "weight": 1.0}, {"sound": 102, "weight": 1.0}]
+        }),
+    )
+    .unwrap();
+    fx.write_asset_json(
+        "collections",
+        "other",
+        serde_json::json!({
+            "id": 6, "name": "other", "bus": 2,
+            "sounds_type": ["Random"], "sounds": [{"sound": 103, "weight": 1.0}]
+        }),
+    )
+    .unwrap();
+    let validator = fx.create_project_validator().unwrap();
+
+    let sound = RefTarget::Asset(AssetType::Sound);
+    let names = |id| -> Vec<String> {
+        referrers(&validator, sound, id)
+            .into_iter()
+            .map(|r| r.name)
+            .collect()
+    };
+    assert_eq!(names(101), vec!["steps".to_string()]);
+    assert_eq!(names(102), vec!["steps".to_string()]);
+    assert_eq!(names(103), vec!["other".to_string()]);
+    assert!(names(999).is_empty());
+}
+
+#[test]
+fn test_referrers_find_rtpc_bound_in_a_collection_entry() {
+    let fx = common::fixtures::AssetTestFixture::new("referrers_nested_rtpc").unwrap();
+    fx.write_asset_json(
+        "collections",
+        "steps",
+        serde_json::json!({
+            "id": 5, "name": "steps", "bus": 2,
+            "sounds_type": ["Random"],
+            "sounds": [{"sound": 101, "pitch": rtpc_binding(77)}]
+        }),
+    )
+    .unwrap();
+    let validator = fx.create_project_validator().unwrap();
+    let found = referrers(&validator, RefTarget::Asset(AssetType::Rtpc), 77);
+    assert_eq!(found.len(), 1);
+    assert_eq!(found[0].name, "steps");
+    assert!(referrers(&validator, RefTarget::Asset(AssetType::Rtpc), 78).is_empty());
+}
+
+#[test]
+fn test_ids_at_path_walks_lists() {
+    use am::forms::references::ids_at_path;
+    let value = serde_json::json!({"a": [{"b": 1}, {"b": 2}, {"c": 3}], "d": 4});
+    assert_eq!(ids_at_path(&value, "a.b"), vec![1, 2]);
+    assert_eq!(ids_at_path(&value, "d"), vec![4]);
+    assert!(ids_at_path(&value, "a.x").is_empty());
+    assert!(ids_at_path(&value, "zzz.b").is_empty());
+}

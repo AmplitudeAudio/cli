@@ -74,12 +74,13 @@ const COLLECTION_RULES: &[RefRule] = &[
     rule(AssetType::Collection, "bus", BUS, true),
     rule(AssetType::Collection, "effect", EFFECT, false),
     rule(AssetType::Collection, "attenuation", ATTENUATION, false),
-    // Zero handling of entry sounds is unconfirmed in the audit; kept optional.
+    // `Collection.cpp` rejects an entry whose sound is 0 or unknown ("specifies an
+    // invalid/unknown sound ID"), so the entry sound is required.
     rule(
         AssetType::Collection,
         "sounds.sound",
         RefTarget::Asset(AssetType::Sound),
-        false,
+        true,
     ),
 ];
 
@@ -127,7 +128,8 @@ pub fn rule_for(asset_type: AssetType, field: &str) -> Option<RefRule> {
 /// are references to [`AssetType::Rtpc`] too. Kept as a table (instead of
 /// calling `forms::describe`) so that reference lookups do not need the SDK
 /// schemas; a test checks it against the schema. Fields inside nested tables
-/// or lists (collection entries, effect parameters) are out of scope.
+/// or lists are listed in [`NESTED_RTPC_VALUE_FIELDS`] (effect parameters are
+/// not covered yet).
 pub const RTPC_VALUE_FIELDS: &[(AssetType, &str)] = &[
     (AssetType::Sound, "gain"),
     (AssetType::Sound, "near_field_gain"),
@@ -140,6 +142,15 @@ pub const RTPC_VALUE_FIELDS: &[(AssetType, &str)] = &[
     (AssetType::SwitchContainer, "gain"),
     (AssetType::SwitchContainer, "pitch"),
     (AssetType::SwitchContainer, "priority"),
+];
+
+/// `RtpcCompatibleValue` fields inside lists of nested tables, as dotted paths.
+///
+/// Kept apart from [`RTPC_VALUE_FIELDS`], which mirrors the top-level schema
+/// fields exactly. `sounds.gain` is the `gain` of each collection entry.
+pub const NESTED_RTPC_VALUE_FIELDS: &[(AssetType, &str)] = &[
+    (AssetType::Collection, "sounds.gain"),
+    (AssetType::Collection, "sounds.pitch"),
 ];
 
 /// Every asset type that can hold references.
@@ -164,14 +175,29 @@ fn read_json(path: &std::path::Path) -> Option<serde_json::Value> {
     serde_json::from_str(&text).ok()
 }
 
-/// Whether `value[field]` is an RTPC-compatible value bound to RTPC `id`.
+/// The numbers found at the dotted `path` of `value`.
+///
+/// Every segment descends into an object field; when the field holds a list,
+/// the walk continues in each element (`sounds.sound` yields the `sound` of
+/// every entry of `sounds`). Missing fields and non-numbers are skipped.
+pub fn ids_at_path(value: &serde_json::Value, path: &str) -> Vec<u64> {
+    let mut current = vec![value];
+    for segment in path.split('.') {
+        current = current
+            .into_iter()
+            .filter_map(|v| v.get(segment))
+            .flat_map(|v| match v.as_array() {
+                Some(items) => items.iter().collect(),
+                None => vec![v],
+            })
+            .collect();
+    }
+    current.into_iter().filter_map(|v| v.as_u64()).collect()
+}
+
+/// Whether the RTPC-compatible value at `field` (possibly a dotted path) is bound to RTPC `id`.
 fn binds_rtpc(value: &serde_json::Value, field: &str, id: u64) -> bool {
-    value
-        .get(field)
-        .and_then(|v| v.get("rtpc"))
-        .and_then(|r| r.get("id"))
-        .and_then(|i| i.as_u64())
-        == Some(id)
+    ids_at_path(value, &format!("{field}.rtpc.id")).contains(&id)
 }
 
 /// Like [`referrers`], but also reports each referrer's asset type.
@@ -188,12 +214,13 @@ pub fn referrers_with_type(
     for asset_type in ALL_ASSET_TYPES {
         let fields: Vec<&str> = rules_for(asset_type)
             .into_iter()
-            .filter(|r| r.target == target && !r.field.contains('.'))
+            .filter(|r| r.target == target)
             .map(|r| r.field)
             .collect();
         let rtpc_fields: Vec<&str> = if target == RefTarget::Asset(AssetType::Rtpc) {
             RTPC_VALUE_FIELDS
                 .iter()
+                .chain(NESTED_RTPC_VALUE_FIELDS)
                 .filter(|(t, _)| *t == asset_type)
                 .map(|(_, f)| *f)
                 .collect()
@@ -210,7 +237,7 @@ pub fn referrers_with_type(
             };
             let points_at_target = fields
                 .iter()
-                .any(|f| value.get(*f).and_then(|v| v.as_u64()) == Some(id))
+                .any(|f| ids_at_path(&value, f).contains(&id))
                 || rtpc_fields.iter().any(|f| binds_rtpc(&value, f, id));
             let own_id = value.get("id").and_then(|v| v.as_u64());
             let name = value.get("name").and_then(|v| v.as_str());
@@ -232,10 +259,9 @@ pub fn referrers_with_type(
 ///
 /// Scans every asset JSON file under the project's sources directories and
 /// applies each [`RefRule`] aimed at `target` (plus the RTPC bindings listed in
-/// [`RTPC_VALUE_FIELDS`] when `target` is an RTPC). Only top-level fields are
-/// checked: rules with a dotted path (references nested inside lists or
-/// tables, such as `sounds.sound`) are skipped for now, so assets that hold
-/// the reference only in such a nested entry are not reported.
+/// [`RTPC_VALUE_FIELDS`] and [`NESTED_RTPC_VALUE_FIELDS`] when `target` is an
+/// RTPC). Dotted rules (references nested inside lists or tables, such as
+/// `sounds.sound`) are followed through every list element, see [`ids_at_path`].
 pub fn referrers(validator: &ProjectValidator, target: RefTarget, id: u64) -> Vec<AssetRef> {
     referrers_with_type(validator, target, id)
         .into_iter()

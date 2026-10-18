@@ -16,6 +16,8 @@
 //!
 //! This module provides shared test infrastructure for all test modules.
 
+#[allow(dead_code)]
+pub mod collection_helpers;
 pub mod fixtures;
 pub mod flatc;
 #[allow(dead_code)]
