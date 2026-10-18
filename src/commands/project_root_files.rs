@@ -23,7 +23,10 @@
 
 use std::path::{Path, PathBuf};
 
+use crate::assets::{AssetType, ProjectValidator};
 use crate::common::utils::config_write_dir;
+use crate::forms::references::RefTarget;
+use crate::services::engine_config::reference_problems;
 
 use serde_json::Value;
 
@@ -112,6 +115,7 @@ fn unreadable(
 /// and project root; a file is checked once).
 pub(super) fn validate_root_files(
     project_root: &Path,
+    validator: Option<&ProjectValidator>,
     buses: bool,
     engine_configs: bool,
 ) -> RootFileReport {
@@ -131,8 +135,44 @@ pub(super) fn validate_root_files(
             RootFileKind::EngineConfig,
             validate_engine_config,
         );
+        if let Some(validator) = validator {
+            check_config_references(&mut report, project_root, validator);
+        }
     }
     report
+}
+
+/// The SDK fails to initialise when `mixer.pipeline` or `buses_file` name a
+/// file the build does not produce, so each engine config must point at an
+/// existing pipeline asset and bus file.
+fn check_config_references(
+    report: &mut RootFileReport,
+    project_root: &Path,
+    validator: &ProjectValidator,
+) {
+    let Ok(configs) = scan_engine_configs(project_root) else {
+        return;
+    };
+    let pipelines: Vec<String> = validator
+        .list(RefTarget::Asset(AssetType::Pipeline))
+        .into_iter()
+        .map(|p| p.name)
+        .collect();
+    let bus_files: Vec<String> = scan_bus_files(project_root)
+        .map(|scan| scan.files.into_iter().map(|f| f.name).collect())
+        .unwrap_or_default();
+    for config in configs.files {
+        for e in reference_problems(&config.value, &pipelines, &bus_files) {
+            report.findings.push(RootFileFinding {
+                file: relative(project_root, &config.path),
+                kind: RootFileKind::EngineConfig,
+                error: e.what,
+                why: e.why,
+                suggestion: e.suggestion,
+                field: None,
+            });
+        }
+    }
 }
 
 fn check_files(

@@ -236,6 +236,24 @@ async fn test_full_flow_on_fresh_project() {
 }
 
 #[tokio::test]
+async fn test_validate_reports_config_references_to_missing_files() {
+    let flow = fresh_project().await;
+    let path = flow.sources().join("pc.config.json");
+    let mut config = read_json(&path);
+    config["buses_file"] = Value::from("gone.buses.ambus");
+    config["mixer"]["pipeline"] = Value::from("gone.ampipeline");
+    std::fs::write(&path, serde_json::to_string_pretty(&config).unwrap()).unwrap();
+
+    let (result, out) = flow.am(&["project", "validate"]).await;
+    assert!(result.is_err(), "dangling buses_file/pipeline must fail");
+    let reported = out.last_success().unwrap();
+    let errors = reported["errors"].as_array().unwrap();
+    let text = serde_json::to_string(errors).unwrap();
+    assert!(text.contains("No pipeline named 'gone'"), "errors: {text}");
+    assert!(text.contains("No bus file named 'gone'"), "errors: {text}");
+}
+
+#[tokio::test]
 async fn test_build_compiles_the_files_in_the_sources_dir() {
     let flow = fresh_project().await;
     flow.ok(&["asset", "bus", "create", "sfx"]).await;

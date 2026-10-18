@@ -1355,7 +1355,12 @@ async fn handle_validate_project_command(scope: ValidateScope, output: &dyn Outp
         total_validated += type_count;
     }
 
-    let root_report = validate_root_files(&current_dir, scope.buses, scope.engine_configs);
+    let root_report = validate_root_files(
+        &current_dir,
+        context.validator.as_ref(),
+        scope.buses,
+        scope.engine_configs,
+    );
     if scope.buses {
         asset_summary.insert("buses".to_string(), root_report.bus_files);
         total_validated += root_report.bus_files;

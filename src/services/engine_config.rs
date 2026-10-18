@@ -232,13 +232,29 @@ pub fn check_references(
     pipeline_names: &[String],
     bus_file_names: &[String],
 ) -> Result<(), CliError> {
+    match reference_problems(config, pipeline_names, bus_file_names)
+        .into_iter()
+        .next()
+    {
+        Some(first) => Err(first),
+        None => Ok(()),
+    }
+}
+
+/// Every dangling reference of `config` (`mixer.pipeline`, then `buses_file`).
+pub fn reference_problems(
+    config: &Value,
+    pipeline_names: &[String],
+    bus_file_names: &[String],
+) -> Vec<CliError> {
+    let mut problems = Vec::new();
     let pipeline = config
         .get("mixer")
         .and_then(|m| m.get("pipeline"))
         .and_then(Value::as_str)
         .map(pipeline_ref_name);
     if let Some(name) = pipeline.filter(|n| !pipeline_names.iter().any(|p| p == n)) {
-        return Err(CliError::new(
+        problems.push(CliError::new(
             codes::ERR_VALIDATION_REFERENCE,
             format!("No pipeline named '{name}'"),
             format!(
@@ -253,7 +269,7 @@ pub fn check_references(
         .and_then(Value::as_str)
         .map(buses_ref_name);
     if let Some(name) = buses.filter(|n| !bus_file_names.iter().any(|f| f == n)) {
-        return Err(CliError::new(
+        problems.push(CliError::new(
             codes::ERR_VALIDATION_REFERENCE,
             format!("No bus file named '{name}'"),
             format!(
@@ -263,7 +279,7 @@ pub fn check_references(
         )
         .with_suggestion("Create one with 'am asset bus-file create <file-name>'"));
     }
-    Ok(())
+    problems
 }
 
 fn list_or_none(names: &[String]) -> String {
