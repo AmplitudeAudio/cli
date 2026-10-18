@@ -22,6 +22,7 @@ pub mod common;
 pub mod compiler;
 pub mod config;
 pub mod database;
+pub mod forms;
 pub mod input;
 pub mod presentation;
 pub mod schema;
