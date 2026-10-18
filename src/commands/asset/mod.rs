@@ -52,6 +52,7 @@ mod rtpc_args;
 mod rtpc_prompts;
 mod sound;
 mod sound_args;
+mod sound_list;
 mod sound_prompts;
 mod soundbank;
 mod soundbank_args;

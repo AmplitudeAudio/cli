@@ -478,7 +478,122 @@ async fn test_malformed_referrer_files_do_not_panic() {
     assert_deleted(&fx, "effect", "echo", &p).await;
 }
 
-// -- sounds have no delete command; the shared check still covers them --------
+// -- sound --------------------------------------------------------------------
+
+fn sound(fx: &AssetTestFixture) -> PathBuf {
+    put(
+        fx,
+        "sounds",
+        "boom",
+        json!({
+            "id": 101, "name": "boom", "bus": 2, "path": "boom.wav",
+            "gain": {"kind": "Static", "value": 1.0},
+            "priority": {"kind": "Static", "value": 128.0},
+            "stream": false, "loop": {"enabled": false, "loop_count": 0},
+            "spatialization": "None", "attenuation": 0, "scope": "World",
+            "fader": "Linear", "effect": 0
+        }),
+    )
+}
+
+#[tokio::test]
+async fn test_sound_refused_when_a_collection_entry_uses_it() {
+    let fx = fixture("del_sound_col");
+    let p = sound(&fx);
+    put(
+        &fx,
+        "collections",
+        "crowd",
+        json!({"id": 100, "name": "crowd", "bus": 2, "sounds": [{"sound": 101}]}),
+    );
+    assert_refused(&fx, "sound", "boom", &p, "crowd").await;
+}
+
+#[tokio::test]
+async fn test_sound_refused_when_a_switch_container_entry_uses_it() {
+    let fx = fixture("del_sound_sc");
+    let p = sound(&fx);
+    put(
+        &fx,
+        "switch_containers",
+        "steps",
+        json!({"id": 300, "name": "steps", "bus": 2, "switch_group": 10, "entries": [{"object": 101}]}),
+    );
+    assert_refused(&fx, "sound", "boom", &p, "steps").await;
+}
+
+#[tokio::test]
+async fn test_sound_refused_when_an_event_targets_it() {
+    let fx = fixture("del_sound_event");
+    let p = sound(&fx);
+    put(
+        &fx,
+        "events",
+        "hit",
+        json!({"id": 200, "name": "hit", "actions": [{"type": "Play", "targets": [101]}]}),
+    );
+    assert_refused(&fx, "sound", "boom", &p, "hit").await;
+}
+
+#[tokio::test]
+async fn test_sound_refused_when_a_soundbank_includes_it() {
+    let fx = fixture("del_sound_bank");
+    let p = sound(&fx);
+    bank(&fx, "main", "sounds", "boom.amsound");
+    assert_refused(&fx, "sound", "boom", &p, "main").await;
+}
+
+#[tokio::test]
+async fn test_sound_deletes_when_unreferenced_and_keeps_the_audio_file() {
+    let fx = fixture("del_sound_free");
+    let p = sound(&fx);
+    let audio = fx.project_root().join("data").join("boom.wav");
+    std::fs::create_dir_all(audio.parent().unwrap()).unwrap();
+    std::fs::write(&audio, b"RIFF").unwrap();
+    put(
+        &fx,
+        "collections",
+        "crowd",
+        json!({"id": 100, "name": "crowd", "bus": 2, "sounds": [{"sound": 999}]}),
+    );
+    assert_deleted(&fx, "sound", "boom", &p).await;
+    assert!(audio.exists(), "the audio data file must be kept");
+}
+
+#[tokio::test]
+async fn test_sound_delete_needs_force_when_not_interactive() {
+    let fx = fixture("del_sound_noforce");
+    let p = sound(&fx);
+    let (result, output) = run(&fx, &["sound", "delete", "boom"]).await;
+    let err = result.unwrap_err();
+    assert_eq!(
+        as_cli_error(&err).unwrap().code,
+        codes::ERR_VALIDATION_FIELD
+    );
+    assert!(p.exists());
+    assert!(output.all_successes().is_empty());
+}
+
+#[tokio::test]
+async fn test_sound_delete_accepts_yes_as_an_alias_for_force() {
+    let fx = fixture("del_sound_yes");
+    let p = sound(&fx);
+    let (result, _) = run(&fx, &["sound", "delete", "boom", "--yes"]).await;
+    result.unwrap();
+    assert!(!p.exists());
+}
+
+#[tokio::test]
+async fn test_sound_delete_of_unknown_sound_fails() {
+    let fx = fixture("del_sound_unknown");
+    let (result, _) = run(&fx, &["sound", "delete", "ghost", "--force"]).await;
+    assert_eq!(
+        as_cli_error(&result.unwrap_err()).unwrap().code,
+        codes::ERR_ASSET_NOT_FOUND
+    );
+}
+
+// -- the shared check, called directly ---------------------------------------
 
 #[test]
 fn test_sound_in_use_check_finds_collections_containers_events_and_banks() {

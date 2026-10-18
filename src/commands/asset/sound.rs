@@ -25,19 +25,15 @@ use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use clap::Subcommand;
-use colored::Colorize;
 use serde_json::json;
 
 use crate::{
-    assets::{
-        Asset, AssetType, ProjectContext, ProjectValidator, RtpcCompatibleValue, Sound,
-        Spatialization,
-    },
+    assets::{Asset, AssetType, ProjectContext, ProjectValidator, Sound},
     common::{
         errors::{CliError, asset_already_exists, asset_not_found, codes},
         files::atomic_write,
         json_merge::merge_update_unknown_only,
-        utils::{read_amproject_file, truncate_string},
+        utils::read_amproject_file,
     },
     database::Database,
     forms::coverage::known_field_names,
@@ -50,6 +46,7 @@ use super::sound_args::{
     SoundExtraArgs, SoundFlags, bus_warnings, resolve_patch, validate_patch_references,
     with_warnings,
 };
+use super::sound_list::{delete_sound, list_sounds};
 use super::sound_prompts::{
     complete_create_patch, prompt_audio_file, prompt_bus, prompt_update_patch,
 };
@@ -169,6 +166,20 @@ pub enum SoundCommands {
         #[command(flatten)]
         extra: SoundExtraArgs,
     },
+
+    /// Delete a sound asset (refused while collections, switch containers, events or soundbanks use it)
+    #[command(after_help = "Examples:
+  am asset sound delete explosion
+  am asset sound delete explosion --force
+")]
+    Delete {
+        /// Name of the sound asset to delete
+        name: String,
+
+        /// Skip confirmation prompt (required in non-interactive mode; alias: --yes)
+        #[arg(long, visible_alias = "yes")]
+        force: bool,
+    },
 }
 
 /// Handle sound commands by routing to the appropriate handler.
@@ -207,6 +218,7 @@ pub async fn handler(
             create_sound(name, flags, input, output).await
         }
         SoundCommands::List {} => list_sounds(output).await,
+        SoundCommands::Delete { name, force } => delete_sound(name, *force, input, output).await,
         SoundCommands::Update {
             name,
             file,
@@ -387,247 +399,6 @@ async fn create_sound(
                 )),
                 None,
             );
-        }
-    }
-
-    Ok(())
-}
-
-/// Maximum character length for paths before truncation in table display.
-const PATH_MAX_LENGTH: usize = 40;
-
-/// Format gain value for display in interactive mode.
-///
-/// Returns the static value formatted to 1 decimal place, "RTPC" if RTPC-controlled,
-/// or "N/A" if not set.
-fn format_gain(gain: &Option<RtpcCompatibleValue>) -> String {
-    match gain {
-        Some(g) => match g.as_static() {
-            Some(v) => format!("{:.1}", v),
-            None => "RTPC".to_string(),
-        },
-        None => "N/A".to_string(),
-    }
-}
-
-/// Format gain value for JSON output.
-///
-/// Returns a numeric value when static, "RTPC" when RTPC-controlled, or null when not set.
-fn gain_to_json(gain: &Option<RtpcCompatibleValue>) -> serde_json::Value {
-    match gain {
-        Some(g) => match g.as_static() {
-            Some(v) => json!(v),
-            None => json!("RTPC"),
-        },
-        None => serde_json::Value::Null,
-    }
-}
-
-/// Format spatialization mode as a stable string for JSON output.
-fn spatialization_to_string(spatialization: &Spatialization) -> &'static str {
-    match spatialization {
-        Spatialization::None => "None",
-        Spatialization::Position => "Position",
-        Spatialization::PositionOrientation => "PositionOrientation",
-        Spatialization::HRTF => "HRTF",
-    }
-}
-
-use super::find_json_files_recursive;
-
-/// List all sound assets in the current project.
-async fn list_sounds(output: &dyn Output) -> Result<()> {
-    // Step 1: Detect project (validates we're in a project directory)
-    let current_dir = env::current_dir()?;
-    let project_config = read_amproject_file(&current_dir)?;
-
-    // Step 2: Scan sounds directory using sources_dir from config
-    let sources_base = if project_config.sources_dir.is_empty() {
-        current_dir.clone()
-    } else {
-        current_dir.join(&project_config.sources_dir)
-    };
-    let sounds_dir = sources_base.join("sounds");
-
-    // Step 3: Handle missing or unreadable directory
-    if !sounds_dir.exists() {
-        match output.mode() {
-            OutputMode::Json => {
-                output.success(
-                    json!({
-                        "sounds": [],
-                        "count": 0,
-                        "warnings": ["No sounds directory found. Create sounds with 'am asset sound create'."]
-                    }),
-                    None,
-                );
-            }
-            OutputMode::Interactive => {
-                output.progress("No sounds directory found.");
-                output.progress(&format!(
-                    "Create sounds with '{}'.",
-                    "am asset sound create <name>".green()
-                ));
-            }
-        }
-        return Ok(());
-    }
-
-    // Step 4: Read and parse all .json files recursively
-    let mut sounds: Vec<Sound> = Vec::new();
-    let mut warnings: Vec<String> = Vec::new();
-
-    let json_files = match find_json_files_recursive(&sounds_dir) {
-        Ok(files) => files,
-        Err(e) => {
-            return Err(CliError::new(
-                codes::ERR_VALIDATION_FIELD,
-                "Cannot read sounds directory",
-                format!("Permission denied on {}", sounds_dir.display()),
-            )
-            .with_suggestion("Check directory permissions")
-            .with_context(format!("I/O error: {}", e))
-            .into());
-        }
-    };
-
-    for path in json_files {
-        if path.extension().map(|e| e == "json").unwrap_or(false) {
-            match fs::read_to_string(&path) {
-                Ok(content) => match serde_json::from_str::<Sound>(&content) {
-                    Ok(sound) => {
-                        // Check if referenced audio file exists
-                        let path_str = sound.path.as_deref().unwrap_or("");
-                        if !path_str.is_empty() {
-                            let data_base = if project_config.data_dir.is_empty() {
-                                current_dir.clone()
-                            } else {
-                                current_dir.join(&project_config.data_dir)
-                            };
-                            let audio_path = data_base.join(path_str);
-                            if !audio_path.exists() {
-                                warnings.push(format!(
-                                    "Warning: Sound '{}' references missing audio file: {}. Re-add the file or update the sound.",
-                                    sound.name(),
-                                    path_str
-                                ));
-                            }
-                        }
-                        sounds.push(sound);
-                    }
-                    Err(e) => {
-                        let filename = path.file_name().unwrap_or_default().to_string_lossy();
-                        output.warning(&format!("Skipping invalid sound file: {}", path.display()));
-                        // Provide more context for JSON errors
-                        let error_msg = if let Some(line) = content.lines().next() {
-                            if e.to_string().contains("column") {
-                                format!(
-                                    "Invalid JSON in {}: {}. First line: {}",
-                                    filename,
-                                    e,
-                                    &line[..line.len().min(200)]
-                                )
-                            } else {
-                                format!("Invalid JSON in {}: {}", filename, e)
-                            }
-                        } else {
-                            format!("Invalid JSON in {}: {}", filename, e)
-                        };
-                        warnings.push(error_msg);
-                    }
-                },
-                Err(e) => {
-                    let filename = path.file_name().unwrap_or_default().to_string_lossy();
-                    output.warning(&format!("Failed to read sound file: {}", path.display()));
-                    warnings.push(format!("Failed to read {}: {}", filename, e));
-                }
-            }
-        }
-    }
-
-    // Step 4: Sort by name for consistent output
-    sounds.sort_by(|a, b| a.name().cmp(b.name()));
-
-    // Step 5: Handle empty directory
-    if sounds.is_empty() {
-        match output.mode() {
-            OutputMode::Json => {
-                output.success(
-                    json!({
-                        "sounds": [],
-                        "count": 0,
-                        "warnings": warnings
-                    }),
-                    None,
-                );
-            }
-            OutputMode::Interactive => {
-                // Print warnings first so the user knows why no sounds were found
-                for warning in &warnings {
-                    output.progress(&format!("{} {}", "Warning:".yellow(), warning));
-                }
-                if !warnings.is_empty() {
-                    output.progress("");
-                }
-                output.progress("No sounds found in this project.");
-                output.progress(&format!(
-                    "Use '{}' to add one.",
-                    "am asset sound create <name>".green()
-                ));
-            }
-        }
-        return Ok(());
-    }
-
-    // Step 6: Output based on mode
-    match output.mode() {
-        OutputMode::Json => {
-            let sound_data: Vec<serde_json::Value> = sounds
-                .iter()
-                .map(|s| {
-                    json!({
-                        "id": s.id,
-                        "name": s.name(),
-                        "path": s.path.as_deref().unwrap_or(""),
-                        "gain": gain_to_json(&s.gain),
-                        "loop_enabled": s.loop_.as_ref().map(|l| l.enabled).unwrap_or(false),
-                        "spatialization": spatialization_to_string(&s.spatialization),
-                        "spread": gain_to_json(&s.spread)
-                    })
-                })
-                .collect();
-
-            output.success(
-                json!({
-                    "sounds": sound_data,
-                    "count": sounds.len(),
-                    "warnings": warnings
-                }),
-                None,
-            );
-        }
-        OutputMode::Interactive => {
-            // Print warnings if any
-            for warning in &warnings {
-                output.progress(&format!("{} {}", "Warning:".yellow(), warning));
-            }
-
-            // Build table data
-            let table_data: Vec<serde_json::Value> = sounds
-                .iter()
-                .map(|s| {
-                    json!({
-                        "id": s.id,
-                        "name": s.name(),
-                        "audio_file": truncate_string(s.path.as_deref().unwrap_or(""), PATH_MAX_LENGTH),
-                        "gain": format_gain(&s.gain)
-                    })
-                })
-                .collect();
-
-            output.table(None, json!(table_data));
-            output.progress("");
-            output.progress(&format!("{} sound(s) found", sounds.len()));
         }
     }
 
