@@ -13,11 +13,13 @@
 // limitations under the License.
 
 //! Validation of the bus (`*.buses.json`) and engine config (`*.config.json`)
-//! files for `am project validate` and `am project build`.
+//! files for `am project validate`. (`am project build` does not call this;
+//! it compiles these files through the generic converter, which only needs
+//! them to be valid for `flatc`.)
 //!
 //! They are named files, not assets under `sources/`. They live in the
-//! sources dir (where `am project init` and the build put them); the project
-//! root is scanned too for legacy layouts.
+//! sources dir (where `am project init` and the build look for them); the
+//! project root is scanned too for legacy layouts.
 
 use std::path::{Path, PathBuf};
 

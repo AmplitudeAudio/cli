@@ -212,22 +212,12 @@ async fn test_full_flow_on_fresh_project() {
     .await;
 
     // The template config uses its pipeline and bus file.
-    // NOTE: the template ships `pipelines/pc.pipeline.json` (asset name
-    // "pc.pipeline"), while its config names `pc.ampipeline`, which is what a
-    // pipeline asset called `pc` builds to. Create that one to exercise the
-    // referrer check.
-    flow.ok(&[
-        "asset",
-        "pipeline",
-        "create",
-        "pc",
-        "--node",
-        "1:Input",
-        "--node",
-        "2:Output:1",
-    ])
-    .await;
-    let (result, _) = flow.am(&["asset", "pipeline", "delete", "pc"]).await;
+    // The template's own pipeline is `pc` and builds to `pc.ampipeline`, the
+    // file its config names.
+    assert!(flow.sources().join("pipelines/pc.json").exists());
+    let listed = names(&flow.ok(&["asset", "pipeline", "list"]).await, "pipelines", "name");
+    assert_eq!(listed, vec!["pc".to_string()]);
+    let (result, _)= flow.am(&["asset", "pipeline", "delete", "pc"]).await;
     assert_eq!(code_of(&result.unwrap_err()), codes::ERR_ASSET_IN_USE);
     let (result, _) = flow.am(&["asset", "bus-file", "delete", "pc"]).await;
     assert!(result.is_err(), "the bus file in use must not be deleted");
@@ -263,4 +253,8 @@ async fn test_build_compiles_the_files_in_the_sources_dir() {
     let build = flow.project().join("build");
     assert!(build.join("pc.buses.ambus").exists(), "compiled buses file");
     assert!(build.join("pc.config.amconfig").exists(), "compiled config");
+    assert!(
+        build.join("pipelines/pc.ampipeline").exists(),
+        "the template pipeline builds to the file its config names"
+    );
 }

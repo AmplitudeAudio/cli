@@ -475,7 +475,7 @@ async fn handle_init_project_command(
             fs::write(
                 sources_dir
                     .join(ASSET_DIR_PIPELINES)
-                    .join("pc.pipeline.json"),
+                    .join("pc.json"),
                 file.data,
             )?;
         }
