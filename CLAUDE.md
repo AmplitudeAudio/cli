@@ -27,7 +27,7 @@ cargo run -- --help      # Show available commands
 2. `src/app.rs` - CLI definition using clap derive macros, defines `Commands` enum
 3. `src/commands/` - Command handlers (project.rs, sudo.rs, asset/)
    - `src/commands/asset/` holds one module family per asset type: `<type>.rs` (clap subcommands and routing), `<type>_args.rs` (flags), `<type>_prompts.rs` (interactive flow) and `<type>_list.rs` (list/delete where split out). Never prompt in `--json` or non-interactive runs: fail with an error naming the missing flag.
-   - Asset commands: `am asset sound|collection|effect|switch|switch-container|event|soundbank|attenuation|rtpc|pipeline create|list|update|delete`, plus `am asset bus ...` (buses inside a `*.buses.json` file), `am asset bus-file ...` and `am asset engine-config ...` (named files in the project root; deleting the last one is refused).
+   - Asset commands: `am asset sound|collection|effect|switch|switch-container|event|soundbank|attenuation|rtpc|pipeline create|list|update|delete`, plus `am asset bus ...` (buses inside a `*.buses.json` file), `am asset bus-file ...` and `am asset engine-config ...` (named files in the sources dir, project root accepted; deleting the last one is refused).
    - `am project validate` checks every asset type and the `*.buses.json` / `*.config.json` files; `--*-only` flags narrow it (`src/commands/project_root_files.rs` handles the root-level files).
 
 ### Forms and services (`src/forms/`, `src/services/`)
@@ -63,7 +63,7 @@ cargo test --no-fail-fast -- --test-threads=1
 - `AM_SDK_PATH` must point at a checkout of the Amplitude SDK (schemas are read at build and test time).
 - `tests/common/scripted_input.rs` (`ScriptedInput`) drives interactive flows with queued answers and records the prompts; `NonInteractiveInput` asserts that nothing prompts.
 - `tests/common/flatc.rs` checks that a written JSON file is accepted by `flatc --binary`; it skips visibly when `flatc` is not installed.
-- `AssetTestFixture` (`tests/common/fixtures.rs`) builds a throwaway project with a `main.buses.json`; `CaptureOutput` captures JSON/interactive output.
+- `AssetTestFixture` (`tests/common/fixtures.rs`) builds a throwaway project with a `sources/main.buses.json` (`write_root_buses_file` writes the legacy project-root layout); `tests/feature_fresh_project_flow_test.rs` drives a real `am project init` project end to end; `CaptureOutput` captures JSON/interactive output.
 
 ## Adding New Features
 
@@ -106,4 +106,4 @@ project_name/
 └── plugins/             # Custom SDK plugins
 ```
 
-The `*.config.json`, and `*.buses.json` files in project roots (`am project init` currently writes its defaults under `sources/`; `am project validate` looks in both places) configure the SDK's audio engine, and bus hierarchy (for mixing/ducking) respectively.
+The `*.config.json`, and `*.buses.json` files live in the project's sources dir (where `am project init` and `am build` put them; the project root is read too, and a name present in both is used once; new files are written to the sources dir) configure the SDK's audio engine, and bus hierarchy (for mixing/ducking) respectively.

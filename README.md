@@ -69,8 +69,8 @@ Every SDK asset type can be created, listed, updated and deleted through `am ass
 | `am asset sound`, `collection`, `effect`, `switch`, `switch-container`, `event`, `soundbank` | assets under `sources/` |
 | `am asset attenuation`, `rtpc`, `pipeline` | attenuators, RTPCs and processing pipelines under `sources/` |
 | `am asset bus` | buses inside a `*.buses.json` file |
-| `am asset bus-file` | `<name>.buses.json` files in the project root (the last one cannot be deleted) |
-| `am asset engine-config` | `<name>.config.json` files in the project root (the last one cannot be deleted) |
+| `am asset bus-file` | `<name>.buses.json` files in the sources dir (project root accepted; the last one cannot be deleted) |
+| `am asset engine-config` | `<name>.config.json` files in the sources dir (project root accepted; the last one cannot be deleted) |
 
 Each type has `create`, `list`, `update` and `delete` (`bus-file` has no `update`); run `am asset <type> --help` for the flags. Examples:
 
