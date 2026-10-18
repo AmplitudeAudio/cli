@@ -147,15 +147,25 @@ fn label(bus: &Value, index: usize) -> String {
     }
 }
 
-fn check_fader(owner: &str, field: &str, value: Option<&Value>) -> Result<(), ValidationError> {
+/// A bus `fader` is dereferenced by the SDK but only looked up by name
+/// (`Fader::Find`), so any non-empty name is accepted; duck faders must be
+/// registered because the SDK fails to load otherwise.
+fn check_fader(
+    owner: &str,
+    field: &str,
+    value: Option<&Value>,
+    registered_only: bool,
+) -> Result<(), ValidationError> {
     match value.and_then(Value::as_str) {
-        Some(f) if FADER_ALGORITHM_NAMES.contains(&f) => Ok(()),
-        Some(f) => Err(violation(format!(
+        Some(f) if !f.is_empty() && (!registered_only || FADER_ALGORITHM_NAMES.contains(&f)) => {
+            Ok(())
+        }
+        Some(f) if !f.is_empty() => Err(violation(format!(
             "{owner}: unknown {field} '{f}' (one of: {})",
             FADER_ALGORITHM_NAMES.join(", ")
         ))),
-        None => Err(violation(format!(
-            "{owner}: {field} is missing (the SDK reads it without a null check)"
+        _ => Err(violation(format!(
+            "{owner}: {field} is missing or empty (the SDK reads it without a null check)"
         ))),
     }
 }
@@ -191,7 +201,7 @@ fn check_bus_fields(bus: &Value, index: usize) -> Result<(), ValidationError> {
     if let Some(gain) = bus.get("gain") {
         check_non_negative(&who, "gain", gain)?;
     }
-    check_fader(&who, "fader", bus.get("fader"))?;
+    check_fader(&who, "fader", bus.get("fader"), false)?;
     if let Some(children) = bus.get("child_buses")
         && children
             .as_array()
@@ -234,7 +244,7 @@ fn check_duck(
         if let Some(duration) = fade.get("duration") {
             check_non_negative(&owner, "duration", duration)?;
         }
-        check_fader(&owner, "fader", fade.get("fader"))?;
+        check_fader(&owner, "fader", fade.get("fader"), true)?;
     }
     Ok(())
 }
@@ -257,28 +267,27 @@ fn check_unique(buses: &[Value]) -> Result<(), ValidationError> {
     Ok(())
 }
 
+/// Id of the root bus: the bus with id 1, else the bus named `master`
+/// (the lookup order of `Engine::Initialize`).
+pub fn master_id(buses: &[Value]) -> Option<u64> {
+    buses
+        .iter()
+        .find(|b| id_of(b) == Some(MASTER_BUS_ID))
+        .or_else(|| {
+            buses
+                .iter()
+                .find(|b| b.get("name").and_then(Value::as_str) == Some(MASTER_BUS_NAME))
+        })
+        .and_then(id_of)
+}
+
 fn check_master(buses: &[Value]) -> Result<(), ValidationError> {
-    let by_id = buses.iter().find(|b| id_of(b) == Some(MASTER_BUS_ID));
-    let Some(root) = by_id else {
-        return Err(violation(format!(
-            "The file has no root bus: a bus called '{MASTER_BUS_NAME}' with id {MASTER_BUS_ID} must exist"
-        )));
-    };
-    if root.get("name").and_then(Value::as_str) != Some(MASTER_BUS_NAME) {
-        return Err(violation(format!(
-            "The bus with id {MASTER_BUS_ID} must be named '{MASTER_BUS_NAME}'"
-        )));
+    if master_id(buses).is_some() {
+        return Ok(());
     }
-    let misnamed = buses.iter().any(|b| {
-        b.get("name").and_then(Value::as_str) == Some(MASTER_BUS_NAME)
-            && id_of(b) != Some(MASTER_BUS_ID)
-    });
-    if misnamed {
-        return Err(violation(format!(
-            "A bus named '{MASTER_BUS_NAME}' must have id {MASTER_BUS_ID}"
-        )));
-    }
-    Ok(())
+    Err(violation(format!(
+        "The file has no root bus: a bus with id {MASTER_BUS_ID} or named '{MASTER_BUS_NAME}' must exist"
+    )))
 }
 
 fn check_tree(buses: &[Value]) -> Result<(), ValidationError> {
@@ -288,6 +297,7 @@ fn check_tree(buses: &[Value]) -> Result<(), ValidationError> {
         .filter_map(|b| Some((id_of(b)?, b.get("name")?.as_str()?)))
         .collect();
     let name_of = |id: u64| names.get(&id).copied().unwrap_or("?");
+    let root = master_id(buses);
 
     let mut parent_of: HashMap<u64, u64> = HashMap::new();
     for bus in buses {
@@ -298,7 +308,7 @@ fn check_tree(buses: &[Value]) -> Result<(), ValidationError> {
             if child == own {
                 return Err(violation(format!("{who} lists itself as a child")));
             }
-            if child == MASTER_BUS_ID {
+            if Some(child) == root {
                 return Err(violation(format!(
                     "{who} lists the '{MASTER_BUS_NAME}' bus as a child; the root has no parent"
                 )));

@@ -431,3 +431,27 @@ async fn test_delete_with_two_files_requires_the_file_flag() {
         .0
         .unwrap();
 }
+
+#[tokio::test]
+async fn test_edited_entry_keeps_known_keys_first_and_unknown_keys_last() {
+    let fx = AssetTestFixture::new("bus_key_order").unwrap();
+    let raw = json!({"buses": [
+        {"id": 1, "name": "master", "fader": "Linear", "child_buses": [2]},
+        {"aaa_note": "x", "id": 2, "name": "sfx", "gain": 1.0, "fader": "my_plugin_fader"}
+    ]});
+    std::fs::write(
+        file_path(&fx, "main"),
+        serde_json::to_string_pretty(&raw).unwrap(),
+    )
+    .unwrap();
+
+    // A plugin fader written by hand does not block editing.
+    run(&fx, &["update", "sfx", "--gain", "0.5"])
+        .await
+        .0
+        .unwrap();
+    let file = read_file(&fx, "main");
+    let keys: Vec<&String> = bus(&file, "sfx").as_object().unwrap().keys().collect();
+    assert_eq!(keys, ["id", "name", "gain", "fader", "aaa_note"]);
+    assert_eq!(bus(&file, "sfx")["fader"], json!("my_plugin_fader"));
+}

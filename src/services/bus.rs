@@ -24,7 +24,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
 use crate::assets::bus::{
-    DEFAULT_FADER, MASTER_BUS_ID, MASTER_BUS_NAME, buses_of, validate_bus_file,
+    DEFAULT_FADER, MASTER_BUS_ID, MASTER_BUS_NAME, buses_of, master_id, validate_bus_file,
 };
 use crate::common::errors::{CliError, codes};
 use crate::common::json_merge::merge_update_unknown_only;
@@ -369,7 +369,7 @@ pub fn add_bus(
 }
 
 fn reparent(file: &Value, bus_id: u64, new_parent: &str) -> Result<Vec<Value>, CliError> {
-    if bus_id == MASTER_BUS_ID {
+    if master_id(buses_of(file)) == Some(bus_id) {
         return Err(field_error(
             codes::ERR_VALIDATION_FIELD,
             format!("The '{MASTER_BUS_NAME}' bus cannot have a parent"),
@@ -439,7 +439,7 @@ pub fn remove_bus(file: &Value, name: &str) -> Result<Value, CliError> {
         return Err(not_found(name));
     };
     let id = id_of(target);
-    if id == MASTER_BUS_ID {
+    if master_id(buses_of(file)) == Some(id) {
         return Err(field_error(
             codes::ERR_VALIDATION_FIELD,
             format!("The '{MASTER_BUS_NAME}' bus cannot be deleted"),

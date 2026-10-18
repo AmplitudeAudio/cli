@@ -61,11 +61,50 @@ fn test_master_with_id_1_is_required() {
 }
 
 #[test]
-fn test_master_name_must_use_id_1() {
+fn test_master_may_be_identified_by_name_alone() {
+    // The SDK falls back to the bus named "master" when no bus has id 1.
+    let v = json!({"buses": [
+        {"id": 7, "name": "master", "fader": "Linear", "child_buses": [2]},
+        {"id": 2, "name": "sfx", "fader": "Linear"}]});
+    validate_bus_file(&v).unwrap();
+}
+
+#[test]
+fn test_master_may_be_identified_by_id_alone() {
     let v = json!({"buses": [
         {"id": 1, "name": "root", "fader": "Linear", "child_buses": [2]},
-        {"id": 2, "name": "master", "fader": "Linear"}]});
+        {"id": 2, "name": "sfx", "fader": "Linear"}]});
+    validate_bus_file(&v).unwrap();
+}
+
+#[test]
+fn test_file_without_master_by_id_or_name_is_rejected() {
+    let v = json!({"buses": [{"id": 5, "name": "root", "fader": "Linear"}]});
     assert!(message(&v).contains("master"), "{}", message(&v));
+}
+
+#[test]
+fn test_hand_written_plugin_fader_on_a_bus_is_accepted() {
+    let mut v = valid();
+    v["buses"][2]["fader"] = json!("my_plugin_fader");
+    validate_bus_file(&v).unwrap();
+}
+
+#[test]
+fn test_empty_bus_fader_is_rejected() {
+    let mut v = valid();
+    v["buses"][2]["fader"] = json!("");
+    assert!(message(&v).contains("fader"), "{}", message(&v));
+}
+
+#[test]
+fn test_default_template_is_valid() {
+    let text = std::fs::read_to_string(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/resources/default.buses.json"
+    ))
+    .unwrap();
+    validate_bus_file(&serde_json::from_str(&text).unwrap()).unwrap();
 }
 
 #[test]
@@ -97,13 +136,6 @@ fn test_missing_fader_is_rejected_because_the_sdk_dereferences_it() {
     v["buses"][2].as_object_mut().unwrap().remove("fader");
     let m = message(&v);
     assert!(m.contains("music") && m.contains("fader"), "{m}");
-}
-
-#[test]
-fn test_unknown_fader_is_rejected() {
-    let mut v = valid();
-    v["buses"][2]["fader"] = json!("Bouncy");
-    assert!(message(&v).contains("Bouncy"));
 }
 
 #[test]
