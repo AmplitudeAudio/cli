@@ -201,6 +201,42 @@ fn test_every_event_action_schema_field_is_supported_or_a_known_gap() {
     }
 }
 
+/// The switch container entry table is a nested table of `switch_container_definition.fbs`.
+#[test]
+fn test_every_switch_container_entry_field_is_supported_or_a_known_gap() {
+    let sdk = discover_sdk().expect("AM_SDK_PATH must point at an SDK with schemas/*.bfbs");
+    for (table, supported, gaps) in am::forms::coverage::SWITCH_CONTAINER_TABLES {
+        let fields = table_field_names(&sdk, "switch_container_definition.bfbs", table)
+            .expect("switch container schema must load");
+        for field in &fields {
+            assert!(
+                supported.contains(&field.as_str()) || gaps.contains(&field.as_str()),
+                "{table}.{field} is neither supported nor a known gap"
+            );
+        }
+        for name in supported.iter().chain(gaps.iter()) {
+            assert!(
+                fields.iter().any(|f| f == name),
+                "{table}.{name} is not a schema field"
+            );
+        }
+    }
+}
+
+#[test]
+fn test_switch_container_has_no_known_gaps_left() {
+    assert!(
+        KNOWN_GAPS
+            .iter()
+            .all(|(t, _)| *t != AssetType::SwitchContainer)
+    );
+    assert!(
+        am::forms::coverage::SWITCH_CONTAINER_TABLES
+            .iter()
+            .all(|(_, _, gaps)| gaps.is_empty())
+    );
+}
+
 #[test]
 fn test_event_has_no_known_gaps_left() {
     assert!(KNOWN_GAPS.iter().all(|(t, _)| *t != AssetType::Event));

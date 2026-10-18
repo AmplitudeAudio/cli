@@ -24,3 +24,5 @@ pub mod fixtures;
 pub mod flatc;
 #[allow(dead_code)]
 pub mod scripted_input;
+#[allow(dead_code)]
+pub mod switch_container_helpers;

@@ -68,6 +68,16 @@ pub fn supported_fields(asset_type: AssetType) -> &'static [&'static str] {
             "switch_group",
             "default_switch_state",
             "entries",
+            "effect",
+            "priority",
+            "gain",
+            "pitch",
+            "bus",
+            "spatialization",
+            "attenuation",
+            "scope",
+            "fader",
+            "update_behavior",
         ],
         AssetType::Soundbank => &[
             "id",
@@ -105,19 +115,26 @@ pub fn supported_fields(asset_type: AssetType) -> &'static [&'static str] {
 }
 
 /// Schema fields deliberately not yet covered by any create/update flow.
-pub const KNOWN_GAPS: &[(AssetType, &str)] = &[
-    // Switch container
-    (AssetType::SwitchContainer, "effect"),
-    (AssetType::SwitchContainer, "priority"),
-    (AssetType::SwitchContainer, "gain"),
-    (AssetType::SwitchContainer, "pitch"),
-    (AssetType::SwitchContainer, "bus"),
-    (AssetType::SwitchContainer, "spatialization"),
-    (AssetType::SwitchContainer, "attenuation"),
-    (AssetType::SwitchContainer, "scope"),
-    (AssetType::SwitchContainer, "fader"),
-    (AssetType::SwitchContainer, "update_behavior"),
-];
+pub const KNOWN_GAPS: &[(AssetType, &str)] = &[];
+
+/// Tables of `switch_container_definition.fbs` below the container itself, as
+/// `(table, supported fields, known gaps)`.
+///
+/// `--entry` (and `--entries-from-json`) covers every entry field.
+/// `unit_schema_coverage_test` checks every list against the schema.
+pub const SWITCH_CONTAINER_TABLES: &[(&str, &[&str], &[&str])] = &[(
+    "SwitchContainerEntry",
+    &[
+        "object",
+        "continue_between_states",
+        "fade_in",
+        "fade_out",
+        "gain",
+        "pitch",
+        "switch_states",
+    ],
+    &[],
+)];
 
 /// Tables of `collection_definition.fbs` below the collection itself, as
 /// `(table, supported fields, known gaps)`.

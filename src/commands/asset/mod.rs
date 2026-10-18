@@ -53,7 +53,12 @@ mod sound_prompts;
 mod soundbank;
 mod switch;
 mod switch_container;
+mod switch_container_args;
+mod switch_container_entry_args;
+mod switch_container_entry_json;
+mod switch_container_entry_prompts;
 mod switch_container_list;
+mod switch_container_prompts;
 
 pub use attenuation::{AttenuationCommands, handler as handle_attenuation_command};
 pub use bus::{BusCommands, handler as handle_bus_command};
