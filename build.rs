@@ -311,15 +311,14 @@ fn process_schema(
             };
 
             // Handle reserved word field names
-            let final_name;
-            let final_rename;
-            if is_reserved(&field_name) {
-                final_name = format!("{}_", field_name);
-                final_rename = Some(serde_rename.unwrap_or(field_name.clone()));
+            let (final_name, final_rename) = if is_reserved(&field_name) {
+                (
+                    format!("{}_", field_name),
+                    Some(serde_rename.unwrap_or(field_name.clone())),
+                )
             } else {
-                final_name = field_name.clone();
-                final_rename = serde_rename;
-            }
+                (field_name.clone(), serde_rename)
+            };
 
             let union_kind = match (base, ty.element()) {
                 (BaseType::Union, _) => UnionKind::Single,
@@ -617,7 +616,11 @@ fn generate_union(out: &mut String, def: &EnumDef) {
     writeln!(out).unwrap();
 
     writeln!(out, "impl {} {{", def.name).unwrap();
-    writeln!(out, "    /// The flatc JSON type tag of the active variant.").unwrap();
+    writeln!(
+        out,
+        "    /// The flatc JSON type tag of the active variant."
+    )
+    .unwrap();
     writeln!(out, "    pub fn tag(&self) -> &'static str {{").unwrap();
     writeln!(out, "        match self {{").unwrap();
     for (name, _) in &members {
@@ -638,7 +641,12 @@ fn generate_union(out: &mut String, def: &EnumDef) {
     .unwrap();
     writeln!(out, "        match self {{").unwrap();
     for (name, _) in &members {
-        writeln!(out, "            Self::{}(v) => serde_json::to_value(v),", name).unwrap();
+        writeln!(
+            out,
+            "            Self::{}(v) => serde_json::to_value(v),",
+            name
+        )
+        .unwrap();
     }
     writeln!(out, "        }}").unwrap();
     writeln!(out, "    }}").unwrap();
@@ -774,12 +782,8 @@ fn generate_enum(out: &mut String, def: &EnumDef, _fqn: &str) {
         // Generate match arms for string values
         for variant in &def.variants {
             let rust_name = &variant.name;
-            let serde_name =
-                if rust_name.chars().all(|c| c.is_uppercase() || c == '_') && rust_name.len() > 1 {
-                    rust_name.clone() // Keep as-is for HRTF, etc.
-                } else {
-                    rust_name.clone()
-                };
+            // Variant names (including all-caps ones such as HRTF) are kept as-is.
+            let serde_name = rust_name.clone();
             writeln!(
                 out,
                 "                    \"{}\" => Ok({}::{}),",
@@ -879,7 +883,11 @@ fn write_union_wire_fields(out: &mut String, field: &FieldDef) {
     };
     let key = json_key(field);
     for (rust, json, ty) in [
-        (format!("{}_tag", field.name), format!("{}_type", key), tag_ty),
+        (
+            format!("{}_tag", field.name),
+            format!("{}_type", key),
+            tag_ty,
+        ),
         (field.name.clone(), key.to_string(), payload_ty),
     ] {
         writeln!(

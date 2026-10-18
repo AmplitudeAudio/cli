@@ -1043,55 +1043,55 @@ fn display_project_info_interactive(
     if has_assets {
         output.progress("");
         output.progress("Assets:");
-        if let Some(&count) = asset_counts.get("sounds") {
-            if count > 0 {
-                output.progress(&format!("  Sounds:         {}", count));
-            }
+        if let Some(&count) = asset_counts.get("sounds")
+            && count > 0
+        {
+            output.progress(&format!("  Sounds:         {}", count));
         }
-        if let Some(&count) = asset_counts.get("collections") {
-            if count > 0 {
-                output.progress(&format!("  Collections:    {}", count));
-            }
+        if let Some(&count) = asset_counts.get("collections")
+            && count > 0
+        {
+            output.progress(&format!("  Collections:    {}", count));
         }
-        if let Some(&count) = asset_counts.get("events") {
-            if count > 0 {
-                output.progress(&format!("  Events:         {}", count));
-            }
+        if let Some(&count) = asset_counts.get("events")
+            && count > 0
+        {
+            output.progress(&format!("  Events:         {}", count));
         }
-        if let Some(&count) = asset_counts.get("effects") {
-            if count > 0 {
-                output.progress(&format!("  Effects:        {}", count));
-            }
+        if let Some(&count) = asset_counts.get("effects")
+            && count > 0
+        {
+            output.progress(&format!("  Effects:        {}", count));
         }
-        if let Some(&count) = asset_counts.get("switches") {
-            if count > 0 {
-                output.progress(&format!("  Switches:       {}", count));
-            }
+        if let Some(&count) = asset_counts.get("switches")
+            && count > 0
+        {
+            output.progress(&format!("  Switches:       {}", count));
         }
-        if let Some(&count) = asset_counts.get("switch_containers") {
-            if count > 0 {
-                output.progress(&format!("  Switch Cont.:   {}", count));
-            }
+        if let Some(&count) = asset_counts.get("switch_containers")
+            && count > 0
+        {
+            output.progress(&format!("  Switch Cont.:   {}", count));
         }
-        if let Some(&count) = asset_counts.get("soundbanks") {
-            if count > 0 {
-                output.progress(&format!("  Soundbanks:     {}", count));
-            }
+        if let Some(&count) = asset_counts.get("soundbanks")
+            && count > 0
+        {
+            output.progress(&format!("  Soundbanks:     {}", count));
         }
-        if let Some(&count) = asset_counts.get("attenuators") {
-            if count > 0 {
-                output.progress(&format!("  Attenuators:    {}", count));
-            }
+        if let Some(&count) = asset_counts.get("attenuators")
+            && count > 0
+        {
+            output.progress(&format!("  Attenuators:    {}", count));
         }
-        if let Some(&count) = asset_counts.get("rtpc") {
-            if count > 0 {
-                output.progress(&format!("  RTPC:           {}", count));
-            }
+        if let Some(&count) = asset_counts.get("rtpc")
+            && count > 0
+        {
+            output.progress(&format!("  RTPC:           {}", count));
         }
-        if let Some(&count) = asset_counts.get("pipelines") {
-            if count > 0 {
-                output.progress(&format!("  Pipelines:      {}", count));
-            }
+        if let Some(&count) = asset_counts.get("pipelines")
+            && count > 0
+        {
+            output.progress(&format!("  Pipelines:      {}", count));
         }
     }
 }
@@ -1824,11 +1824,12 @@ async fn handle_build_project_command(
 
 /// Recursively copy a directory's contents.
 /// Returns (files_copied, total_bytes, errors).
+type CopyDirResult = (usize, u64, Vec<(String, String)>);
 fn copy_dir_recursive(
     src: &std::path::Path,
     dest: &std::path::Path,
     fail_fast: bool,
-) -> Result<(usize, u64, Vec<(String, String)>)> {
+) -> Result<CopyDirResult> {
     let mut count = 0;
     let mut bytes = 0u64;
     let mut errors = Vec::new();

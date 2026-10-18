@@ -18,7 +18,6 @@
 
 use crate::input::Input;
 use anyhow::Result;
-use inquire::validator::Validation;
 use inquire::{Confirm, MultiSelect, Select, Text};
 
 #[derive(Debug, Default, Clone, Copy)]
@@ -36,7 +35,7 @@ impl Input for InteractiveInput {
         prompt: &str,
         placeholder: Option<&str>,
         formatter: Option<&dyn Fn(&str) -> String>,
-        validator: Option<&dyn Fn(&str) -> Result<Validation, inquire::CustomUserError>>,
+        validator: Option<&super::InputValidator>,
     ) -> Result<String> {
         let mut t = Text::new(prompt);
 
@@ -74,7 +73,7 @@ impl Input for InteractiveInput {
         &self,
         prompt: &str,
         default: &str,
-        validator: Option<&dyn Fn(&str) -> Result<Validation, inquire::CustomUserError>>,
+        validator: Option<&super::InputValidator>,
     ) -> Result<String> {
         let mut t = Text::new(prompt).with_default(default);
 

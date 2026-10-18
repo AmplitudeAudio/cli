@@ -358,7 +358,7 @@ fn build_table<'a>(
     // Pass 2: Build the table.
     let table_start = builder.start_table();
 
-    for i in 0..num_fields {
+    for (i, prebuilt_slot) in prebuilt.iter().enumerate() {
         let field = fields.get(i);
         let field_name = field.name();
 
@@ -392,7 +392,7 @@ fn build_table<'a>(
             }
         };
 
-        if let Some(pre) = prebuilt[i] {
+        if let Some(pre) = *prebuilt_slot {
             match base_type {
                 BaseType::String | BaseType::Vector | BaseType::Vector64 => {
                     let wip: WIPOffset<flatbuffers::ForwardsUOffset<&str>> = WIPOffset::new(pre.0);
@@ -633,19 +633,19 @@ fn build_vector<'a>(
                     if ev.value() == 0 {
                         continue; // Skip NONE
                     }
-                    if let Some(ut) = ev.union_type() {
-                        if ut.base_type() == BaseType::Obj {
-                            let obj_idx = ut.index();
-                            let variant_obj = schema.objects().get(obj_idx as usize);
-                            // Try building with this variant's schema
-                            match build_table(builder, schema, &variant_obj, child_json, output) {
-                                Ok(off) => {
-                                    offsets.push(off);
-                                    built = true;
-                                    break;
-                                }
-                                Err(_) => continue,
+                    if let Some(ut) = ev.union_type()
+                        && ut.base_type() == BaseType::Obj
+                    {
+                        let obj_idx = ut.index();
+                        let variant_obj = schema.objects().get(obj_idx as usize);
+                        // Try building with this variant's schema
+                        match build_table(builder, schema, &variant_obj, child_json, output) {
+                            Ok(off) => {
+                                offsets.push(off);
+                                built = true;
+                                break;
                             }
+                            Err(_) => continue,
                         }
                     }
                 }
@@ -744,7 +744,7 @@ fn build_union_value(
     // Get the variant's type info to find which table to build.
     let variant_type = variant
         .union_type()
-        .with_context(|| format!("union variant has no type info"))?;
+        .context("union variant has no type info")?;
 
     let obj_idx = variant_type.index();
     let variant_obj = schema.objects().get(obj_idx as usize);
@@ -808,10 +808,10 @@ fn find_union_type_value(
     // Convention: if UType field is "foo_type", the union value field is "foo".
     let base_name = utype_name.strip_suffix("_type").unwrap_or(utype_name);
 
-    for i in 0..fields.len() {
+    for (i, union_type) in union_types.iter().enumerate().take(fields.len()) {
         let f = fields.get(i);
         if f.type_().base_type() == BaseType::Union && f.name() == base_name {
-            return union_types[i];
+            return *union_type;
         }
     }
 

@@ -55,7 +55,12 @@ use crate::common::errors::CliError;
 /// (absence is `Option::None`). Tables holding union fields serialize to flatc's JSON
 /// form: a `<field>_type` tag next to the `<field>` payload (parallel arrays for
 /// vectors of unions), and deserialize by reading the tag first.
-#[allow(non_snake_case, non_camel_case_types, clippy::upper_case_acronyms)]
+#[allow(
+    non_snake_case,
+    non_camel_case_types,
+    clippy::upper_case_acronyms,
+    clippy::clone_on_copy // generator clones every field without knowing which are Copy
+)]
 pub mod generated {
     include!(concat!(env!("OUT_DIR"), "/generated_assets.rs"));
 }

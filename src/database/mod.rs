@@ -65,10 +65,10 @@ pub fn setup_crash_db_cleanup(db: Option<Arc<Database>>) {
     std::panic::set_hook(Box::new(move |panic_info| {
         eprintln!("Application panicked: {}", panic_info);
 
-        if let Some(db) = &db_clone {
-            if let Ok(db) = Arc::try_unwrap(db.clone()) {
-                cleanup(Some(db));
-            }
+        if let Some(db) = &db_clone
+            && let Ok(db) = Arc::try_unwrap(db.clone())
+        {
+            cleanup(Some(db));
         }
 
         default_hook(panic_info);

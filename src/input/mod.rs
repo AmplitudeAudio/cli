@@ -33,6 +33,8 @@ use anyhow::Result;
 use inquire::validator::Validation;
 use std::fmt::Display;
 
+type InputValidator = dyn Fn(&str) -> std::result::Result<Validation, inquire::CustomUserError>;
+
 /// Input mode for CLI prompting.
 ///
 /// Determines which input implementation is used.
@@ -78,7 +80,7 @@ pub trait Input: Send + Sync {
         prompt: &str,
         placeholder: Option<&str>,
         formatter: Option<&dyn Fn(&str) -> String>,
-        validator: Option<&dyn Fn(&str) -> Result<Validation, inquire::CustomUserError>>,
+        validator: Option<&InputValidator>,
     ) -> Result<String>;
 
     /// Prompt the user to select one option from a list.
@@ -97,7 +99,7 @@ pub trait Input: Send + Sync {
         &self,
         prompt: &str,
         default: &str,
-        validator: Option<&dyn Fn(&str) -> Result<Validation, inquire::CustomUserError>>,
+        validator: Option<&InputValidator>,
     ) -> Result<String>;
 
     /// Prompt the user to select multiple items from a list.

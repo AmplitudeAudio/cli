@@ -23,7 +23,6 @@
 
 use crate::input::Input;
 use anyhow::Result;
-use inquire::validator::Validation;
 
 #[derive(Debug, Default, Clone, Copy)]
 pub struct NonInteractiveInput;
@@ -54,7 +53,7 @@ impl Input for NonInteractiveInput {
         prompt: &str,
         _placeholder: Option<&str>,
         _formatter: Option<&dyn Fn(&str) -> String>,
-        _validator: Option<&dyn Fn(&str) -> Result<Validation, inquire::CustomUserError>>,
+        _validator: Option<&super::InputValidator>,
     ) -> Result<String> {
         Err(self.blocked("prompt", prompt))
     }
@@ -71,7 +70,7 @@ impl Input for NonInteractiveInput {
         &self,
         prompt: &str,
         _default: &str,
-        _validator: Option<&dyn Fn(&str) -> Result<Validation, inquire::CustomUserError>>,
+        _validator: Option<&super::InputValidator>,
     ) -> Result<String> {
         Err(self.blocked("prompt", prompt))
     }

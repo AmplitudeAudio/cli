@@ -352,6 +352,7 @@ async fn handle_template_info_command(
 }
 
 /// Display template information in the appropriate format.
+#[allow(clippy::too_many_arguments)]
 fn display_template_info(
     name: &str,
     engine: &str,

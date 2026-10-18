@@ -40,7 +40,6 @@ use super::{AssetType, ValidationError, ValidationLayer};
 use crate::common::errors::codes;
 use crate::forms::references::RefTarget;
 use crate::presentation::Output;
-use log::{debug, info};
 use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -69,8 +68,8 @@ const RUNTIME_EXTENSIONS: &[&str] = &[
 /// Example: `sounds/throw_01.wav.amsound` → `sounds/throw_01.wav.json`
 fn runtime_path_to_source(path: &str) -> String {
     for ext in RUNTIME_EXTENSIONS {
-        if path.ends_with(ext) {
-            return format!("{}.json", &path[..path.len() - ext.len()]);
+        if let Some(stem) = path.strip_suffix(ext) {
+            return format!("{stem}.json");
         }
     }
     path.to_string()
@@ -250,15 +249,11 @@ impl ProjectValidator {
             .get(&asset_type)
             .is_some_and(|ids| ids.contains(&id));
 
-        if exists {
-            Ok(())
-        } else {
+        if !exists {
             // Check if the ID exists but in a different type directory
-            if let Err(failure) = self.validate_asset_in_correct_directory(asset_type, id) {
-                return Err(failure);
-            }
+            self.validate_asset_in_correct_directory(asset_type, id)?;
 
-            Err(ValidationError::new(
+            return Err(ValidationError::new(
                 ValidationLayer::TypeRules,
                 codes::ERR_VALIDATION_REFERENCE,
                 format!("Referenced {} with ID {} not found", asset_type, id),
@@ -271,8 +266,9 @@ impl ProjectValidator {
                 "Create the {} first with 'am asset {} create', or fix the reference",
                 asset_type,
                 asset_type.directory_name()
-            )))
+            )));
         }
+        Ok(())
     }
 
     /// Validates that an asset ID is located in the correct type directory.
@@ -292,26 +288,26 @@ impl ProjectValidator {
             return Ok(());
         }
 
-        if let Some(actual_type) = self.asset_locations.get(&id) {
-            if *actual_type != asset_type {
-                return Err(ValidationError::new(
-                    ValidationLayer::TypeRules,
-                    codes::ERR_VALIDATION_REFERENCE,
-                    format!(
-                        "Asset ID {} exists but is a {}, not a {}",
-                        id, actual_type, asset_type
-                    ),
-                    format!(
-                        "The asset was found in sources/{} instead of sources/{}",
-                        actual_type.directory_name(),
-                        asset_type.directory_name()
-                    ),
-                )
-                .with_suggestion(format!(
-                    "Move the asset to sources/{} or use the correct asset type reference",
+        if let Some(actual_type) = self.asset_locations.get(&id)
+            && *actual_type != asset_type
+        {
+            return Err(ValidationError::new(
+                ValidationLayer::TypeRules,
+                codes::ERR_VALIDATION_REFERENCE,
+                format!(
+                    "Asset ID {} exists but is a {}, not a {}",
+                    id, actual_type, asset_type
+                ),
+                format!(
+                    "The asset was found in sources/{} instead of sources/{}",
+                    actual_type.directory_name(),
                     asset_type.directory_name()
-                )));
-            }
+                ),
+            )
+            .with_suggestion(format!(
+                "Move the asset to sources/{} or use the correct asset type reference",
+                asset_type.directory_name()
+            )));
         }
 
         Ok(())

@@ -183,11 +183,11 @@ impl Logger {
         )?;
         writeln!(file, "================================\n")?;
 
-        if let Ok(buffer_opt) = LOG_BUFFER.lock() {
-            if let Some(buffer) = buffer_opt.as_ref() {
-                for entry in buffer.iter() {
-                    file.write_all(entry.format_for_file().as_bytes())?;
-                }
+        if let Ok(buffer_opt) = LOG_BUFFER.lock()
+            && let Some(buffer) = buffer_opt.as_ref()
+        {
+            for entry in buffer.iter() {
+                file.write_all(entry.format_for_file().as_bytes())?;
             }
         }
 

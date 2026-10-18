@@ -264,18 +264,18 @@ impl Asset for Sound {
         }
 
         // Validate fader algorithm is a known value
-        if let Some(fader_str) = &self.fader {
-            if FaderAlgorithm::from_str(fader_str).is_err() {
-                return Err(ValidationError::type_rule_violation(
-                    format!("Unknown fader algorithm: '{}'", fader_str),
-                    "Fader must be a valid algorithm name",
-                )
-                .with_suggestion(format!(
-                    "Use one of: {}",
-                    super::extensions::FADER_ALGORITHM_NAMES.join(", ")
-                ))
-                .with_field("fader"));
-            }
+        if let Some(fader_str) = &self.fader
+            && FaderAlgorithm::from_str(fader_str).is_err()
+        {
+            return Err(ValidationError::type_rule_violation(
+                format!("Unknown fader algorithm: '{}'", fader_str),
+                "Fader must be a valid algorithm name",
+            )
+            .with_suggestion(format!(
+                "Use one of: {}",
+                super::extensions::FADER_ALGORITHM_NAMES.join(", ")
+            ))
+            .with_field("fader"));
         }
 
         // Cross-asset reference checks (only if validator is available).

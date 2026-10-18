@@ -52,6 +52,7 @@ const ASSET_NAME: &str = "Soundbank";
 
 /// Soundbank asset subcommands.
 #[derive(Subcommand, Debug)]
+#[allow(clippy::large_enum_variant)] // parsed once at startup; boxing would complicate clap derive
 pub enum SoundbankCommands {
     /// Create a new soundbank asset
     #[command(after_help = "Examples:

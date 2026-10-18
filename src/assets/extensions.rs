@@ -105,6 +105,7 @@ impl FaderAlgorithm {
     /// Parse a fader algorithm from its string representation.
     ///
     /// Returns an error with context if the string doesn't match any known algorithm.
+    #[allow(clippy::should_implement_trait)]
     pub fn from_str(s: &str) -> Result<Self, String> {
         match s {
             "Constant" => Ok(Self::Constant),
@@ -222,6 +223,7 @@ impl std::fmt::Display for CollectionPlayMode {
 
 impl CollectionPlayMode {
     /// Parse a collection play mode from its string representation.
+    #[allow(clippy::should_implement_trait)]
     pub fn from_str(s: &str) -> Result<Self, String> {
         match s {
             "PlayOne" => Ok(Self::PlayOne),
@@ -253,6 +255,7 @@ impl std::fmt::Display for SoundSchedulerMode {
 
 impl SoundSchedulerMode {
     /// Parse a sound scheduler mode from its string representation.
+    #[allow(clippy::should_implement_trait)]
     pub fn from_str(s: &str) -> Result<Self, String> {
         match s {
             "Random" => Ok(Self::Random),

@@ -98,13 +98,12 @@ impl Database {
 
     /// Prepare a statement for execution
     pub fn prepare(&self, sql: &str) -> Result<DatabaseStatement> {
-        let conn = self
-            .connection
-            .lock()
-            .map_err(|e| anyhow::anyhow!("Failed to acquire database lock: {}", e))?;
-
-        let stmt = conn.prepare(sql).context("Failed to prepare statement")?;
-
+        {
+            let _conn = self
+                .connection
+                .lock()
+                .map_err(|e| anyhow::anyhow!("Failed to acquire database lock: {}", e))?;
+        }
         Ok(DatabaseStatement {
             connection: Arc::clone(&self.connection),
             sql: sql.to_string(),
@@ -238,10 +237,10 @@ impl DatabaseTransaction {
 
 impl Drop for DatabaseTransaction {
     fn drop(&mut self) {
-        if !self.committed {
-            if let Ok(conn) = self.connection.lock() {
-                let _ = conn.execute("ROLLBACK", []);
-            }
+        if !self.committed
+            && let Ok(conn) = self.connection.lock()
+        {
+            let _ = conn.execute("ROLLBACK", []);
         }
     }
 }

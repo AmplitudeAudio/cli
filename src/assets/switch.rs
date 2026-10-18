@@ -122,7 +122,7 @@ impl Asset for Switch {
         Ok(())
     }
 
-    fn validate_rules(&self, context: &ProjectContext) -> Result<(), ValidationError> {
+    fn validate_rules(&self, _context: &ProjectContext) -> Result<(), ValidationError> {
         // Validate name is not empty or whitespace-only
         let name = self.name.as_deref().unwrap_or("").trim();
         if name.is_empty() {
