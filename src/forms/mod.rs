@@ -15,6 +15,7 @@
 //! Schema-driven field model shared by prompts, flags and the TUI.
 
 pub mod coverage;
+pub mod curve;
 pub mod describe;
 pub mod field;
 pub mod field_docs;
@@ -22,3 +23,4 @@ pub mod pick;
 pub mod references;
 pub mod rtpc_value;
 pub mod validate_refs;
+pub mod zone;

@@ -1,0 +1,267 @@
+// Copyright (c) 2026-present Sparky Studios. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+//! Tests for the curve and zone input helpers.
+
+mod common;
+
+use std::fs;
+use std::path::PathBuf;
+use std::process::Command;
+
+use am::assets::generated::{AttenuationShapeDefinition, ZoneDefinition};
+use am::forms::curve::{curve_from_flags, parse_curve_part, prompt_curve};
+use am::forms::zone::{ZoneArgs, prompt_zone, zone_from_flags};
+use common::scripted_input::ScriptedInput;
+
+fn box_args() -> ZoneArgs {
+    ZoneArgs {
+        shape: Some("box".to_string()),
+        inner_half_width: Some(1.0),
+        inner_half_height: Some(2.0),
+        inner_half_depth: Some(3.0),
+        ..ZoneArgs::default()
+    }
+}
+
+#[test]
+fn parse_curve_part_reads_five_fields() {
+    let part = parse_curve_part("0,0,1,1,linear").unwrap();
+    let start = part.start.unwrap();
+    let end = part.end.unwrap();
+    assert_eq!((start.x, start.y, end.x, end.y), (0.0, 0.0, 1.0, 1.0));
+    assert_eq!(part.fader.as_deref(), Some("Linear"));
+}
+
+#[test]
+fn parse_curve_part_rejects_malformed_input_naming_format() {
+    for bad in ["0,0,1", "a,0,1,1,linear", "0,0,1,1,wobble", "0,0,NaN,1,linear"] {
+        let err = parse_curve_part(bad).unwrap_err().to_string();
+        assert!(
+            err.contains("start_x,start_y,end_x,end_y,fader") || err.contains("fader"),
+            "{bad}: {err}"
+        );
+    }
+    let err = parse_curve_part("0,0,1").unwrap_err().to_string();
+    assert!(err.contains("start_x,start_y,end_x,end_y,fader"), "{err}");
+}
+
+#[test]
+fn parse_curve_part_rejects_non_increasing_x() {
+    assert!(parse_curve_part("1,0,1,1,linear").is_err());
+    assert!(parse_curve_part("2,0,1,1,linear").is_err());
+}
+
+#[test]
+fn curve_from_flags_neither_is_none_and_both_is_error() {
+    assert!(curve_from_flags(&[], None).unwrap().is_none());
+    let both = curve_from_flags(&["0,0,1,1,linear".to_string()], Some(&PathBuf::from("x.json")));
+    assert!(both.is_err());
+}
+
+#[test]
+fn curve_from_flags_collects_parts_in_order() {
+    let curve = curve_from_flags(
+        &["0,0,1,1,linear".to_string(), "1,1,2,0,EaseIn".to_string()],
+        None,
+    )
+    .unwrap()
+    .unwrap();
+    let parts = curve.parts.unwrap();
+    assert_eq!(parts.len(), 2);
+    assert_eq!(parts[1].fader.as_deref(), Some("EaseIn"));
+}
+
+#[test]
+fn curve_from_flags_rejects_gap_between_parts() {
+    let r = curve_from_flags(
+        &["0,0,1,1,linear".to_string(), "2,1,3,0,linear".to_string()],
+        None,
+    );
+    assert!(r.is_err());
+}
+
+#[test]
+fn curve_from_flags_reads_json_file() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("curve.json");
+    fs::write(
+        &path,
+        r#"{"parts":[{"start":{"x":0.0,"y":0.0},"end":{"x":1.0,"y":1.0},"fader":"Linear"}]}"#,
+    )
+    .unwrap();
+    let curve = curve_from_flags(&[], Some(&path)).unwrap().unwrap();
+    assert_eq!(curve.parts.unwrap().len(), 1);
+}
+
+#[test]
+fn curve_from_flags_rejects_empty_json_curve() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("curve.json");
+    fs::write(&path, r#"{"parts":[]}"#).unwrap();
+    assert!(curve_from_flags(&[], Some(&path)).is_err());
+    assert!(curve_from_flags(&[], Some(&dir.path().join("missing.json"))).is_err());
+}
+
+#[test]
+fn prompt_curve_collects_two_parts() {
+    let input = ScriptedInput::new(
+        &["Linear", "EaseIn"],
+        &["0", "0", "1", "1", "1", "1", "2", "0"],
+    )
+    .with_confirms(&[true, false]);
+    let curve = prompt_curve(&input).unwrap();
+    let parts = curve.parts.unwrap();
+    assert_eq!(parts.len(), 2);
+    assert_eq!(parts[1].end.as_ref().unwrap().x, 2.0);
+    assert_eq!(parts[1].fader.as_deref(), Some("EaseIn"));
+    input.assert_all_consumed();
+}
+
+#[test]
+fn zone_from_flags_builds_box_zone() {
+    let zone = zone_from_flags(&box_args()).unwrap();
+    match zone {
+        ZoneDefinition::Box(settings) => {
+            let inner = settings.inner.unwrap();
+            assert_eq!(
+                (inner.half_width, inner.half_height, inner.half_depth),
+                (1.0, 2.0, 3.0)
+            );
+            assert!(settings.outer.is_none());
+        }
+        other => panic!("expected box, got {other:?}"),
+    }
+}
+
+#[test]
+fn zone_from_flags_rejects_flags_for_another_shape() {
+    let args = ZoneArgs {
+        shape: Some("sphere".to_string()),
+        ..box_args()
+    };
+    let err = zone_from_flags(&args).unwrap_err().to_string();
+    assert!(err.contains("sphere") && err.contains("box"), "{err}");
+}
+
+#[test]
+fn zone_from_flags_lists_missing_fields() {
+    let args = ZoneArgs {
+        shape: Some("box".to_string()),
+        inner_half_width: Some(1.0),
+        ..ZoneArgs::default()
+    };
+    let err = zone_from_flags(&args).unwrap_err().to_string();
+    assert!(
+        err.contains("--inner-half-height") && err.contains("--inner-half-depth"),
+        "{err}"
+    );
+}
+
+#[test]
+fn zone_from_flags_requires_known_shape_and_some_dimensions() {
+    assert!(zone_from_flags(&ZoneArgs::default()).is_err());
+    let unknown = ZoneArgs {
+        shape: Some("torus".to_string()),
+        ..ZoneArgs::default()
+    };
+    assert!(zone_from_flags(&unknown).is_err());
+    let empty = ZoneArgs {
+        shape: Some("sphere".to_string()),
+        ..ZoneArgs::default()
+    };
+    let err = zone_from_flags(&empty).unwrap_err().to_string();
+    assert!(err.contains("--inner-radius") || err.contains("--outer-radius"), "{err}");
+}
+
+#[test]
+fn zone_from_flags_builds_sphere_with_both_sides() {
+    let args = ZoneArgs {
+        shape: Some("Sphere".to_string()),
+        inner_radius: Some(1.0),
+        outer_radius: Some(5.0),
+        ..ZoneArgs::default()
+    };
+    match zone_from_flags(&args).unwrap() {
+        ZoneDefinition::Sphere(s) => {
+            assert_eq!(s.inner.unwrap().radius, 1.0);
+            assert_eq!(s.outer.unwrap().radius, 5.0);
+        }
+        other => panic!("expected sphere, got {other:?}"),
+    }
+}
+
+#[test]
+fn prompt_zone_walks_inner_and_outer_fields() {
+    let input = ScriptedInput::new(&["capsule"], &["1", "2", "3", "4"]);
+    match prompt_zone(&input).unwrap() {
+        ZoneDefinition::Capsule(s) => {
+            assert_eq!(s.inner.unwrap().radius, 1.0);
+            assert_eq!(s.outer.unwrap().half_height, 4.0);
+        }
+        other => panic!("expected capsule, got {other:?}"),
+    }
+    assert!(input.saw_prompt("inner radius"));
+    assert!(input.saw_prompt("outer half height"));
+    input.assert_all_consumed();
+}
+
+#[test]
+fn zone_serializes_with_flatc_union_tag_and_is_accepted_by_flatc() {
+    let zone = zone_from_flags(&box_args()).unwrap();
+    let shape = AttenuationShapeDefinition {
+        max_attenuation_factor: 1.0,
+        zone: Some(zone),
+    };
+    let json = serde_json::to_value(&shape).unwrap();
+    assert_eq!(json["zone_type"], "Box");
+    assert!(json["zone"]["inner"]["half_width"].is_number());
+
+    // Validate with flatc when both flatc and the SDK schemas are available.
+    let Ok(sdk) = std::env::var("AM_SDK_PATH") else {
+        return;
+    };
+    let sdk = PathBuf::from(sdk);
+    let schema = [sdk.join("schemas"), sdk.join("../schemas")]
+        .into_iter()
+        .map(|d| d.join("attenuation_definition.fbs"))
+        .find(|p| p.exists());
+    let Some(schema) = schema else {
+        return;
+    };
+    if Command::new("flatc").arg("--version").output().is_err() {
+        return;
+    }
+    let doc = serde_json::json!({
+        "id": 1, "name": "a", "max_distance": 10.0,
+        "shape": json,
+    });
+    let dir = tempfile::tempdir().unwrap();
+    let file = dir.path().join("att.json");
+    fs::write(&file, serde_json::to_string(&doc).unwrap()).unwrap();
+    let out = Command::new("flatc")
+        .args(["-b", "--strict-json", "-o"])
+        .arg(dir.path())
+        .arg("-I")
+        .arg(schema.parent().unwrap())
+        .arg(&schema)
+        .arg(&file)
+        .output()
+        .unwrap();
+    assert!(
+        out.status.success(),
+        "flatc rejected the JSON: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+}
