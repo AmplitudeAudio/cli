@@ -17,6 +17,9 @@
 //! Manages Amplitude Audio SDK assets: sounds, collections, effects, switches,
 //! switch containers, events, and soundbanks.
 
+mod attenuation;
+mod attenuation_args;
+mod attenuation_prompts;
 mod collection;
 mod effect;
 mod event;
@@ -27,6 +30,7 @@ mod soundbank;
 mod switch;
 mod switch_container;
 
+pub use attenuation::{AttenuationCommands, handler as handle_attenuation_command};
 pub use collection::{CollectionCommands, handler as handle_collection_command};
 pub use effect::{EffectCommands, handler as handle_effect_command};
 pub use event::{EventCommands, handler as handle_event_command};
@@ -124,6 +128,11 @@ pub enum AssetCommands {
         #[command(subcommand)]
         command: SoundbankCommands,
     },
+    /// Attenuation asset management
+    Attenuation {
+        #[command(subcommand)]
+        command: AttenuationCommands,
+    },
 }
 
 /// Handle asset commands by routing to the appropriate subcommand handler.
@@ -154,6 +163,9 @@ pub async fn handler(
         }
         AssetCommands::Soundbank { command } => {
             handle_soundbank_command(command, database, input, output).await
+        }
+        AssetCommands::Attenuation { command } => {
+            handle_attenuation_command(command, database, input, output).await
         }
     }
 }
