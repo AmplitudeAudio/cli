@@ -25,22 +25,60 @@ use crate::input::{Input, select_index};
 pub const NONE_LABEL: &str = "(none)";
 
 /// Human-readable name of what a reference target holds ("bus", "attenuation", ...).
+///
+/// An any-of target reads "sound, collection or switch container".
 pub fn target_label(target: RefTarget) -> String {
     match target {
         RefTarget::Bus => "bus".to_string(),
         RefTarget::Asset(asset_type) => asset_type.to_string().to_lowercase(),
+        RefTarget::AnyOf(_) => {
+            let labels: Vec<String> = target.members().into_iter().map(target_label).collect();
+            match labels.split_last() {
+                Some((last, rest)) if !rest.is_empty() => {
+                    format!("{} or {last}", rest.join(", "))
+                }
+                _ => labels.join(""),
+            }
+        }
     }
+}
+
+fn single_command(target: RefTarget, verb: &str) -> String {
+    match target {
+        RefTarget::Bus => format!("am asset bus {verb}"),
+        RefTarget::Asset(asset_type) => format!(
+            "am asset {} {verb}",
+            asset_type.to_string().to_lowercase().replace(' ', "-")
+        ),
+        RefTarget::AnyOf(_) => String::new(),
+    }
+}
+
+fn commands(target: RefTarget, verb: &str) -> String {
+    target
+        .members()
+        .into_iter()
+        .map(|member| single_command(member, verb))
+        .collect::<Vec<_>>()
+        .join(" or ")
 }
 
 /// The CLI command that creates an object of `target`.
 pub fn create_command(target: RefTarget) -> String {
-    match target {
-        RefTarget::Bus => "am asset bus create".to_string(),
-        RefTarget::Asset(asset_type) => format!(
-            "am asset {} create",
-            asset_type.to_string().to_lowercase().replace(' ', "-")
-        ),
-    }
+    commands(target, "create")
+}
+
+/// The CLI command that lists the objects of `target`.
+pub fn list_command(target: RefTarget) -> String {
+    commands(target, "list")
+}
+
+/// The label of the first kind among `kinds` that holds an object with `id`.
+fn kind_of(validator: &ProjectValidator, kinds: &[RefTarget], id: u64) -> String {
+    kinds
+        .iter()
+        .find(|kind| validator.resolve(**kind, id).is_some())
+        .map_or_else(String::new, |kind| target_label(*kind))
 }
 
 /// Lets the user choose the object a reference field points at.
@@ -70,7 +108,16 @@ pub fn pick_reference(
         .into());
     }
 
-    let mut labels: Vec<String> = candidates.iter().map(|c| c.name.clone()).collect();
+    // With several kinds on offer a name alone is ambiguous, so each label names its kind.
+    let kinds = rule.target.members();
+    let mut labels: Vec<String> = if kinds.len() > 1 {
+        candidates
+            .iter()
+            .map(|c| format!("{} ({})", c.name, kind_of(validator, &kinds, c.id)))
+            .collect()
+    } else {
+        candidates.iter().map(|c| c.name.clone()).collect()
+    };
     if !rule.required {
         labels.push(NONE_LABEL.to_string());
     }

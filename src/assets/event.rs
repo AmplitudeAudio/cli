@@ -21,6 +21,7 @@
 use super::generated::{
     EventActionDefinition, EventActionRunningMode, EventActionType, EventDefinition, Scope,
 };
+use super::event_actions::{validate_action_shape, validate_action_targets};
 use super::{Asset, AssetType, ProjectContext, Schema, ValidationError};
 
 // =============================================================================
@@ -170,62 +171,11 @@ impl Asset for Event {
             .with_field("actions"));
         }
 
-        // Validate each action
+        // Validate each action: the SDK reads Wait's duration unchecked and resolves
+        // the other targets by kind (see `event_actions`).
         for (idx, action) in actions.iter().enumerate() {
-            // Validate action has targets for action types that need them
-            match action.type_ {
-                EventActionType::Play
-                | EventActionType::Stop
-                | EventActionType::Pause
-                | EventActionType::Resume
-                | EventActionType::Seek => {
-                    let targets = action.targets.as_deref().unwrap_or(&[]);
-                    if targets.is_empty() {
-                        return Err(ValidationError::type_rule_violation(
-                            format!("Action {} has no targets", idx + 1),
-                            format!(
-                                "{:?} actions must have at least one target asset",
-                                action.type_
-                            ),
-                        )
-                        .with_suggestion("Add target asset IDs to the 'targets' field")
-                        .with_field(format!("actions[{}].targets", idx)));
-                    }
-
-                    // Validate all target IDs reference existing assets
-                    if let Some(ref validator) = context.validator {
-                        for (target_idx, &target_id) in targets.iter().enumerate() {
-                            // For Play/Resume actions, targets should be playable assets
-                            // (sounds, collections, switch containers)
-                            if action.type_ == EventActionType::Play
-                                || action.type_ == EventActionType::Resume
-                            {
-                                if !validator.is_playable_asset(target_id) {
-                                    return Err(ValidationError::type_rule_violation(
-                                        format!(
-                                            "Action {} target {} references non-playable asset {}",
-                                            idx + 1,
-                                            target_idx + 1,
-                                            target_id
-                                        ),
-                                        "Play and Resume actions must target sounds, collections, or switch containers",
-                                    )
-                                    .with_suggestion(
-                                        "Ensure the target ID references a valid playable asset",
-                                    )
-                                    .with_field(format!(
-                                        "actions[{}].targets[{}]",
-                                        idx, target_idx
-                                    )));
-                                }
-                            }
-                        }
-                    }
-                }
-                _ => {
-                    // Other action types may not need targets
-                }
-            }
+            validate_action_shape(action, idx)?;
+            validate_action_targets(action, idx, context.validator.as_ref())?;
         }
 
         Ok(())

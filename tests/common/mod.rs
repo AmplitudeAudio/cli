@@ -18,6 +18,8 @@
 
 #[allow(dead_code)]
 pub mod collection_helpers;
+#[allow(dead_code)]
+pub mod event_helpers;
 pub mod fixtures;
 pub mod flatc;
 #[allow(dead_code)]

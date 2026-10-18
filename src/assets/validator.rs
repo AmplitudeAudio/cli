@@ -388,11 +388,16 @@ impl ProjectValidator {
 
     /// Lists every object a reference to `target` can point at, sorted by name.
     pub fn list(&self, target: RefTarget) -> Vec<AssetRef> {
-        let source = match target {
-            RefTarget::Asset(asset_type) => self.asset_refs.get(&asset_type),
-            RefTarget::Bus => Some(self.visible_buses()),
-        };
-        let mut refs = source.cloned().unwrap_or_default();
+        let mut refs: Vec<AssetRef> = target
+            .members()
+            .into_iter()
+            .flat_map(|member| match member {
+                RefTarget::Asset(asset_type) => {
+                    self.asset_refs.get(&asset_type).cloned().unwrap_or_default()
+                }
+                _ => self.visible_buses().clone(),
+            })
+            .collect();
         refs.sort_by(|a, b| a.name.cmp(&b.name).then(a.id.cmp(&b.id)));
         refs
     }
@@ -435,11 +440,13 @@ impl ProjectValidator {
         if id == 0 {
             return None;
         }
-        let source = match target {
-            RefTarget::Asset(asset_type) => self.asset_refs.get(&asset_type)?,
-            RefTarget::Bus => self.visible_buses(),
-        };
-        source.iter().find(|r| r.id == id).cloned()
+        target.members().into_iter().find_map(|member| {
+            let source = match member {
+                RefTarget::Asset(asset_type) => self.asset_refs.get(&asset_type)?,
+                _ => self.visible_buses(),
+            };
+            source.iter().find(|r| r.id == id).cloned()
+        })
     }
 
     /// Returns the project root path.

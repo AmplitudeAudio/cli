@@ -19,6 +19,7 @@ pub mod bus;
 pub mod collection;
 pub mod collection_entries;
 pub mod engine_config;
+pub mod event;
 pub mod pipeline;
 pub mod rtpc;
 pub mod sound;

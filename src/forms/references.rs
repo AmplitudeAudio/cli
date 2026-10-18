@@ -23,6 +23,7 @@
 //! top-level field (`"sounds.sound"` is the `sound` of each entry in
 //! `sounds`).
 
+use crate::assets::generated::EventActionType;
 use crate::assets::{AssetType, ProjectValidator};
 
 pub use crate::assets::validator::AssetRef;
@@ -34,6 +35,24 @@ pub enum RefTarget {
     Asset(AssetType),
     /// A bus defined in a `*.buses.json` file of the project root.
     Bus,
+    /// An object of any one of the listed targets (for example the sound, collection
+    /// or switch container an event action plays).
+    AnyOf(&'static [RefTarget]),
+}
+
+impl RefTarget {
+    /// The single targets this one stands for (itself unless it is [`RefTarget::AnyOf`]).
+    pub fn members(self) -> Vec<RefTarget> {
+        match self {
+            RefTarget::AnyOf(targets) => targets.iter().flat_map(|t| t.members()).collect(),
+            single => vec![single],
+        }
+    }
+
+    /// Whether objects of `other` can be pointed at by a reference to `self`.
+    pub fn includes(self, other: RefTarget) -> bool {
+        self.members().contains(&other)
+    }
 }
 
 /// Declares that `field` of `asset_type` holds the ID of another object.
@@ -63,6 +82,24 @@ const fn rule(
 const BUS: RefTarget = RefTarget::Bus;
 const EFFECT: RefTarget = RefTarget::Asset(AssetType::Effect);
 const ATTENUATION: RefTarget = RefTarget::Asset(AssetType::Attenuation);
+
+const SOUND: RefTarget = RefTarget::Asset(AssetType::Sound);
+const COLLECTION: RefTarget = RefTarget::Asset(AssetType::Collection);
+const SWITCH_CONTAINER: RefTarget = RefTarget::Asset(AssetType::SwitchContainer);
+
+/// What Play/Pause/Resume/Stop/Seek actions target: `Engine::Play(id)` resolves a
+/// sound, a collection or a switch container, and the other actions match the id
+/// of the playing object, which is one of those three.
+pub const PLAYBACK_TARGETS: RefTarget = RefTarget::AnyOf(&[SOUND, COLLECTION, SWITCH_CONTAINER]);
+
+/// Every kind some event action can target; `Event::validate_rules` narrows it per action type.
+const EVENT_TARGETS: RefTarget = RefTarget::AnyOf(&[SOUND, COLLECTION, SWITCH_CONTAINER, BUS]);
+
+const EVENT_RULES: &[RefRule] = &[
+    // MuteBus/UnmuteBus target buses, the other non-Wait actions the playback kinds.
+    // Wait targets are durations, not references.
+    rule(AssetType::Event, "actions.targets", EVENT_TARGETS, true),
+];
 
 const SOUND_RULES: &[RefRule] = &[
     rule(AssetType::Sound, "bus", BUS, true),
@@ -107,9 +144,9 @@ pub fn rules_for(asset_type: AssetType) -> Vec<RefRule> {
         AssetType::Sound => SOUND_RULES.to_vec(),
         AssetType::Collection => COLLECTION_RULES.to_vec(),
         AssetType::SwitchContainer => SWITCH_CONTAINER_RULES.to_vec(),
+        AssetType::Event => EVENT_RULES.to_vec(),
         AssetType::Switch
         | AssetType::Soundbank
-        | AssetType::Event
         | AssetType::Effect
         | AssetType::Attenuation
         | AssetType::Rtpc
@@ -195,6 +232,36 @@ pub fn ids_at_path(value: &serde_json::Value, path: &str) -> Vec<u64> {
     current.into_iter().filter_map(|v| v.as_u64()).collect()
 }
 
+/// The ids the reference field `field` of an `asset_type` file holds for `target`.
+///
+/// Event action targets need care: a Wait action's targets are durations and a
+/// bus action's targets are buses, so only actions whose type targets `target` count.
+fn rule_ids(
+    asset_type: AssetType,
+    value: &serde_json::Value,
+    field: &str,
+    target: RefTarget,
+) -> Vec<u64> {
+    if asset_type != AssetType::Event || field != "actions.targets" {
+        return ids_at_path(value, field);
+    }
+    value
+        .get("actions")
+        .and_then(|a| a.as_array())
+        .into_iter()
+        .flatten()
+        .filter(|action| {
+            action
+                .get("type")
+                .and_then(|t| t.as_str())
+                .and_then(|t| EventActionType::from_name(t).ok())
+                .and_then(|t| t.target_kinds())
+                .is_some_and(|kinds| kinds.includes(target))
+        })
+        .flat_map(|action| ids_at_path(action, "targets"))
+        .collect()
+}
+
 /// Whether the RTPC-compatible value at `field` (possibly a dotted path) is bound to RTPC `id`.
 fn binds_rtpc(value: &serde_json::Value, field: &str, id: u64) -> bool {
     ids_at_path(value, &format!("{field}.rtpc.id")).contains(&id)
@@ -214,7 +281,7 @@ pub fn referrers_with_type(
     for asset_type in ALL_ASSET_TYPES {
         let fields: Vec<&str> = rules_for(asset_type)
             .into_iter()
-            .filter(|r| r.target == target)
+            .filter(|r| r.target.includes(target))
             .map(|r| r.field)
             .collect();
         let rtpc_fields: Vec<&str> = if target == RefTarget::Asset(AssetType::Rtpc) {
@@ -237,7 +304,7 @@ pub fn referrers_with_type(
             };
             let points_at_target = fields
                 .iter()
-                .any(|f| ids_at_path(&value, f).contains(&id))
+                .any(|f| rule_ids(asset_type, &value, f, target).contains(&id))
                 || rtpc_fields.iter().any(|f| binds_rtpc(&value, f, id));
             let own_id = value.get("id").and_then(|v| v.as_u64());
             let name = value.get("name").and_then(|v| v.as_str());

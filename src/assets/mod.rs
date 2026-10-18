@@ -69,6 +69,7 @@ mod engine_config_rules;
 mod collection;
 mod effect;
 mod event;
+pub mod event_actions;
 /// FaderAlgorithm enum and convenience extension methods for generated SDK types.
 pub mod extensions;
 mod pipeline;

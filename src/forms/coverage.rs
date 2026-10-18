@@ -150,6 +150,18 @@ pub const COLLECTION_TABLES: &[(&str, &[&str], &[&str])] = &[
     ),
 ];
 
+/// Tables of `event_definition.fbs` below the event itself, as
+/// `(table, supported fields, known gaps)`.
+///
+/// `--action TYPE:TARGET[,KEY=VALUE]` (and `--actions-from-json`) covers the
+/// action type, its targets, `active` and `scope`.
+/// `unit_schema_coverage_test` checks every list against the schema.
+pub const EVENT_TABLES: &[(&str, &[&str], &[&str])] = &[(
+    "EventActionDefinition",
+    &["type", "active", "targets", "scope"],
+    &[],
+)];
+
 /// Fields of `PipelineNodeDefinition` the `--node` flag syntax covers.
 pub const PIPELINE_NODE_SUPPORTED_FIELDS: &[&str] = &["id", "name", "consume", "parameters"];
 
