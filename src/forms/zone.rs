@@ -319,3 +319,126 @@ pub fn prompt_zone(input: &dyn Input) -> Result<ZoneDefinition> {
     let outer = prompt_side(input, Side::Outer, shape, fields)?;
     Ok(build_zone(shape, inner, outer))
 }
+
+/// The shape name and the values of each side of `zone`, keyed by schema field.
+fn zone_sides(zone: &ZoneDefinition) -> (&'static str, [Option<Values>; 2]) {
+    match zone {
+        ZoneDefinition::Box(z) => (
+            "box",
+            [&z.inner, &z.outer].map(|s| {
+                s.as_ref().map(|s| {
+                    vec![
+                        ("half_width", s.half_width),
+                        ("half_height", s.half_height),
+                        ("half_depth", s.half_depth),
+                    ]
+                })
+            }),
+        ),
+        ZoneDefinition::Capsule(z) => (
+            "capsule",
+            [&z.inner, &z.outer].map(|s| {
+                s.as_ref()
+                    .map(|s| vec![("radius", s.radius), ("half_height", s.half_height)])
+            }),
+        ),
+        ZoneDefinition::Cone(z) => (
+            "cone",
+            [&z.inner, &z.outer].map(|s| {
+                s.as_ref()
+                    .map(|s| vec![("radius", s.radius), ("height", s.height)])
+            }),
+        ),
+        ZoneDefinition::Sphere(z) => (
+            "sphere",
+            [&z.inner, &z.outer].map(|s| s.as_ref().map(|s| vec![("radius", s.radius)])),
+        ),
+    }
+}
+
+/// Checks a zone that was not built by [`zone_from_flags`] (e.g. read from a
+/// hand-edited file): both the inner and the outer shape must be present, as
+/// the SDK dereferences both, and every dimension must satisfy the same rules
+/// as the flags.
+pub fn validate_zone(zone: &ZoneDefinition) -> Result<()> {
+    let (shape, sides) = zone_sides(zone);
+    for (side, values) in Side::BOTH.into_iter().zip(sides) {
+        let Some(values) = values else {
+            return Err(error(
+                format!("Incomplete {shape} zone"),
+                format!(
+                    "the SDK needs both an inner and an outer shape; the {} shape is missing",
+                    side.prefix()
+                ),
+            )
+            .into());
+        };
+        for (field, value) in values {
+            check_dimension(&flag(side, field), shape, field, value)?;
+        }
+    }
+    Ok(())
+}
+
+/// Name of the zone's shape (`box`, `capsule`, `cone` or `sphere`).
+pub fn zone_shape_name(zone: &ZoneDefinition) -> &'static str {
+    zone_sides(zone).0
+}
+
+/// Expresses an existing zone as flag values, so `update` can merge partial
+/// changes (e.g. only `--outer-radius`) into it.
+pub fn zone_to_args(zone: &ZoneDefinition) -> ZoneArgs {
+    let (shape, sides) = zone_sides(zone);
+    let mut args = ZoneArgs {
+        shape: Some(shape.to_string()),
+        ..ZoneArgs::default()
+    };
+    for (side, values) in Side::BOTH.into_iter().zip(sides) {
+        for (field, value) in values.unwrap_or_default() {
+            args.set(side, field, value);
+        }
+    }
+    args
+}
+
+impl ZoneArgs {
+    /// Whether any zone flag was given.
+    pub fn is_set(&self) -> bool {
+        self.shape.is_some()
+            || Side::BOTH
+                .iter()
+                .any(|s| ALL_FIELDS.iter().any(|f| self.get(*s, f).is_some()))
+    }
+
+    /// Fills the dimensions this struct lacks from `base`; given ones win.
+    pub fn merged_over(&self, base: &ZoneArgs) -> ZoneArgs {
+        let mut merged = self.clone();
+        for side in Side::BOTH {
+            for field in ALL_FIELDS {
+                if merged.get(side, field).is_none()
+                    && let Some(v) = base.get(side, field)
+                {
+                    merged.set(side, field, v);
+                }
+            }
+        }
+        merged
+    }
+
+    fn set(&mut self, side: Side, field: &str, value: f32) {
+        let slot = match (side, field) {
+            (Side::Inner, "radius") => &mut self.inner_radius,
+            (Side::Inner, "height") => &mut self.inner_height,
+            (Side::Inner, "half_width") => &mut self.inner_half_width,
+            (Side::Inner, "half_height") => &mut self.inner_half_height,
+            (Side::Inner, "half_depth") => &mut self.inner_half_depth,
+            (Side::Outer, "radius") => &mut self.outer_radius,
+            (Side::Outer, "height") => &mut self.outer_height,
+            (Side::Outer, "half_width") => &mut self.outer_half_width,
+            (Side::Outer, "half_height") => &mut self.outer_half_height,
+            (Side::Outer, "half_depth") => &mut self.outer_half_depth,
+            _ => return,
+        };
+        *slot = Some(value);
+    }
+}

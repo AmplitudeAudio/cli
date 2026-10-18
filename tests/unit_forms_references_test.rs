@@ -14,9 +14,11 @@
 
 //! Tests for the asset reference annotation table.
 
+mod common;
+
 use am::assets::AssetType;
 use am::config::sdk::discover_sdk;
-use am::forms::references::{RefTarget, rule_for, rules_for};
+use am::forms::references::{RefTarget, referrers, rule_for, rules_for};
 use am::presentation::JsonOutput;
 use am::schema::loader::load_schemas;
 
@@ -97,4 +99,45 @@ fn test_every_rule_field_exists_in_schema() {
             );
         }
     }
+}
+
+#[test]
+fn test_referrers_finds_assets_pointing_at_the_target() {
+    let fx = common::fixtures::AssetTestFixture::new("referrers").unwrap();
+    fx.write_asset_json(
+        "attenuators",
+        "short",
+        serde_json::json!({"id": 55, "name": "short"}),
+    )
+    .unwrap();
+    fx.write_asset_json(
+        "sounds",
+        "uses",
+        serde_json::json!({"id": 1, "name": "uses", "bus": 2, "attenuation": 55}),
+    )
+    .unwrap();
+    fx.write_asset_json(
+        "sounds",
+        "other",
+        serde_json::json!({"id": 2, "name": "other", "bus": 2, "attenuation": 56}),
+    )
+    .unwrap();
+    fx.write_asset_json(
+        "sounds",
+        "unset",
+        serde_json::json!({"id": 3, "name": "unset", "bus": 2}),
+    )
+    .unwrap();
+    let validator = fx.create_project_validator().unwrap();
+
+    let found = referrers(&validator, RefTarget::Asset(AssetType::Attenuation), 55);
+    assert_eq!(found.len(), 1);
+    assert_eq!(found[0].name, "uses");
+    assert_eq!(found[0].id, 1);
+
+    assert!(referrers(&validator, RefTarget::Asset(AssetType::Attenuation), 99).is_empty());
+    // Zero means "unset" and is never a reference to anything.
+    assert!(referrers(&validator, RefTarget::Asset(AssetType::Attenuation), 0).is_empty());
+    // Buses are matched through the same rules.
+    assert_eq!(referrers(&validator, RefTarget::Bus, 2).len(), 3);
 }

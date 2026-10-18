@@ -92,7 +92,7 @@ pub use extensions::{COLLECTION_PLAY_MODE_NAMES, FaderAlgorithm, SOUND_SCHEDULER
 // Note: Some types are currently unused but are part of the public API for future asset type
 // implementations. These will be used when Collection, Effect, Event, etc. CRUD commands are added.
 #[allow(unused_imports)]
-pub use attenuation::{Attenuation, AttenuationBuilder};
+pub use attenuation::{AIR_ABSORPTION_BANDS, Attenuation, AttenuationBuilder};
 #[allow(unused_imports)]
 pub use collection::{Collection, CollectionBuilder};
 #[allow(unused_imports)]
