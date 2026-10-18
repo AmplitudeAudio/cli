@@ -235,16 +235,3 @@ pub fn apply_patch(existing: &Rtpc, patch: &RtpcPatch) -> Rtpc {
     rtpc.fade_settings = merged_fade(existing.fade_settings.as_ref(), &patch.fade);
     rtpc
 }
-
-/// Serializes `updated` on top of the file's `original` JSON, so keys this
-/// version of the CLI does not know about survive an update.
-pub fn merge_into_original(
-    original: &serde_json::Value,
-    updated: &Rtpc,
-) -> serde_json::Result<serde_json::Value> {
-    let mut merged = original.as_object().cloned().unwrap_or_default();
-    if let serde_json::Value::Object(fields) = serde_json::to_value(updated)? {
-        merged.extend(fields);
-    }
-    Ok(serde_json::Value::Object(merged))
-}

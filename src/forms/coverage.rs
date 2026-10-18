@@ -125,3 +125,27 @@ pub const KNOWN_GAPS: &[(AssetType, &str)] = &[
     (AssetType::Pipeline, "name"),
     (AssetType::Pipeline, "nodes"),
 ];
+
+/// Returns every schema field name of `asset_type`, covered or not.
+///
+/// Covered fields come from [`supported_fields`]; gaps come from [`KNOWN_GAPS`]. The
+/// coverage test keeps those two lists complete. Union tag companions
+/// (`<field>_type`) of covered fields are included too, so a stale tag is not carried over.
+pub fn known_field_names(asset_type: AssetType) -> Vec<String> {
+    let covered = supported_fields(asset_type);
+    let gaps = KNOWN_GAPS
+        .iter()
+        .filter(|(t, _)| *t == asset_type)
+        .map(|(_, name)| *name);
+
+    let mut names: Vec<String> = covered
+        .iter()
+        .copied()
+        .chain(gaps)
+        .map(str::to_string)
+        .collect();
+    names.extend(covered.iter().map(|name| format!("{name}_type")));
+    names.sort();
+    names.dedup();
+    names
+}

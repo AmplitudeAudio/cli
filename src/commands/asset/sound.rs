@@ -30,14 +30,17 @@ use serde_json::json;
 
 use crate::{
     assets::{
-        Asset, ProjectContext, ProjectValidator, RtpcCompatibleValue, Sound, Spatialization,
+        Asset, AssetType, ProjectContext, ProjectValidator, RtpcCompatibleValue, Sound,
+        Spatialization,
     },
     common::{
         errors::{CliError, asset_already_exists, asset_not_found, codes},
         files::atomic_write,
+        json_merge::merge_update_unknown_only,
         utils::{read_amproject_file, truncate_string},
     },
     database::Database,
+    forms::coverage::known_field_names,
     input::Input,
     presentation::{Output, OutputMode},
     services::sound::{SoundPatch, SoundValues, apply_patch, build_sound},
@@ -667,6 +670,10 @@ async fn update_sound(
         "Failed to parse sound file: {}",
         sound_file_path.display()
     ))?;
+    let original: serde_json::Value = serde_json::from_str(&content).context(format!(
+        "Failed to parse sound file: {}",
+        sound_file_path.display()
+    ))?;
 
     let validator = ProjectValidator::new(current_dir.clone(), output)?;
     let context = ProjectContext::new(current_dir.clone()).with_validator(validator);
@@ -694,9 +701,13 @@ async fn update_sound(
         }
     })?;
 
-    // Step 6: Serialize and write atomically
+    // Step 6: Serialize over the original file, keeping keys the CLI does not model
+    let known = known_field_names(AssetType::Sound);
+    let known: Vec<&str> = known.iter().map(String::as_str).collect();
+    let updated = serde_json::to_value(&sound).context("Failed to serialize sound to JSON")?;
+    let merged = merge_update_unknown_only(&original, &updated, &known);
     let json_content =
-        serde_json::to_string_pretty(&sound).context("Failed to serialize sound to JSON")?;
+        serde_json::to_string_pretty(&merged).context("Failed to serialize sound to JSON")?;
     atomic_write(&sound_file_path, json_content.as_bytes())?;
 
     // Step 7: Output success

@@ -33,9 +33,11 @@ use crate::{
     common::{
         errors::{CliError, asset_already_exists, asset_not_found, codes},
         files::atomic_write,
+        json_merge::merge_update_unknown_only,
         utils::read_amproject_file,
     },
     database::Database,
+    forms::coverage::known_field_names,
     forms::references::{RefTarget, referrers_with_type},
     forms::zone::zone_shape_name,
     input::Input,
@@ -417,8 +419,19 @@ fn update_attenuation(
     let attenuation = apply_patch(&existing, &patch);
     attenuation.validate_rules(&context)?;
 
-    let json_content = serde_json::to_string_pretty(&attenuation)
-        .context("Failed to serialize attenuation to JSON")?;
+    // Serialize over the original file, keeping keys the CLI does not model.
+    let original: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(&file_path).with_context(|| {
+            format!("Failed to read attenuation file: {}", file_path.display())
+        })?)
+        .with_context(|| format!("Failed to parse attenuation file: {}", file_path.display()))?;
+    let known = known_field_names(AssetType::Attenuation);
+    let known: Vec<&str> = known.iter().map(String::as_str).collect();
+    let updated =
+        serde_json::to_value(&attenuation).context("Failed to serialize attenuation to JSON")?;
+    let merged = merge_update_unknown_only(&original, &updated, &known);
+    let json_content =
+        serde_json::to_string_pretty(&merged).context("Failed to serialize attenuation to JSON")?;
     atomic_write(&file_path, json_content.as_bytes())?;
 
     match output.mode() {

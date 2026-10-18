@@ -33,15 +33,16 @@ use crate::{
     common::{
         errors::{CliError, asset_already_exists, asset_not_found, codes},
         files::atomic_write,
+        json_merge::merge_update_unknown_only,
         utils::read_amproject_file,
     },
     database::Database,
+    forms::coverage::known_field_names,
     forms::references::{AssetRef, RefTarget, referrers_with_type},
     input::Input,
     presentation::{Output, OutputMode},
     services::rtpc::{
-        FadePatch, FadeTransitionValues, FadeValues, RtpcPatch, RtpcValues, apply_patch,
-        build_rtpc, merge_into_original,
+        FadePatch, FadeTransitionValues, FadeValues, RtpcPatch, RtpcValues, apply_patch, build_rtpc,
     },
 };
 
@@ -384,7 +385,10 @@ fn update_rtpc(name: &str, args: &RtpcArgs, input: &dyn Input, output: &dyn Outp
     rtpc.validate_rules(&context)?;
 
     // Keys the CLI does not know about stay in the file.
-    let merged = merge_into_original(&raw, &rtpc).context("Failed to serialize RTPC to JSON")?;
+    let known = known_field_names(AssetType::Rtpc);
+    let known: Vec<&str> = known.iter().map(String::as_str).collect();
+    let updated = serde_json::to_value(&rtpc).context("Failed to serialize RTPC to JSON")?;
+    let merged = merge_update_unknown_only(&raw, &updated, &known);
     let json_content =
         serde_json::to_string_pretty(&merged).context("Failed to serialize RTPC to JSON")?;
     atomic_write(&file_path, json_content.as_bytes())?;

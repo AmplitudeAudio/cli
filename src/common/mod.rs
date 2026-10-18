@@ -14,5 +14,6 @@
 
 pub mod errors;
 pub mod files;
+pub mod json_merge;
 pub mod logger;
 pub mod utils;
