@@ -18,7 +18,8 @@ use am::assets::AssetType;
 use am::config::sdk::discover_sdk;
 use am::forms::coverage::{
     BUS_KNOWN_GAPS, BUS_SUPPORTED_FIELDS, DUCK_BUS_KNOWN_GAPS, DUCK_BUS_SUPPORTED_FIELDS,
-    KNOWN_GAPS, PIPELINE_NODE_KNOWN_GAPS, PIPELINE_NODE_SUPPORTED_FIELDS, supported_fields,
+    ENGINE_CONFIG_TABLES, KNOWN_GAPS, PIPELINE_NODE_KNOWN_GAPS, PIPELINE_NODE_SUPPORTED_FIELDS,
+    supported_fields,
 };
 use am::presentation::JsonOutput;
 use am::schema::loader::{SchemaRegistry, load_schemas, table_field_names};
@@ -152,6 +153,60 @@ fn test_every_pipeline_node_schema_field_is_supported_or_a_known_gap() {
         assert!(
             fields.iter().any(|f| f == name),
             "PipelineNodeDefinition.{name} is not a schema field"
+        );
+    }
+}
+
+/// Engine config tables are nested tables of one file, so they are checked separately.
+#[test]
+fn test_every_engine_config_schema_field_is_supported_or_a_known_gap() {
+    let sdk = discover_sdk().expect("AM_SDK_PATH must point at an SDK with schemas/*.bfbs");
+    for (table, supported, gaps) in ENGINE_CONFIG_TABLES {
+        let fields = table_field_names(&sdk, "engine_config_definition.bfbs", table)
+            .expect("engine config schema must load");
+        for field in &fields {
+            assert!(
+                supported.contains(&field.as_str()) || gaps.contains(&field.as_str()),
+                "{table}.{field} is neither supported nor a known gap"
+            );
+        }
+        for name in supported.iter().chain(gaps.iter()) {
+            assert!(
+                fields.iter().any(|f| f == name),
+                "{table}.{name} is not a schema field"
+            );
+        }
+        assert!(
+            gaps.iter().all(|g| !supported.contains(g)),
+            "{table}: a field is both supported and a known gap"
+        );
+    }
+}
+
+/// Every flag of the engine config field table must be a real schema field.
+#[test]
+fn test_engine_config_flag_table_matches_the_schema() {
+    use am::assets::engine_config_fields::FIELDS;
+    let sdk = discover_sdk().expect("AM_SDK_PATH must point at an SDK with schemas/*.bfbs");
+    let table_of = |section: Option<&str>| match section {
+        None => "EngineConfigDefinition",
+        Some("output") => "PlaybackOutputConfig",
+        Some("mixer") => "AudioMixerConfig",
+        Some("game") => "GameSyncConfig",
+        Some("hrtf") => "HRTFConfig",
+        Some(other) => panic!("unexpected section {other}"),
+    };
+    for spec in FIELDS {
+        let fields = table_field_names(
+            &sdk,
+            "engine_config_definition.bfbs",
+            table_of(spec.section),
+        )
+        .unwrap();
+        assert!(
+            fields.iter().any(|f| f == spec.field),
+            "{} is not a schema field",
+            spec.key()
         );
     }
 }

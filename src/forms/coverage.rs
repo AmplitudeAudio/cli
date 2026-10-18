@@ -143,6 +143,60 @@ pub const BUS_KNOWN_GAPS: &[&str] = &[];
 /// `DuckBusDefinition` fields not covered by any bus command (none today).
 pub const DUCK_BUS_KNOWN_GAPS: &[&str] = &[];
 
+/// Tables of `engine_config_definition.fbs`, as `(table, supported fields, known gaps)`.
+///
+/// Engine configs are files, not an [`AssetType`], so they have their own
+/// lists. Scalar and enum fields have a `--<section>-<field>` flag; the two
+/// obstruction/occlusion curves are set with `--from-json` (and default to the
+/// template curves). `unit_schema_coverage_test` checks every list against the schema.
+pub const ENGINE_CONFIG_TABLES: &[(&str, &[&str], &[&str])] = &[
+    (
+        "EngineConfigDefinition",
+        &["output", "mixer", "hrtf", "game", "buses_file", "driver"],
+        &[],
+    ),
+    (
+        "PlaybackOutputConfig",
+        &["frequency", "buffer_size", "format", "channels"],
+        &[],
+    ),
+    (
+        "AudioMixerConfig",
+        &[
+            "active_channels",
+            "virtual_channels",
+            "panning_mode",
+            "pipeline",
+            "resampler",
+            "max_instance_pipelines",
+        ],
+        &[],
+    ),
+    (
+        "GameSyncConfig",
+        &[
+            "listener_fetch_mode",
+            "listeners",
+            "entities",
+            "environments",
+            "rooms",
+            "sound_speed",
+            "doppler_factor",
+            "obstruction",
+            "occlusion",
+            "track_environments",
+            "track_rooms",
+        ],
+        &[],
+    ),
+    (
+        "ObstructionOcclusionConfig",
+        &["lpf_curve", "gain_curve"],
+        &[],
+    ),
+    ("HRTFConfig", &["amir_file", "hrir_sampling"], &[]),
+];
+
 /// Returns every schema field name of `asset_type`, covered or not.
 ///
 /// Covered fields come from [`supported_fields`]; gaps come from [`KNOWN_GAPS`]. The

@@ -63,6 +63,9 @@ pub mod generated {
 // Submodules for each asset type
 mod attenuation;
 pub mod bus;
+pub mod engine_config;
+pub mod engine_config_fields;
+mod engine_config_rules;
 mod collection;
 mod effect;
 mod event;
