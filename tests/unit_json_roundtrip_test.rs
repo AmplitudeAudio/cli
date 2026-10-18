@@ -387,7 +387,9 @@ async fn test_sound_update_keeps_create_key_order_with_unknown_key_last() {
     .unwrap();
     let path = fx.project_root().join("sources/sounds/boom.json");
     let created_keys = keys_in_order(&read_value(&path));
-    inject_unknown(&path, "x_custom", json!({"a": 1}));
+    // Sorts before every known key, so alphabetical output would move it first.
+    inject_unknown(&path, "aaa_unknown", json!(1));
+    inject_unknown(&path, "zz_custom", json!({"a": 1}));
 
     handle_sound_command(
         &sound_command(&["update", "boom", "--gain", "0.5"]),
@@ -399,8 +401,9 @@ async fn test_sound_update_keeps_create_key_order_with_unknown_key_last() {
     .unwrap();
     let updated_keys = keys_in_order(&read_value(&path));
 
+    // Known keys keep create's order; unknown keys follow, in file order.
     let mut expected = created_keys;
-    expected.push("x_custom".to_string());
+    expected.extend(["aaa_unknown".to_string(), "zz_custom".to_string()]);
     assert_eq!(updated_keys, expected);
 }
 
@@ -436,7 +439,9 @@ async fn test_attenuation_update_keeps_create_key_order_with_unknown_key_last() 
     .unwrap();
     let path = fx.project_root().join("sources/attenuators/short.json");
     let created_keys = keys_in_order(&read_value(&path));
-    inject_unknown(&path, "x_custom", json!({"a": 1}));
+    // Sorts before every known key, so alphabetical output would move it first.
+    inject_unknown(&path, "aaa_unknown", json!(1));
+    inject_unknown(&path, "zz_custom", json!({"a": 1}));
 
     handle_attenuation_command(
         &attenuation_command(&["update", "short", "--max-distance", "80"]),
@@ -448,8 +453,9 @@ async fn test_attenuation_update_keeps_create_key_order_with_unknown_key_last() 
     .unwrap();
     let updated_keys = keys_in_order(&read_value(&path));
 
+    // Known keys keep create's order; unknown keys follow, in file order.
     let mut expected = created_keys;
-    expected.push("x_custom".to_string());
+    expected.extend(["aaa_unknown".to_string(), "zz_custom".to_string()]);
     assert_eq!(updated_keys, expected);
 }
 
@@ -470,7 +476,9 @@ async fn test_rtpc_update_keeps_create_key_order_with_unknown_key_last() {
     .unwrap();
     let path = fx.project_root().join("sources/rtpc/speed.json");
     let created_keys = keys_in_order(&read_value(&path));
-    inject_unknown(&path, "x_custom", json!({"a": 1}));
+    // Sorts before every known key, so alphabetical output would move it first.
+    inject_unknown(&path, "aaa_unknown", json!(1));
+    inject_unknown(&path, "zz_custom", json!({"a": 1}));
 
     handle_rtpc_command(
         &rtpc_command(&["update", "speed", "--default-value", "3"]),
@@ -482,7 +490,8 @@ async fn test_rtpc_update_keeps_create_key_order_with_unknown_key_last() {
     .unwrap();
     let updated_keys = keys_in_order(&read_value(&path));
 
+    // Known keys keep create's order; unknown keys follow, in file order.
     let mut expected = created_keys;
-    expected.push("x_custom".to_string());
+    expected.extend(["aaa_unknown".to_string(), "zz_custom".to_string()]);
     assert_eq!(updated_keys, expected);
 }
