@@ -21,7 +21,7 @@
 
 use crate::assets::generated::{Scope, Spatialization};
 use crate::assets::{
-    Asset, AssetType, ProjectContext, ProjectValidator, RtpcCompatibleValue, Sound,
+    Asset, AssetType, FaderAlgorithm, ProjectContext, ProjectValidator, RtpcCompatibleValue, Sound,
     SoundLoopConfig, ValidationError, ValidationLayer,
 };
 use crate::common::errors::codes::ERR_ASSET_ALREADY_EXISTS;
@@ -50,6 +50,58 @@ pub struct SoundValues {
     pub stream: bool,
     pub loop_config: SoundLoopConfig,
     pub spatialization: Spatialization,
+}
+
+/// Default static gain of a new sound.
+pub const DEFAULT_GAIN: f32 = 1.0;
+/// Default static priority of a new sound.
+pub const DEFAULT_PRIORITY: f32 = 128.0;
+
+impl SoundValues {
+    /// Fills a patch's gaps with defaults. The audio file and bus have none:
+    /// a missing audio file is an error and a missing bus becomes the invalid
+    /// id 0, which [`build_sound`] rejects.
+    pub fn from_patch(name: &str, patch: &SoundPatch) -> Result<Self, ValidationError> {
+        let audio_file = patch.audio_file.clone().ok_or_else(|| {
+            ValidationError::type_rule_violation(
+                "Sound asset has no audio file path",
+                "Sound assets must reference an audio file in the data/ directory",
+            )
+            .with_field("path")
+        })?;
+        let loop_config = match (patch.loop_enabled.unwrap_or(false), patch.loop_count) {
+            (false, _) => SoundLoopConfig::disabled(),
+            (true, None | Some(0)) => SoundLoopConfig::infinite(),
+            (true, Some(count)) => SoundLoopConfig::count(count),
+        };
+
+        Ok(Self {
+            name: name.to_string(),
+            audio_file,
+            bus: patch.bus.unwrap_or(0),
+            attenuation: patch.attenuation.unwrap_or(0),
+            effect: patch.effect.unwrap_or(0),
+            scope: patch.scope.unwrap_or_default(),
+            fader: patch
+                .fader
+                .clone()
+                .unwrap_or_else(|| FaderAlgorithm::Linear.to_string()),
+            gain: patch
+                .gain
+                .clone()
+                .unwrap_or_else(|| RtpcCompatibleValue::static_value(DEFAULT_GAIN)),
+            pitch: patch.pitch.clone(),
+            near_field_gain: patch.near_field_gain.clone(),
+            priority: patch
+                .priority
+                .clone()
+                .unwrap_or_else(|| RtpcCompatibleValue::static_value(DEFAULT_PRIORITY)),
+            spread: patch.spread.clone(),
+            stream: patch.stream.unwrap_or(false),
+            loop_config,
+            spatialization: patch.spatialization.unwrap_or(Spatialization::None),
+        })
+    }
 }
 
 fn id_collision_error(name: &str, id: u64) -> ValidationError {

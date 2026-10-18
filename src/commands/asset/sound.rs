@@ -12,9 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+
 //! Sound asset commands.
 //!
-//! Implements CRUD operations for Sound assets in Amplitude projects.
+//! Implements CRUD operations for Sound assets in Amplitude projects. The
+//! create/update handlers only gather values (flags, then prompts when the
+//! session is interactive); building and merging lives in `services::sound`.
 
 use std::env;
 use std::fs;
@@ -23,14 +26,11 @@ use std::sync::Arc;
 use anyhow::{Context, Result};
 use clap::Subcommand;
 use colored::Colorize;
-use inquire::validator::Validation;
 use serde_json::json;
 
-use crate::common::utils::generate_unique_id;
 use crate::{
     assets::{
-        Asset, AssetType, ProjectContext, ProjectValidator, RtpcCompatibleValue, Sound,
-        SoundLoopConfig, Spatialization,
+        Asset, ProjectContext, ProjectValidator, RtpcCompatibleValue, Sound, Spatialization,
     },
     common::{
         errors::{CliError, asset_already_exists, asset_not_found, codes},
@@ -38,12 +38,15 @@ use crate::{
         utils::{read_amproject_file, truncate_string},
     },
     database::Database,
-    forms::{pick::pick_reference, references::rule_for},
-    input::{Input, select_index},
+    input::Input,
     presentation::{Output, OutputMode},
+    services::sound::{SoundPatch, SoundValues, apply_patch, build_sound},
 };
 
-use super::parse_spatialization;
+use super::sound_args::{SoundExtraArgs, SoundFlags, resolve_patch, validate_patch_references};
+use super::sound_prompts::{
+    complete_create_patch, prompt_audio_file, prompt_bus, prompt_update_patch,
+};
 
 /// The name of the current asset.
 ///
@@ -55,9 +58,10 @@ const ASSET_NAME: &str = "Sound";
 pub enum SoundCommands {
     /// Create a new sound asset
     #[command(after_help = "Examples:
-  am asset sound create explosion --file audio/explosion.wav
-  am asset sound create footstep --file audio/step.wav --gain 0.8 --loop
-  am asset sound create ambient --stream --spatialization position
+  am asset sound create explosion --file audio/explosion.wav --bus sfx
+  am asset sound create footstep --file audio/step.wav --bus sfx --gain 0.8 --loop
+  am asset sound create ambient --bus sfx --stream --spatialization position
+  am asset sound create hit --bus sfx --attenuation short --scope entity --pitch 1.2
 ")]
     Create {
         /// Name of the sound asset
@@ -71,9 +75,9 @@ pub enum SoundCommands {
         #[arg(short, long)]
         gain: Option<f32>,
 
-        /// Bus ID for audio routing (required; see 'am asset bus list')
+        /// Bus to route the sound to, by name or ID (required; see 'am asset bus list')
         #[arg(short, long)]
-        bus: Option<u64>,
+        bus: Option<String>,
 
         /// Playback priority (0-255, omit for default: 128; invalid values are rejected)
         #[arg(short, long)]
@@ -98,6 +102,9 @@ pub enum SoundCommands {
         /// Stereo/multichannel image width in degrees (0-360); 0 collapses channels to the sound's direction
         #[arg(long)]
         spread: Option<f32>,
+
+        #[command(flatten)]
+        extra: SoundExtraArgs,
     },
 
     /// List all sound assets in the project
@@ -111,6 +118,7 @@ pub enum SoundCommands {
     #[command(after_help = "Examples:
   am asset sound update explosion --gain 0.5
   am asset sound update ambient --file audio/new_ambient.wav --stream
+  am asset sound update hit --effect echo --scope entity
 ")]
     Update {
         /// Name of the sound asset to update
@@ -124,9 +132,9 @@ pub enum SoundCommands {
         #[arg(short, long)]
         gain: Option<f32>,
 
-        /// New bus ID for audio routing
+        /// New bus, by name or ID
         #[arg(short, long)]
-        bus: Option<u64>,
+        bus: Option<String>,
 
         /// New playback priority (0-255)
         #[arg(short, long)]
@@ -151,6 +159,9 @@ pub enum SoundCommands {
         /// Stereo/multichannel image width in degrees (0-360); 0 collapses channels to the sound's direction
         #[arg(long)]
         spread: Option<f32>,
+
+        #[command(flatten)]
+        extra: SoundExtraArgs,
     },
 }
 
@@ -173,22 +184,21 @@ pub async fn handler(
             loop_count,
             spatialization,
             spread,
+            extra,
         } => {
-            create_sound(
-                name,
-                file.clone(),
-                *gain,
-                *bus,
-                *priority,
-                *stream,
-                *loop_enabled,
-                *loop_count,
-                spatialization.clone(),
-                *spread,
-                input,
-                output,
-            )
-            .await
+            let flags = SoundFlags {
+                file: file.clone(),
+                gain: *gain,
+                bus: bus.clone(),
+                priority: *priority,
+                stream: stream.then_some(true),
+                loop_enabled: loop_enabled.then_some(true),
+                loop_count: *loop_count,
+                spatialization: spatialization.clone(),
+                spread: *spread,
+                extra: extra.clone(),
+            };
+            create_sound(name, flags, input, output).await
         }
         SoundCommands::List {} => list_sounds(output).await,
         SoundCommands::Update {
@@ -202,39 +212,54 @@ pub async fn handler(
             loop_count,
             spatialization,
             spread,
+            extra,
         } => {
-            update_sound(
-                name,
-                file.clone(),
-                *gain,
-                *bus,
-                *priority,
-                *stream,
-                *loop_enabled,
-                *loop_count,
-                spatialization.clone(),
-                *spread,
-                input,
-                output,
-            )
-            .await
+            let flags = SoundFlags {
+                file: file.clone(),
+                gain: *gain,
+                bus: bus.clone(),
+                priority: *priority,
+                stream: *stream,
+                loop_enabled: *loop_enabled,
+                loop_count: *loop_count,
+                spatialization: spatialization.clone(),
+                spread: *spread,
+                extra: extra.clone(),
+            };
+            update_sound(name, flags, input, output).await
         }
     }
 }
 
+/// Whether this session may ask the user questions (never in JSON or non-interactive runs).
+fn can_prompt(input: &dyn Input, output: &dyn Output) -> bool {
+    input.is_interactive() && output.mode() != OutputMode::Json
+}
+
+fn missing_bus_error() -> CliError {
+    CliError::new(
+        codes::ERR_VALIDATION_EMPTY_REFERENCE,
+        "Missing required --bus",
+        "Sounds must be routed to a bus and cannot prompt in non-interactive or JSON mode",
+    )
+    .with_suggestion(
+        "Pass --bus <name|id> (see 'am asset bus list'); if the project has no bus yet, create a bus first",
+    )
+}
+
+fn missing_file_error() -> CliError {
+    CliError::new(
+        codes::ERR_VALIDATION_FIELD,
+        "Audio file path is required",
+        "The --file flag must be provided in non-interactive mode",
+    )
+    .with_suggestion("Use --file <path> to specify the audio file path")
+}
+
 /// Create a new sound asset.
-#[allow(clippy::too_many_arguments)]
 async fn create_sound(
     name: &str,
-    file: Option<String>,
-    gain: Option<f32>,
-    bus: Option<u64>,
-    priority: Option<u8>,
-    stream: bool,
-    loop_enabled: bool,
-    loop_count: Option<u32>,
-    spatialization: Option<String>,
-    spread: Option<f32>,
+    flags: SoundFlags,
     input: &dyn Input,
     output: &dyn Output,
 ) -> Result<()> {
@@ -255,38 +280,44 @@ async fn create_sound(
     };
     let sounds_dir = sources_base.join("sounds");
     let sound_file_path = sounds_dir.join(format!("{}.json", name));
-
-    if sound_file_path.exists() {
-        return Err(asset_already_exists(ASSET_NAME, name)
-            .with_suggestion(format!(
-                "Use 'am asset sound update {}' to modify it, or choose a different name",
-                name
-            ))
-            .into());
-    }
-
-    // Build populated ProjectContext for validation (used throughout)
-    let validator = ProjectValidator::new(current_dir.clone(), output)?;
-    let context = ProjectContext::new(current_dir.clone()).with_validator(validator);
-
-    // Check name uniqueness via ProjectContext registry
-    if context.has_name(crate::assets::AssetType::Sound, name) {
-        return Err(asset_already_exists(ASSET_NAME, name)
-            .with_suggestion(format!(
-                "Use 'am asset sound update {}' to modify it, or choose a different name",
-                name
-            ))
-            .into());
-    }
-
-    // Step 3: Get audio file path (prompt if not provided)
-    let audio_file = if let Some(f) = file {
-        f
-    } else {
-        prompt_audio_file(input)?
+    let already_exists = || {
+        asset_already_exists(ASSET_NAME, name).with_suggestion(format!(
+            "Use 'am asset sound update {}' to modify it, or choose a different name",
+            name
+        ))
     };
 
-    // Step 4: Validate audio file exists
+    if sound_file_path.exists() {
+        return Err(already_exists().into());
+    }
+
+    let validator = ProjectValidator::new(current_dir.clone(), output)?;
+    let context = ProjectContext::new(current_dir.clone()).with_validator(validator);
+    let validator = context
+        .validator
+        .as_ref()
+        .context("Project validator is unavailable")?;
+    if context.has_name(crate::assets::AssetType::Sound, name) {
+        return Err(already_exists().into());
+    }
+
+    // Step 3: Resolve flags; unknown names and dangling ids fail before any prompt
+    let patch = resolve_patch(&flags, validator)?;
+    validate_patch_references(&patch, validator)?;
+    let interactive = can_prompt(input, output);
+
+    // Step 4: Required fields, bus first so a missing bus fails fast
+    let bus = match (patch.bus, interactive) {
+        (Some(bus), _) => bus,
+        (None, true) => prompt_bus(input, validator)?,
+        (None, false) => return Err(missing_bus_error().into()),
+    };
+    let audio_file = match (&patch.audio_file, interactive) {
+        (Some(file), _) => file.clone(),
+        (None, true) => prompt_audio_file(input)?,
+        (None, false) => return Err(missing_file_error().into()),
+    };
+
     let data_base = if project_config.data_dir.is_empty() {
         current_dir.clone()
     } else {
@@ -305,89 +336,26 @@ async fn create_sound(
         ))
         .into());
     }
-
-    // Step 4b: Resolve the bus before anything else is prompted or written
-    let bus_id = resolve_bus(bus, input, output, &context)?;
-
-    // Step 5: Get gain value (prompt if not provided)
-    let gain_value = if let Some(g) = gain {
-        validate_gain(g)?;
-        g
-    } else {
-        prompt_gain(input)?
+    let patch = SoundPatch {
+        bus: Some(bus),
+        audio_file: Some(audio_file),
+        ..patch
     };
 
-    // Step 6: Get priority value (prompt if not provided)
-    let priority_value = if let Some(p) = priority {
-        p
+    // Step 5: Optional fields, interactive only
+    let patch = if interactive {
+        complete_create_patch(input, validator, patch)?
     } else {
-        prompt_priority(input)?
+        patch
     };
 
-    // Step 7: Get stream value (already from flag, or prompt)
-    let stream_value = if stream { true } else { prompt_stream(input)? };
-
-    // Step 8: Get loop configuration
-    let loop_config = if loop_enabled {
-        let count = loop_count.unwrap_or(0);
-        if count == 0 {
-            SoundLoopConfig::infinite()
-        } else {
-            SoundLoopConfig::count(count)
-        }
-    } else {
-        prompt_loop_config(input)?
-    };
-
-    // Step 9: Get spatialization mode
-    let spatialization_mode = if let Some(s) = spatialization {
-        parse_spatialization(&s)?
-    } else {
-        prompt_spatialization(input)?
-    };
-
-    // Step 11: Generate unique ID and check for collisions against all project assets
-    let mut id = generate_unique_id(name);
-    let mut retries = 0;
-    while context.has_id(id) && retries < 3 {
-        id = generate_unique_id(&format!("{}{}", name, retries));
-        retries += 1;
-    }
-    if context.has_id(id) {
-        return Err(CliError::new(
-            codes::ERR_ASSET_ALREADY_EXISTS,
-            format!("Generated ID {} collides with an existing asset", id),
-            "All generated ID attempts collided with existing assets in the project",
-        )
-        .with_suggestion("Try a different name or wait a moment and retry")
-        .into());
-    }
-
-    // Step 12: Build the Sound asset
-    let mut builder = Sound::builder(id, name)
-        .path(&audio_file)
-        .bus(bus_id)
-        .gain(gain_value)
-        .priority(priority_value)
-        .stream(stream_value)
-        .loop_config(loop_config)
-        .spatialization(spatialization_mode);
-    if let Some(width) = spread {
-        builder = builder.spread(width);
-    }
-    let sound = builder.build();
-
-    // Step 13: Validate the sound (type rules) with populated context (built in step 2)
-    sound.validate_rules(&context)?;
-
-    // Step 14: Serialize to JSON
+    // Step 6: Build and validate through the service, then write atomically
+    let sound = build_sound(SoundValues::from_patch(name, &patch)?, &context)?;
     let json_content =
         serde_json::to_string_pretty(&sound).context("Failed to serialize sound to JSON")?;
-
-    // Step 15: Write using atomic write pattern
     atomic_write(&sound_file_path, json_content.as_bytes())?;
 
-    // Step 16: Output success
+    // Step 7: Output success
     match output.mode() {
         OutputMode::Json => {
             output.success(
@@ -413,39 +381,6 @@ async fn create_sound(
     }
 
     Ok(())
-}
-
-/// Resolves the bus a new sound is routed to.
-///
-/// Uses the `--bus` value when given. Otherwise an interactive session picks one
-/// from the project's buses; non-interactive and JSON runs fail naming `--bus`
-/// instead of prompting.
-fn resolve_bus(
-    bus: Option<u64>,
-    input: &dyn Input,
-    output: &dyn Output,
-    context: &ProjectContext,
-) -> Result<u64> {
-    if let Some(id) = bus {
-        return Ok(id);
-    }
-
-    let rule = rule_for(AssetType::Sound, "bus").context("Sound has no bus reference rule")?;
-    let interactive = input.is_interactive() && output.mode() != OutputMode::Json;
-    if interactive && let Some(validator) = &context.validator {
-        return pick_reference(input, validator, &rule)?
-            .context("A required reference cannot be left unset");
-    }
-
-    Err(CliError::new(
-        codes::ERR_VALIDATION_EMPTY_REFERENCE,
-        "Missing required --bus",
-        "Sounds must be routed to a bus and cannot prompt in non-interactive or JSON mode",
-    )
-    .with_suggestion(
-        "Pass --bus <id> (see 'am asset bus list'); if the project has no bus yet, create a bus first",
-    )
-    .into())
 }
 
 /// Maximum character length for paths before truncation in table display.
@@ -689,177 +624,10 @@ async fn list_sounds(output: &dyn Output) -> Result<()> {
     Ok(())
 }
 
-/// Validate gain is in valid range.
-fn validate_gain(gain: f32) -> Result<()> {
-    if !(0.0..=1.0).contains(&gain) {
-        return Err(CliError::new(
-            codes::ERR_VALIDATION_FIELD,
-            format!("Invalid gain value: {}", gain),
-            "Gain must be between 0.0 and 1.0",
-        )
-        .with_suggestion("Set gain to a value between 0.0 (silent) and 1.0 (full volume)")
-        .into());
-    }
-    Ok(())
-}
-
-/// Prompt for audio file path.
-fn prompt_audio_file(input: &dyn Input) -> Result<String> {
-    input
-        .prompt_text(
-            "Path to audio file (relative to data/)",
-            Some("sfx/sound.wav"),
-            None,
-            Some(&|value: &str| {
-                if value.trim().is_empty() {
-                    return Ok(Validation::Invalid("Audio file path is required".into()));
-                }
-                Ok(Validation::Valid)
-            }),
-        )
-        .map_err(|e| {
-            // In non-interactive mode, provide a helpful error
-            if e.to_string().contains("non-interactive") || e.to_string().contains("blocked") {
-                CliError::new(
-                    codes::ERR_VALIDATION_FIELD,
-                    "Audio file path is required",
-                    "The --file flag must be provided in non-interactive mode",
-                )
-                .with_suggestion("Use --file <path> to specify the audio file path")
-                .into()
-            } else {
-                e
-            }
-        })
-}
-
-/// Prompt for gain value.
-///
-/// Only called when --gain flag was NOT provided (field omitted).
-/// Uses default of 1.0 in non-interactive mode, which is correct
-/// because omitted fields should get defaults (AC #5).
-fn prompt_gain(input: &dyn Input) -> Result<f32> {
-    let result = input.prompt_text(
-        "Volume gain [0.0-1.0]",
-        Some("1.0"),
-        None,
-        Some(&|value: &str| match value.trim().parse::<f32>() {
-            Ok(g) if (0.0..=1.0).contains(&g) => Ok(Validation::Valid),
-            Ok(g) => Ok(Validation::Invalid(
-                format!("Gain must be between 0.0 and 1.0, got {}", g).into(),
-            )),
-            Err(_) => Ok(Validation::Invalid("Must be a number".into())),
-        }),
-    );
-
-    match result {
-        Ok(value) => Ok(value.trim().parse().unwrap_or(1.0)),
-        Err(_) => Ok(1.0), // Default to 1.0 when field omitted in non-interactive mode
-    }
-}
-
-/// Prompt for priority value.
-///
-/// Only called when --priority flag was NOT provided (field omitted).
-/// Uses default of 128 in non-interactive mode, which is correct
-/// because omitted fields should get defaults (AC #5).
-fn prompt_priority(input: &dyn Input) -> Result<u8> {
-    let result = input.prompt_text(
-        "Playback priority [0-255]",
-        Some("128"),
-        None,
-        Some(&|value: &str| match value.trim().parse::<u8>() {
-            Ok(_) => Ok(Validation::Valid),
-            Err(_) => Ok(Validation::Invalid(
-                "Must be a number between 0 and 255".into(),
-            )),
-        }),
-    );
-
-    match result {
-        Ok(value) => Ok(value.trim().parse().unwrap_or(128)),
-        Err(_) => Ok(128), // Default to 128 when field omitted in non-interactive mode
-    }
-}
-
-/// Prompt for stream preference.
-fn prompt_stream(input: &dyn Input) -> Result<bool> {
-    match input.confirm("Stream from disk?", Some(false)) {
-        Ok(value) => Ok(value),
-        Err(_) => Ok(false), // Default to false in non-interactive mode
-    }
-}
-
-/// Prompt for loop configuration.
-fn prompt_loop_config(input: &dyn Input) -> Result<SoundLoopConfig> {
-    let loop_enabled = match input.confirm("Enable looping?", Some(false)) {
-        Ok(value) => value,
-        Err(_) => return Ok(SoundLoopConfig::disabled()), // Default in non-interactive mode
-    };
-
-    if !loop_enabled {
-        return Ok(SoundLoopConfig::disabled());
-    }
-
-    // Ask for loop count
-    let result = input.prompt_text(
-        "Loop count (0=infinite)",
-        Some("0"),
-        None,
-        Some(&|value: &str| match value.trim().parse::<u32>() {
-            Ok(_) => Ok(Validation::Valid),
-            Err(_) => Ok(Validation::Invalid("Must be a non-negative number".into())),
-        }),
-    );
-
-    match result {
-        Ok(value) => {
-            let count: u32 = value.trim().parse().unwrap_or(0);
-            if count == 0 {
-                Ok(SoundLoopConfig::infinite())
-            } else {
-                Ok(SoundLoopConfig::count(count))
-            }
-        }
-        Err(_) => Ok(SoundLoopConfig::infinite()), // Default to infinite in non-interactive mode
-    }
-}
-
-/// Prompt for spatialization mode.
-fn prompt_spatialization(input: &dyn Input) -> Result<Spatialization> {
-    let options = vec![
-        "None".to_string(),
-        "Position".to_string(),
-        "Position + Orientation".to_string(),
-        "HRTF".to_string(),
-    ];
-
-    let modes = [
-        Spatialization::None,
-        Spatialization::Position,
-        Spatialization::PositionOrientation,
-        Spatialization::HRTF,
-    ];
-
-    match select_index(input, "Spatialization mode:", &options) {
-        Ok(idx) => Ok(modes[idx]),
-        Err(_) => Ok(Spatialization::None), // Default in non-interactive mode
-    }
-}
-
 /// Update an existing sound asset.
-#[allow(clippy::too_many_arguments)]
 async fn update_sound(
     name: &str,
-    file: Option<String>,
-    gain: Option<f32>,
-    bus: Option<u64>,
-    priority: Option<u8>,
-    stream: Option<bool>,
-    loop_enabled: Option<bool>,
-    loop_count: Option<u32>,
-    spatialization: Option<String>,
-    spread: Option<f32>,
+    flags: SoundFlags,
     input: &dyn Input,
     output: &dyn Output,
 ) -> Result<()> {
@@ -895,49 +663,30 @@ async fn update_sound(
         "Failed to read sound file: {}",
         sound_file_path.display()
     ))?;
-    let mut sound: Sound = serde_json::from_str(&content).context(format!(
+    let existing: Sound = serde_json::from_str(&content).context(format!(
         "Failed to parse sound file: {}",
         sound_file_path.display()
     ))?;
 
-    // Step 4: Determine if we have any flag values (non-interactive mode)
-    let has_any_flag = file.is_some()
-        || gain.is_some()
-        || bus.is_some()
-        || priority.is_some()
-        || stream.is_some()
-        || loop_enabled.is_some()
-        || loop_count.is_some()
-        || spatialization.is_some()
-        || spread.is_some();
-
-    // Step 5: Apply updates based on mode, tracking which fields changed
-    let updated_fields: Vec<String> = if has_any_flag {
-        // Non-interactive mode: only update fields provided via flags
-        apply_flag_updates(
-            &mut sound,
-            file,
-            gain,
-            bus,
-            priority,
-            stream,
-            loop_enabled,
-            loop_count,
-            spatialization,
-            spread,
-        )?
-    } else {
-        // Interactive mode: prompt for each field with current values as defaults
-        prompt_sound_updates(&mut sound, input)?
-    };
-
-    // Step 6: Validate the updated sound with populated context
     let validator = ProjectValidator::new(current_dir.clone(), output)?;
     let context = ProjectContext::new(current_dir.clone()).with_validator(validator);
+    let validator = context
+        .validator
+        .as_ref()
+        .context("Project validator is unavailable")?;
+
+    // Step 4: Flags win; with none, an interactive session is offered every field
+    let mut patch = resolve_patch(&flags, validator)?;
+    if patch.is_empty() && can_prompt(input, output) {
+        patch = prompt_update_patch(input, validator, &existing)?;
+    }
+
+    // Step 5: Merge into a copy and validate the new state
+    let sound = apply_patch(&existing, &patch);
     sound.validate_rules(&context).map_err(|e| {
         if e.field.as_deref() == Some("bus") {
             let suggestion = format!(
-                "Run 'am asset sound update {name} --bus <id>' with an existing bus (see 'am asset bus list')"
+                "Run 'am asset sound update {name} --bus <name|id>' with an existing bus (see 'am asset bus list')"
             );
             e.with_suggestion(suggestion)
         } else {
@@ -945,12 +694,12 @@ async fn update_sound(
         }
     })?;
 
-    // Step 7: Serialize and write atomically
+    // Step 6: Serialize and write atomically
     let json_content =
         serde_json::to_string_pretty(&sound).context("Failed to serialize sound to JSON")?;
     atomic_write(&sound_file_path, json_content.as_bytes())?;
 
-    // Step 8: Output success
+    // Step 7: Output success
     match output.mode() {
         OutputMode::Json => {
             output.success(
@@ -959,7 +708,7 @@ async fn update_sound(
                     "name": sound.name(),
                     "path": sound_file_path.to_string_lossy(),
                     "audio_file": sound.path.as_deref().unwrap_or(""),
-                    "updated_fields": updated_fields,
+                    "updated_fields": patch.changed_fields(),
                 }),
                 None,
             );
@@ -977,270 +726,4 @@ async fn update_sound(
     }
 
     Ok(())
-}
-
-/// Apply flag updates to a sound (non-interactive mode).
-/// Returns a list of field names that were updated.
-fn apply_flag_updates(
-    sound: &mut Sound,
-    file: Option<String>,
-    gain: Option<f32>,
-    bus: Option<u64>,
-    priority: Option<u8>,
-    stream: Option<bool>,
-    loop_enabled: Option<bool>,
-    loop_count: Option<u32>,
-    spatialization: Option<String>,
-    spread: Option<f32>,
-) -> Result<Vec<String>> {
-    let mut updated_fields = Vec::new();
-
-    if let Some(f) = file {
-        sound.path = Some(f);
-        updated_fields.push("audio_file".to_string());
-    }
-
-    if let Some(g) = gain {
-        validate_gain(g)?;
-        sound.gain = Some(RtpcCompatibleValue::static_value(g));
-        updated_fields.push("gain".to_string());
-    }
-
-    if let Some(b) = bus {
-        sound.bus = b;
-        updated_fields.push("bus".to_string());
-    }
-
-    if let Some(p) = priority {
-        sound.priority = Some(RtpcCompatibleValue::static_value(p as f32));
-        updated_fields.push("priority".to_string());
-    }
-
-    if let Some(s) = stream {
-        sound.stream = s;
-        updated_fields.push("stream".to_string());
-    }
-
-    if let Some(enabled) = loop_enabled {
-        let loop_cfg = sound.loop_.get_or_insert(SoundLoopConfig::disabled());
-        loop_cfg.enabled = enabled;
-        updated_fields.push("loop_enabled".to_string());
-    }
-
-    if let Some(count) = loop_count {
-        let loop_cfg = sound.loop_.get_or_insert(SoundLoopConfig::disabled());
-        loop_cfg.loop_count = count;
-        // Auto-enable looping if count is specified
-        if count > 0 && !loop_cfg.enabled {
-            loop_cfg.enabled = true;
-        }
-        updated_fields.push("loop_count".to_string());
-    }
-
-    if let Some(s) = spatialization {
-        sound.spatialization = parse_spatialization(&s)?;
-        updated_fields.push("spatialization".to_string());
-    }
-
-    if let Some(w) = spread {
-        sound.spread = Some(RtpcCompatibleValue::static_value(w));
-        updated_fields.push("spread".to_string());
-    }
-
-    Ok(updated_fields)
-}
-
-/// Prompt for sound updates in interactive mode.
-/// Returns a list of field names that were updated.
-fn prompt_sound_updates(sound: &mut Sound, input: &dyn Input) -> Result<Vec<String>> {
-    let mut updated_fields = Vec::new();
-
-    // Prompt for audio file path
-    let current_path = sound.path.as_deref().unwrap_or("");
-    if let Some(new_file) = prompt_update_text(input, "Audio file path", current_path)? {
-        sound.path = Some(new_file);
-        updated_fields.push("audio_file".to_string());
-    }
-
-    // Prompt for gain
-    let current_gain = sound
-        .gain
-        .as_ref()
-        .and_then(|g| g.as_static())
-        .unwrap_or(1.0);
-    if let Some(new_gain) = prompt_update_number(
-        input,
-        "Volume gain [0.0-1.0]",
-        current_gain,
-        |v| (0.0..=1.0).contains(&v),
-        "Gain must be between 0.0 and 1.0",
-    )? {
-        sound.gain = Some(RtpcCompatibleValue::static_value(new_gain));
-        updated_fields.push("gain".to_string());
-    }
-
-    // Prompt for priority
-    let current_priority = sound
-        .priority
-        .as_ref()
-        .and_then(|p| p.as_static())
-        .unwrap_or(128.0) as u8;
-    if let Some(new_priority) = prompt_update_number(
-        input,
-        "Playback priority [0-255]",
-        current_priority as f32,
-        |_| true, // u8 parse already validates range
-        "Priority must be between 0 and 255",
-    )? {
-        sound.priority = Some(RtpcCompatibleValue::static_value(new_priority));
-        updated_fields.push("priority".to_string());
-    }
-
-    // Prompt for streaming
-    if let Some(new_stream) = prompt_update_bool(input, "Stream from disk", sound.stream)? {
-        sound.stream = new_stream;
-        updated_fields.push("stream".to_string());
-    }
-
-    // Prompt for looping
-    let loop_cfg = sound.loop_.get_or_insert(SoundLoopConfig::disabled());
-    let current_loop_enabled = loop_cfg.enabled;
-    let current_loop_count = loop_cfg.loop_count;
-    if let Some(new_loop) = prompt_update_bool(input, "Enable looping", current_loop_enabled)? {
-        let loop_cfg = sound.loop_.get_or_insert(SoundLoopConfig::disabled());
-        loop_cfg.enabled = new_loop;
-        updated_fields.push("loop_enabled".to_string());
-        if new_loop {
-            // Ask for loop count
-            if let Some(new_count) = prompt_update_number(
-                input,
-                "Loop count (0=infinite)",
-                current_loop_count as f32,
-                |_| true,
-                "",
-            )? {
-                let loop_cfg = sound.loop_.get_or_insert(SoundLoopConfig::disabled());
-                if new_count < 0.0 {
-                    return Err(CliError::new(
-                        crate::common::errors::codes::ERR_VALIDATION_FIELD,
-                        "Loop count cannot be negative",
-                        "Loop count must be a non-negative integer (0 = infinite)",
-                    )
-                    .into());
-                }
-                if new_count > u32::MAX as f32 {
-                    return Err(CliError::new(
-                        crate::common::errors::codes::ERR_VALIDATION_FIELD,
-                        format!("Loop count too large: maximum is {}", u32::MAX),
-                        "Loop count exceeds maximum allowed value",
-                    )
-                    .into());
-                }
-                loop_cfg.loop_count = new_count as u32;
-                updated_fields.push("loop_count".to_string());
-            }
-        }
-    }
-
-    // Prompt for spatialization
-    if let Some(new_spat) = prompt_update_spatialization(input, &sound.spatialization)? {
-        sound.spatialization = new_spat;
-        updated_fields.push("spatialization".to_string());
-    }
-
-    Ok(updated_fields)
-}
-
-/// Prompt for an optional text field update.
-/// Returns Some(new_value) if user provided a new value, None to keep current.
-fn prompt_update_text(
-    input: &dyn Input,
-    label: &str,
-    current_value: &str,
-) -> Result<Option<String>> {
-    let prompt = format!("{} (current: {}, Enter to keep)", label, current_value);
-    match input.prompt_text(&prompt, Some(current_value), None, None) {
-        Ok(value) if value == current_value => Ok(None), // No change
-        Ok(value) => Ok(Some(value)),
-        Err(_) => Ok(None), // Non-interactive, keep current
-    }
-}
-
-/// Prompt for an optional numeric field update.
-fn prompt_update_number(
-    input: &dyn Input,
-    label: &str,
-    current_value: f32,
-    validator: impl Fn(f32) -> bool,
-    error_msg: &str,
-) -> Result<Option<f32>> {
-    let current_str = format!("{}", current_value);
-    let prompt = format!("{} (current: {}, Enter to keep)", label, current_value);
-
-    let error_msg = error_msg.to_string();
-    let result = input.prompt_text(
-        &prompt,
-        Some(&current_str),
-        None,
-        Some(&move |value: &str| match value.trim().parse::<f32>() {
-            Ok(v) if validator(v) => Ok(Validation::Valid),
-            Ok(_) => Ok(Validation::Invalid(error_msg.clone().into())),
-            Err(_) => Ok(Validation::Invalid("Must be a number".into())),
-        }),
-    );
-
-    match result {
-        Ok(value) => {
-            let parsed: f32 = value.trim().parse().unwrap_or(current_value);
-            if (parsed - current_value).abs() < f32::EPSILON {
-                Ok(None) // No change
-            } else {
-                Ok(Some(parsed))
-            }
-        }
-        Err(_) => Ok(None), // Non-interactive, keep current
-    }
-}
-
-/// Prompt for an optional boolean field update.
-fn prompt_update_bool(input: &dyn Input, label: &str, current_value: bool) -> Result<Option<bool>> {
-    let prompt = format!(
-        "{} (current: {})",
-        label,
-        if current_value { "yes" } else { "no" }
-    );
-    match input.confirm(&prompt, Some(current_value)) {
-        Ok(value) if value == current_value => Ok(None), // No change
-        Ok(value) => Ok(Some(value)),
-        Err(_) => Ok(None), // Non-interactive, keep current
-    }
-}
-
-/// Prompt for spatialization update.
-fn prompt_update_spatialization(
-    input: &dyn Input,
-    current: &Spatialization,
-) -> Result<Option<Spatialization>> {
-    let options = vec![
-        "None".to_string(),
-        "Position".to_string(),
-        "Position + Orientation".to_string(),
-        "HRTF".to_string(),
-    ];
-
-    let modes = [
-        Spatialization::None,
-        Spatialization::Position,
-        Spatialization::PositionOrientation,
-        Spatialization::HRTF,
-    ];
-
-    let current_idx = modes.iter().position(|m| m == current).unwrap_or(0);
-    let prompt = format!("Spatialization mode (current: {}):", options[current_idx]);
-
-    match select_index(input, &prompt, &options) {
-        Ok(idx) if idx == current_idx => Ok(None), // No change
-        Ok(idx) => Ok(Some(modes[idx])),
-        Err(_) => Ok(None), // Non-interactive, keep current
-    }
 }

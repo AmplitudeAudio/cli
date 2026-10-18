@@ -15,8 +15,8 @@
 //! Tracks which top-level schema fields the create/update commands cover.
 //!
 //! A field is "supported" when a create or update flow can set it to a
-//! meaningful value (static values only for RTPC-compatible fields; partial
-//! sub-field coverage is recorded in the field audit document). Every other
+//! meaningful value (RTPC-compatible fields accept a static value or an RTPC
+//! binding; partial sub-field coverage is recorded in the field audit document). Every other
 //! schema field must be listed in [`KNOWN_GAPS`]. The coverage test fails when
 //! a schema field is in neither list, and when a gap is not a real field or is
 //! also supported, so the gap list can only shrink.
@@ -37,6 +37,12 @@ pub fn supported_fields(asset_type: AssetType) -> &'static [&'static str] {
             "spatialization",
             "path",
             "spread",
+            "effect",
+            "near_field_gain",
+            "pitch",
+            "attenuation",
+            "scope",
+            "fader",
         ],
         AssetType::Collection => &[
             "id",
@@ -77,13 +83,6 @@ pub fn supported_fields(asset_type: AssetType) -> &'static [&'static str] {
 
 /// Schema fields deliberately not yet covered by any create/update flow.
 pub const KNOWN_GAPS: &[(AssetType, &str)] = &[
-    // Sound
-    (AssetType::Sound, "effect"),
-    (AssetType::Sound, "near_field_gain"),
-    (AssetType::Sound, "pitch"),
-    (AssetType::Sound, "attenuation"),
-    (AssetType::Sound, "scope"),
-    (AssetType::Sound, "fader"),
     // Collection
     (AssetType::Collection, "effect"),
     (AssetType::Collection, "pitch"),

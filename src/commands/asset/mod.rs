@@ -21,6 +21,8 @@ mod collection;
 mod effect;
 mod event;
 mod sound;
+mod sound_args;
+mod sound_prompts;
 mod soundbank;
 mod switch;
 mod switch_container;

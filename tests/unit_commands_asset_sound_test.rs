@@ -146,7 +146,7 @@ fn test_p0_sound_create_command_parses_with_all_flags() {
             assert_eq!(name, "explosion");
             assert_eq!(file, Some("sfx/explosion.wav".to_string()));
             assert_eq!(gain, Some(0.8));
-            assert_eq!(bus, Some(100));
+            assert_eq!(bus.as_deref(), Some("100"));
             assert_eq!(priority, Some(200));
             assert!(stream);
             assert!(loop_enabled);
@@ -197,7 +197,7 @@ fn test_p1_sound_create_command_short_flags() {
             assert_eq!(name, "explosion");
             assert_eq!(file, Some("sfx/explosion.wav".to_string()));
             assert_eq!(gain, Some(0.75));
-            assert_eq!(bus, Some(50));
+            assert_eq!(bus.as_deref(), Some("50"));
             assert_eq!(priority, Some(100));
             assert_eq!(spatialization, Some("hrtf".to_string()));
         }
@@ -1154,7 +1154,7 @@ fn test_p0_sound_update_command_parses_with_all_flags() {
             assert_eq!(name, "explosion");
             assert_eq!(file, Some("sfx/explosion_v2.wav".to_string()));
             assert_eq!(gain, Some(0.5));
-            assert_eq!(bus, Some(50));
+            assert_eq!(bus.as_deref(), Some("50"));
             assert_eq!(priority, Some(200));
             assert_eq!(stream, Some(true));
             assert_eq!(loop_enabled, Some(true));
@@ -1205,7 +1205,7 @@ fn test_p1_sound_update_command_short_flags() {
             assert_eq!(name, "explosion");
             assert_eq!(file, Some("sfx/new.wav".to_string()));
             assert_eq!(gain, Some(0.75));
-            assert_eq!(bus, Some(25));
+            assert_eq!(bus.as_deref(), Some("25"));
             assert_eq!(priority, Some(150));
             assert_eq!(spatialization, Some("position".to_string()));
         }
@@ -1295,6 +1295,7 @@ async fn test_p0_sound_update_changes_gain_preserves_other_fields() {
             loop_count: None,
             spatialization: None,
             spread: None,
+            extra: Default::default(),
         },
         None,
         &input,
@@ -1367,6 +1368,7 @@ async fn test_p0_sound_update_not_found_returns_error() {
             loop_count: None,
             spatialization: None,
             spread: None,
+            extra: Default::default(),
         },
         None,
         &input,
@@ -1436,6 +1438,7 @@ async fn test_p1_sound_update_invalid_path_does_not_modify_original() {
             loop_count: None,
             spatialization: None,
             spread: None,
+            extra: Default::default(),
         },
         None,
         &input,
@@ -1504,6 +1507,7 @@ async fn test_p1_sound_update_json_output_envelope_format() {
             loop_count: None,
             spatialization: None,
             spread: None,
+            extra: Default::default(),
         },
         None,
         &input,
@@ -1593,6 +1597,7 @@ async fn test_p1_sound_update_only_updates_specified_flags() {
             loop_count: None,
             spatialization: None,
             spread: None,
+            extra: Default::default(),
         },
         None,
         &input,
@@ -1699,13 +1704,14 @@ async fn test_p1_sound_update_preserves_sound_id() {
             name: "explosion".to_string(),
             file: None,
             gain: Some(0.5),
-            bus: Some(2),
+            bus: Some("2".to_string()),
             priority: Some(200),
             stream: Some(true),
             loop_enabled: None,
             loop_count: None,
             spatialization: Some("hrtf".to_string()),
             spread: None,
+            extra: Default::default(),
         },
         None,
         &input,
@@ -1773,6 +1779,7 @@ async fn test_p1_sound_update_invalid_gain_returns_error() {
             loop_count: None,
             spatialization: None,
             spread: None,
+            extra: Default::default(),
         },
         None,
         &input,
@@ -1830,13 +1837,14 @@ async fn test_p1_sound_update_bus_field_updates_correctly() {
             name: "explosion".to_string(),
             file: None,
             gain: None,
-            bus: Some(2), // Update bus to sfx (2)
+            bus: Some("2".to_string()), // Update bus to sfx (2)
             priority: None,
             stream: None,
             loop_enabled: None,
             loop_count: None,
             spatialization: None,
             spread: None,
+            extra: Default::default(),
         },
         None,
         &input,
@@ -1907,6 +1915,7 @@ async fn test_p1_sound_update_json_includes_updated_fields() {
             loop_count: None,
             spatialization: None,
             spread: None,
+            extra: Default::default(),
         },
         None,
         &input,
@@ -2093,6 +2102,7 @@ async fn test_p0_sound_update_sets_spread_and_rejects_out_of_range() {
         loop_count: None,
         spatialization: None,
         spread: Some(spread),
+        extra: Default::default(),
     };
 
     let ok = handle_sound_command(&update(90.0), None, &input, &output).await;
@@ -2125,13 +2135,14 @@ fn create_cmd(bus: Option<u64>) -> SoundCommands {
         name: "boom".to_string(),
         file: Some("a.wav".to_string()),
         gain: Some(1.0),
-        bus,
+        bus: bus.map(|b| b.to_string()),
         priority: Some(128),
         stream: false,
         loop_enabled: false,
         loop_count: None,
         spatialization: Some("none".to_string()),
         spread: None,
+        extra: Default::default(),
     }
 }
 
@@ -2140,13 +2151,14 @@ fn update_bus_cmd(name: &str, bus: Option<u64>) -> SoundCommands {
         name: name.to_string(),
         file: None,
         gain: None,
-        bus,
+        bus: bus.map(|b| b.to_string()),
         priority: None,
         stream: None,
         loop_enabled: None,
         loop_count: None,
         spatialization: None,
         spread: None,
+        extra: Default::default(),
     }
 }
 
@@ -2275,6 +2287,7 @@ async fn test_p0_sound_update_fixes_legacy_bus_zero_file() {
         loop_count: None,
         spatialization: None,
         spread: None,
+        extra: Default::default(),
     };
     let err = run_in(&fixture, &gain_only, &output)
         .await

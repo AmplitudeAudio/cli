@@ -359,6 +359,7 @@ async fn test_p1_create_rejects_invalid_gain_value() {
             loop_count: None,
             spatialization: None,
             spread: None,
+            extra: Default::default(),
         },
         None,
         &input,
