@@ -36,6 +36,7 @@ fn test_p0_effect_create_command_parses_with_name_only() {
                             name,
                             effect_type,
                             param,
+                            ..
                         },
                 },
         } => {
@@ -73,6 +74,7 @@ fn test_p0_effect_create_command_parses_with_all_flags() {
                             name,
                             effect_type,
                             param,
+                            ..
                         },
                 },
         } => {
@@ -132,6 +134,7 @@ fn test_p0_effect_update_command_parses_with_name_only() {
                             name,
                             effect_type,
                             param,
+                            ..
                         },
                 },
         } => {
@@ -169,6 +172,7 @@ fn test_p0_effect_update_command_parses_with_all_flags() {
                             name,
                             effect_type,
                             param,
+                            ..
                         },
                 },
         } => {
@@ -357,8 +361,10 @@ async fn test_p0_effect_create_with_defaults() {
     let result = handle_effect_command(
         &EffectCommands::Create {
             name: "reverb_hall".to_string(),
-            effect_type: None,
+            // The SDK cannot load an effect without a filter, so the type is required.
+            effect_type: Some("Delay".to_string()),
             param: None,
+            extra: Default::default(),
         },
         None,
         &input,
@@ -409,6 +415,7 @@ async fn test_p0_effect_create_with_all_flags() {
             name: "reverb_large".to_string(),
             effect_type: Some("reverb".to_string()),
             param: Some(vec![0.8, 0.5]),
+            extra: Default::default(),
         },
         None,
         &input,
@@ -460,6 +467,7 @@ async fn test_p1_effect_create_duplicate_name_fails() {
             name: "reverb_hall".to_string(),
             effect_type: Some("reverb".to_string()),
             param: None,
+            extra: Default::default(),
         },
         None,
         &input,
@@ -587,6 +595,8 @@ async fn test_p0_effect_update_with_flags() {
             name: "reverb_hall".to_string(),
             effect_type: Some("eq".to_string()),
             param: Some(vec![1.0, 0.3]),
+            extra: Default::default(),
+            edit: Default::default(),
         },
         None,
         &input,
@@ -644,6 +654,8 @@ async fn test_p1_effect_update_nonexistent_fails() {
             name: "nonexistent".to_string(),
             effect_type: Some("reverb".to_string()),
             param: None,
+            extra: Default::default(),
+            edit: Default::default(),
         },
         None,
         &input,
@@ -874,6 +886,7 @@ async fn test_p1_effect_create_json_output_format() {
             name: "test_output".to_string(),
             effect_type: Some("reverb".to_string()),
             param: Some(vec![0.9]),
+            extra: Default::default(),
         },
         None,
         &input,
@@ -962,6 +975,7 @@ async fn test_p1_effect_create_empty_name_fails() {
             name: "".to_string(),
             effect_type: Some("reverb".to_string()),
             param: None,
+            extra: Default::default(),
         },
         None,
         &input,
@@ -1002,6 +1016,7 @@ async fn test_p1_effect_create_whitespace_name_fails() {
             name: "   ".to_string(),
             effect_type: Some("reverb".to_string()),
             param: None,
+            extra: Default::default(),
         },
         None,
         &input,

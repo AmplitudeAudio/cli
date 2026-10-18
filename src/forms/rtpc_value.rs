@@ -34,7 +34,7 @@ const BIND_LABEL: &str = "bind to RTPC";
 const RTPC_TARGET: RefTarget = RefTarget::Asset(AssetType::Rtpc);
 
 /// A linear curve from (0, 0) to (1, 1), the default mapping for a bound RTPC.
-fn linear_curve() -> CurveDefinition {
+pub fn linear_curve() -> CurveDefinition {
     CurveDefinition {
         parts: Some(vec![CurvePartDefinition {
             start: Some(CurvePointDefinition { x: 0.0, y: 0.0 }),

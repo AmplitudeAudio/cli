@@ -14,7 +14,9 @@
 
 //! Effect asset commands.
 //!
-//! Implements CRUD operations for Effect assets in Amplitude projects.
+//! Implements CRUD operations for Effect assets in Amplitude projects. The
+//! create/update handlers only gather values (flags, then prompts when the
+//! session is interactive); building and merging lives in `services::effect`.
 
 use std::env;
 use std::fs;
@@ -22,50 +24,70 @@ use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use clap::Subcommand;
-use colored::Colorize;
-use inquire::validator::Validation;
 use serde_json::json;
 
-use crate::common::utils::generate_unique_id;
 use crate::{
-    assets::{Asset, Effect, ProjectContext, ProjectValidator, RtpcCompatibleValue},
+    assets::{Asset, AssetType, Effect, ProjectContext, ProjectValidator},
     common::{
         errors::{CliError, asset_already_exists, asset_not_found, codes},
         files::atomic_write,
+        json_merge::merge_update_unknown_only,
         utils::read_amproject_file,
     },
     database::Database,
+    forms::coverage::known_field_names,
     input::Input,
     presentation::{Output, OutputMode},
+    services::effect::{
+        EffectPatch, EffectValues, apply_patch, build_effect, filter_warning,
+    },
 };
 
-use super::find_json_files_recursive;
+use super::effect_args::{
+    EffectEditArgs, EffectExtraArgs, EffectFlags, resolve_patch, validate_patch_references,
+};
+use super::effect_list::{delete_effect, list_effects};
+use super::effect_prompts::{complete_create_patch, prompt_update_patch};
+use super::sound_args::with_warnings;
 
 /// The name of the current asset.
 const ASSET_NAME: &str = "Effect";
-
-/// Maximum number of ID generation retries before giving up.
-const MAX_ID_RETRIES: u32 = 3;
 
 /// Effect asset subcommands.
 #[derive(Subcommand, Debug)]
 pub enum EffectCommands {
     /// Create a new effect asset
     #[command(after_help = "Examples:
-  am asset effect create reverb
-  am asset effect create eq --effect-type equalizer
+  am asset effect create hall --effect-type Delay --param 0.5 --param 0.3
+  am asset effect create wobble --effect-type Flanger --param-rtpc 0=speed
+  am asset effect create from_file --effect-type Equalizer --parameters-from-json params.json
+
+Parameters are positional: the Nth value feeds the Nth parameter of the filter.
+  --param N                 a static number; repeat for several
+  --param-rtpc INDEX=RTPC   bind the parameter at INDEX (0-based) to an RTPC by name or ID;
+                            INDEX may be the current length to append
+  --parameters-from-json F  a list of numbers, \"rtpc:NAME\" strings or value objects, or an
+                            SDK effect object with \"parameters\"
+
+The filter is the exact name of a registered SDK filter: BassBoost, BiquadResonant,
+CompressorFilter, DCRemoval, Delay, Equalizer, Flanger, Lofi, MonoPole, PitchShift, Robotize,
+WaveShaper. A name outside this list only loads if a plugin registers it, so the CLI warns.
 ")]
     Create {
         /// Name of the effect asset
         name: String,
 
-        /// Effect type name (e.g., "reverb", "eq")
+        /// Name of the registered SDK filter the effect applies (required; for example
+        /// Delay, Equalizer, Lofi)
         #[arg(long)]
         effect_type: Option<String>,
 
         /// Parameter values as static floats (repeatable)
-        #[arg(long = "param")]
+        #[arg(long = "param", allow_negative_numbers = true)]
         param: Option<Vec<f32>>,
+
+        #[command(flatten)]
+        extra: EffectExtraArgs,
     },
 
     /// List all effect assets in the project
@@ -77,19 +99,28 @@ pub enum EffectCommands {
 
     /// Update an existing effect asset
     #[command(after_help = "Examples:
-  am asset effect update reverb --effect-type hall_reverb
+  am asset effect update hall --effect-type Equalizer
+  am asset effect update hall --param-rtpc 1=wind
+  am asset effect update hall --add-param 0.4 --add-param rtpc:speed --remove-param 0
+  am asset effect update hall --clear-params
 ")]
     Update {
         /// Name of the effect asset to update
         name: String,
 
-        /// New effect type name
+        /// New registered SDK filter name
         #[arg(long)]
         effect_type: Option<String>,
 
-        /// New parameter values as static floats (repeatable)
-        #[arg(long = "param")]
+        /// New parameter values as static floats (repeatable, replaces the list)
+        #[arg(long = "param", allow_negative_numbers = true)]
         param: Option<Vec<f32>>,
+
+        #[command(flatten)]
+        extra: EffectExtraArgs,
+
+        #[command(flatten)]
+        edit: EffectEditArgs,
     },
 
     /// Delete an effect asset
@@ -119,15 +150,49 @@ pub async fn handler(
             name,
             effect_type,
             param,
-        } => create_effect(name, effect_type.clone(), param.clone(), input, output).await,
+            extra,
+        } => {
+            let flags = EffectFlags {
+                effect_type: effect_type.clone(),
+                param: param.clone(),
+                extra: extra.clone(),
+                ..Default::default()
+            };
+            create_effect(name, flags, input, output).await
+        }
         EffectCommands::List {} => list_effects(output).await,
         EffectCommands::Update {
             name,
             effect_type,
             param,
-        } => update_effect(name, effect_type.clone(), param.clone(), input, output).await,
+            extra,
+            edit,
+        } => {
+            let flags = EffectFlags {
+                effect_type: effect_type.clone(),
+                param: param.clone(),
+                extra: extra.clone(),
+                edit: edit.clone(),
+            };
+            update_effect(name, flags, input, output).await
+        }
         EffectCommands::Delete { name, force } => delete_effect(name, *force, input, output).await,
     }
+}
+
+/// Whether this session may ask the user questions (never in JSON or non-interactive runs).
+fn can_prompt(input: &dyn Input, output: &dyn Output) -> bool {
+    input.is_interactive() && output.mode() != OutputMode::Json
+}
+
+/// Prints the warning for a filter the SDK does not register by itself, and returns it for
+/// the JSON result.
+fn filter_warnings(filter: Option<&str>, output: &dyn Output) -> Vec<String> {
+    let warnings: Vec<String> = filter.and_then(filter_warning).into_iter().collect();
+    for warning in &warnings {
+        output.warning(warning);
+    }
+    warnings
 }
 
 // =============================================================================
@@ -137,12 +202,11 @@ pub async fn handler(
 /// Create a new effect asset.
 async fn create_effect(
     name: &str,
-    effect_type: Option<String>,
-    param: Option<Vec<f32>>,
+    flags: EffectFlags,
     input: &dyn Input,
     output: &dyn Output,
 ) -> Result<()> {
-    // Step 1: Validate name is not empty and contains no path separators
+    // Validate name is not empty and contains no path separators
     if name.trim().is_empty() {
         return Err(CliError::new(
             codes::ERR_VALIDATION_FIELD,
@@ -162,7 +226,6 @@ async fn create_effect(
         .into());
     }
 
-    // Step 2: Detect project
     let current_dir = env::current_dir()?;
     let project_config = read_amproject_file(&current_dir)?;
 
@@ -171,7 +234,6 @@ async fn create_effect(
         name, project_config.name
     ));
 
-    // Step 3: Validate effect name doesn't already exist (filesystem + registry)
     let sources_base = if project_config.sources_dir.is_empty() {
         current_dir.clone()
     } else {
@@ -179,116 +241,58 @@ async fn create_effect(
     };
     let effects_dir = sources_base.join("effects");
     let effect_file_path = effects_dir.join(format!("{}.json", name));
-
+    let already_exists = || {
+        asset_already_exists(ASSET_NAME, name).with_suggestion(format!(
+            "Use 'am asset effect update {}' to modify it, or choose a different name",
+            name
+        ))
+    };
     if effect_file_path.exists() {
-        return Err(asset_already_exists(ASSET_NAME, name)
-            .with_suggestion(format!(
-                "Use 'am asset effect update {}' to modify it, or choose a different name",
-                name
-            ))
-            .into());
+        return Err(already_exists().into());
     }
 
-    // Build populated ProjectContext for validation
     let validator = ProjectValidator::new(current_dir.clone(), output)?;
     let context = ProjectContext::new(current_dir.clone()).with_validator(validator);
-
-    // Check name uniqueness via ProjectContext registry
-    if context.has_name(crate::assets::AssetType::Effect, name) {
-        return Err(asset_already_exists(ASSET_NAME, name)
-            .with_suggestion(format!(
-                "Use 'am asset effect update {}' to modify it, or choose a different name",
-                name
-            ))
-            .into());
+    let validator = context
+        .validator
+        .as_ref()
+        .context("Project validator is unavailable")?;
+    if context.has_name(AssetType::Effect, name) {
+        return Err(already_exists().into());
     }
 
-    // Step 4: Get effect type (validate whitespace-only)
-    let effect_type_value = if let Some(et) = effect_type {
-        let trimmed = et.trim().to_string();
-        if trimmed.is_empty() {
-            return Err(CliError::new(
-                codes::ERR_VALIDATION_FIELD,
-                "Effect type cannot be whitespace-only",
-                "Provide a non-empty effect type or omit the flag",
-            )
-            .into());
-        }
-        Some(trimmed)
+    // Resolve flags; unknown names and dangling ids fail before any prompt
+    let patch = resolve_patch(&flags, validator)?;
+    validate_patch_references(&patch, validator)?;
+
+    // The filter is the one required field; everything else has a default
+    let patch = if can_prompt(input, output) {
+        complete_create_patch(input, validator, patch)?
     } else {
-        prompt_effect_type(input)?
+        patch
     };
 
-    // Step 5: Get parameters (validate finite values)
-    let parameters_value = if let Some(params) = param {
-        for &v in &params {
-            if !v.is_finite() {
-                return Err(CliError::new(
-                    codes::ERR_VALIDATION_FIELD,
-                    "Parameter value must be finite",
-                    "NaN and Infinity are not valid parameter values",
-                )
-                .into());
-            }
-        }
-        Some(
-            params
-                .iter()
-                .map(|&v| RtpcCompatibleValue::static_value(v))
-                .collect(),
-        )
-    } else {
-        prompt_parameters(input)?
-    };
-
-    // Step 6: Generate unique ID with collision check
-    let mut id = generate_unique_id(name);
-    let mut retries = 0;
-    while context.has_id(id) && retries < MAX_ID_RETRIES {
-        id = generate_unique_id(&format!("{}{}", name, retries));
-        retries += 1;
-    }
-    if context.has_id(id) {
-        return Err(CliError::new(
-            codes::ERR_ASSET_ALREADY_EXISTS,
-            format!("Generated ID {} collides with an existing asset", id),
-            "All generated ID attempts collided with existing assets in the project",
-        )
-        .with_suggestion("Try a different name or wait a moment and retry")
-        .into());
-    }
-
-    // Step 7: Build the Effect asset
-    let mut builder = Effect::builder(id, name);
-    if let Some(et) = effect_type_value {
-        builder = builder.effect_type(et);
-    }
-    if let Some(params) = parameters_value {
-        builder = builder.parameters(params);
-    }
-    let effect = builder.build();
-
-    // Step 8: Validate
-    effect.validate_rules(&context)?;
-
-    // Step 9: Serialize to JSON
+    let effect = build_effect(EffectValues::from_patch(name, &patch)?, &context)?;
     let json_content =
         serde_json::to_string_pretty(&effect).context("Failed to serialize effect to JSON")?;
-
-    // Step 10: Ensure directory exists and write atomically
     fs::create_dir_all(&effects_dir)?;
     atomic_write(&effect_file_path, json_content.as_bytes())?;
 
-    // Step 11: Output success
+    let warnings = filter_warnings(effect.effect.as_deref(), output);
+    let parameter_count = effect.parameters.as_ref().map_or(0, |p| p.len());
     match output.mode() {
         OutputMode::Json => {
             output.success(
-                json!({
-                    "id": effect.id,
-                    "name": effect.name(),
-                    "path": effect_file_path.to_string_lossy(),
-                    "effect_type": effect.effect,
-                }),
+                with_warnings(
+                    json!({
+                        "id": effect.id,
+                        "name": effect.name(),
+                        "path": effect_file_path.to_string_lossy(),
+                        "effect_type": effect.effect,
+                        "parameter_count": parameter_count,
+                    }),
+                    &warnings,
+                ),
                 None,
             );
         }
@@ -308,198 +312,16 @@ async fn create_effect(
 }
 
 // =============================================================================
-// List
-// =============================================================================
-
-/// List all effect assets in the current project.
-async fn list_effects(output: &dyn Output) -> Result<()> {
-    // Step 1: Detect project
-    let current_dir = env::current_dir()?;
-    let project_config = read_amproject_file(&current_dir)?;
-
-    // Step 2: Scan effects directory using sources_dir from config
-    let sources_base = if project_config.sources_dir.is_empty() {
-        current_dir.clone()
-    } else {
-        current_dir.join(&project_config.sources_dir)
-    };
-    let effects_dir = sources_base.join("effects");
-
-    // Step 3: Handle missing directory
-    if !effects_dir.exists() {
-        match output.mode() {
-            OutputMode::Json => {
-                output.success(
-                    json!({
-                        "effects": [],
-                        "count": 0,
-                        "warnings": ["No effects directory found. Create effects with 'am asset effect create'."]
-                    }),
-                    None,
-                );
-            }
-            OutputMode::Interactive => {
-                output.progress("No effects directory found.");
-                output.progress(&format!(
-                    "Create effects with '{}'.",
-                    "am asset effect create <name>".green()
-                ));
-            }
-        }
-        return Ok(());
-    }
-
-    // Step 4: Read and parse all .json files recursively
-    let mut effects: Vec<Effect> = Vec::new();
-    let mut warnings: Vec<String> = Vec::new();
-
-    let json_files = match find_json_files_recursive(&effects_dir) {
-        Ok(files) => files,
-        Err(e) => {
-            return Err(CliError::new(
-                codes::ERR_VALIDATION_FIELD,
-                "Cannot read effects directory",
-                format!("Permission denied on {}", effects_dir.display()),
-            )
-            .with_suggestion("Check directory permissions")
-            .with_context(format!("I/O error: {}", e))
-            .into());
-        }
-    };
-
-    for path in json_files {
-        if path.extension().map(|e| e == "json").unwrap_or(false) {
-            match fs::read_to_string(&path) {
-                Ok(content) => match serde_json::from_str::<Effect>(&content) {
-                    Ok(effect) => {
-                        effects.push(effect);
-                    }
-                    Err(e) => {
-                        let filename = path.file_name().unwrap_or_default().to_string_lossy();
-                        output
-                            .warning(&format!("Skipping invalid effect file: {}", path.display()));
-                        // Provide more context for JSON errors
-                        let error_msg = if let Some(line) = content.lines().next() {
-                            if e.to_string().contains("column") {
-                                format!(
-                                    "Invalid JSON in {}: {}. First line: {}",
-                                    filename,
-                                    e,
-                                    &line[..line.len().min(200)]
-                                )
-                            } else {
-                                format!("Invalid JSON in {}: {}", filename, e)
-                            }
-                        } else {
-                            format!("Invalid JSON in {}: {}", filename, e)
-                        };
-                        warnings.push(error_msg);
-                    }
-                },
-                Err(e) => {
-                    let filename = path.file_name().unwrap_or_default().to_string_lossy();
-                    output.warning(&format!("Failed to read effect file: {}", path.display()));
-                    warnings.push(format!("Failed to read {}: {}", filename, e));
-                }
-            }
-        }
-    }
-
-    // Step 5: Sort by name
-    effects.sort_by(|a, b| a.name().cmp(b.name()));
-
-    // Step 6: Handle empty
-    if effects.is_empty() {
-        match output.mode() {
-            OutputMode::Json => {
-                output.success(
-                    json!({
-                        "effects": [],
-                        "count": 0,
-                        "warnings": warnings
-                    }),
-                    None,
-                );
-            }
-            OutputMode::Interactive => {
-                for warning in &warnings {
-                    output.progress(&format!("{} {}", "Warning:".yellow(), warning));
-                }
-                if !warnings.is_empty() {
-                    output.progress("");
-                }
-                output.progress("No effects found in this project.");
-                output.progress(&format!(
-                    "Use '{}' to add one.",
-                    "am asset effect create <name>".green()
-                ));
-            }
-        }
-        return Ok(());
-    }
-
-    // Step 7: Output
-    match output.mode() {
-        OutputMode::Json => {
-            let effect_data: Vec<serde_json::Value> = effects
-                .iter()
-                .map(|e| {
-                    json!({
-                        "id": e.id,
-                        "name": e.name(),
-                        "effect_type": e.effect,
-                        "parameter_count": e.parameters.as_ref().map(|p| p.len()).unwrap_or(0)
-                    })
-                })
-                .collect();
-
-            output.success(
-                json!({
-                    "effects": effect_data,
-                    "count": effects.len(),
-                    "warnings": warnings
-                }),
-                None,
-            );
-        }
-        OutputMode::Interactive => {
-            for warning in &warnings {
-                output.progress(&format!("{} {}", "Warning:".yellow(), warning));
-            }
-
-            let table_data: Vec<serde_json::Value> = effects
-                .iter()
-                .map(|e| {
-                    json!({
-                        "id": e.id,
-                        "name": e.name(),
-                        "effect_type": e.effect.as_deref().unwrap_or("")
-                    })
-                })
-                .collect();
-
-            output.table(None, json!(table_data));
-            output.progress("");
-            output.progress(&format!("{} effect(s) found", effects.len()));
-        }
-    }
-
-    Ok(())
-}
-
-// =============================================================================
 // Update
 // =============================================================================
 
 /// Update an existing effect asset.
 async fn update_effect(
     name: &str,
-    effect_type: Option<String>,
-    param: Option<Vec<f32>>,
+    flags: EffectFlags,
     input: &dyn Input,
     output: &dyn Output,
 ) -> Result<()> {
-    // Step 1: Detect project
     let current_dir = env::current_dir()?;
     let project_config = read_amproject_file(&current_dir)?;
 
@@ -508,14 +330,12 @@ async fn update_effect(
         name, project_config.name
     ));
 
-    // Step 2: Locate existing effect file
     let sources_base = if project_config.sources_dir.is_empty() {
         current_dir.clone()
     } else {
         current_dir.join(&project_config.sources_dir)
     };
-    let effects_dir = sources_base.join("effects");
-    let effect_file_path = effects_dir.join(format!("{}.json", name));
+    let effect_file_path = sources_base.join("effects").join(format!("{}.json", name));
 
     if !effect_file_path.exists() {
         return Err(asset_not_found(ASSET_NAME, name)
@@ -526,46 +346,68 @@ async fn update_effect(
             .into());
     }
 
-    // Step 3: Parse existing effect
+    // Parse the existing effect (typed, and raw to keep what the CLI does not model)
     let content = fs::read_to_string(&effect_file_path).context(format!(
         "Failed to read effect file: {}",
         effect_file_path.display()
     ))?;
-    let mut effect: Effect = serde_json::from_str(&content).context(format!(
+    let existing: Effect = serde_json::from_str(&content).context(format!(
+        "Failed to parse effect file: {}",
+        effect_file_path.display()
+    ))?;
+    let original: serde_json::Value = serde_json::from_str(&content).context(format!(
         "Failed to parse effect file: {}",
         effect_file_path.display()
     ))?;
 
-    // Step 4: Determine if we have any flag values (non-interactive mode)
-    let has_any_flag = effect_type.is_some() || param.is_some();
-
-    // Step 5: Apply updates
-    let updated_fields: Vec<String> = if has_any_flag {
-        apply_flag_updates(&mut effect, effect_type, param)?
-    } else {
-        prompt_effect_updates(&mut effect, input)?
-    };
-
-    // Step 6: Validate
     let validator = ProjectValidator::new(current_dir.clone(), output)?;
     let context = ProjectContext::new(current_dir.clone()).with_validator(validator);
+    let validator = context
+        .validator
+        .as_ref()
+        .context("Project validator is unavailable")?;
+
+    // Flags win; with none, an interactive session is offered every field
+    let mut patch: EffectPatch = resolve_patch(&flags, validator)?;
+    validate_patch_references(&patch, validator)?;
+    if patch.is_empty() && can_prompt(input, output) {
+        patch = prompt_update_patch(input, validator, &existing)?;
+    }
+
+    // Merge into a copy and validate the new state
+    let effect = apply_patch(&existing, &patch)?;
     effect.validate_rules(&context)?;
 
-    // Step 7: Serialize and write atomically
+    // Serialize over the original file, keeping keys the CLI does not model
+    let known = known_field_names(AssetType::Effect);
+    let known: Vec<&str> = known.iter().map(String::as_str).collect();
+    let mut updated =
+        serde_json::to_value(&effect).context("Failed to serialize effect to JSON")?;
+    if patch.parameters.is_empty()
+        && let (Some(raw), Some(map)) = (original.get("parameters"), updated.as_object_mut())
+    {
+        // Untouched parameters stay exactly as written (including keys the CLI does not model).
+        map.insert("parameters".to_string(), raw.clone());
+    }
+    let merged = merge_update_unknown_only(&original, &updated, &known);
     let json_content =
-        serde_json::to_string_pretty(&effect).context("Failed to serialize effect to JSON")?;
+        serde_json::to_string_pretty(&merged).context("Failed to serialize effect to JSON")?;
     atomic_write(&effect_file_path, json_content.as_bytes())?;
 
-    // Step 8: Output success
+    let warnings = filter_warnings(patch.effect.as_deref(), output);
     match output.mode() {
         OutputMode::Json => {
             output.success(
-                json!({
-                    "id": effect.id,
-                    "name": effect.name(),
-                    "path": effect_file_path.to_string_lossy(),
-                    "updated_fields": updated_fields,
-                }),
+                with_warnings(
+                    json!({
+                        "id": effect.id,
+                        "name": effect.name(),
+                        "path": effect_file_path.to_string_lossy(),
+                        "parameter_count": effect.parameters.as_ref().map_or(0, |p| p.len()),
+                        "updated_fields": patch.changed_fields(),
+                    }),
+                    &warnings,
+                ),
                 None,
             );
         }
@@ -582,341 +424,4 @@ async fn update_effect(
     }
 
     Ok(())
-}
-
-/// Apply flag updates to an effect (non-interactive mode).
-fn apply_flag_updates(
-    effect: &mut Effect,
-    effect_type: Option<String>,
-    param: Option<Vec<f32>>,
-) -> Result<Vec<String>> {
-    let mut updated_fields = Vec::new();
-
-    if let Some(et) = effect_type {
-        let trimmed = et.trim().to_string();
-        if trimmed.is_empty() {
-            return Err(CliError::new(
-                codes::ERR_VALIDATION_FIELD,
-                "Effect type cannot be whitespace-only",
-                "Provide a non-empty effect type or omit the flag",
-            )
-            .into());
-        }
-        effect.effect = Some(trimmed);
-        updated_fields.push("effect_type".to_string());
-    }
-
-    if let Some(params) = param {
-        effect.parameters = Some(
-            params
-                .iter()
-                .map(|&v| RtpcCompatibleValue::static_value(v))
-                .collect(),
-        );
-        updated_fields.push("parameters".to_string());
-    }
-
-    Ok(updated_fields)
-}
-
-/// Prompt for effect updates in interactive mode.
-fn prompt_effect_updates(effect: &mut Effect, input: &dyn Input) -> Result<Vec<String>> {
-    let mut updated_fields = Vec::new();
-
-    // Prompt for effect type
-    let current_effect_type = effect.effect.as_deref().unwrap_or("").to_string();
-    let prompt = format!(
-        "Effect type (current: {}, Enter to keep)",
-        if current_effect_type.is_empty() {
-            "none"
-        } else {
-            &current_effect_type
-        }
-    );
-
-    if let Ok(value) = input.prompt_text(
-        &prompt,
-        Some(if current_effect_type.is_empty() {
-            ""
-        } else {
-            &current_effect_type
-        }),
-        None,
-        None,
-    ) {
-        let trimmed = value.trim().to_string();
-        if trimmed != current_effect_type {
-            effect.effect = if trimmed.is_empty() {
-                None
-            } else {
-                Some(trimmed)
-            };
-            updated_fields.push("effect_type".to_string());
-        }
-    }
-
-    // Prompt for parameters
-    let current_params_str = effect
-        .parameters
-        .as_ref()
-        .map(|params| {
-            params
-                .iter()
-                .map(|p| {
-                    p.as_static()
-                        .map(|v| format!("{}", v))
-                        .unwrap_or_else(|| "RTPC".to_string())
-                })
-                .collect::<Vec<_>>()
-                .join(", ")
-        })
-        .unwrap_or_default();
-
-    let param_prompt = format!(
-        "Parameters (comma-separated floats, current: {}, Enter to keep)",
-        if current_params_str.is_empty() {
-            "none"
-        } else {
-            &current_params_str
-        }
-    );
-
-    if let Ok(value) = input.prompt_text(
-        &param_prompt,
-        Some(if current_params_str.is_empty() {
-            ""
-        } else {
-            &current_params_str
-        }),
-        None,
-        Some(&|value: &str| {
-            if value.trim().is_empty() {
-                return Ok(Validation::Valid);
-            }
-            for part in value.split(',') {
-                if part.trim().parse::<f32>().is_err() {
-                    return Ok(Validation::Invalid(
-                        format!("'{}' is not a valid number", part.trim()).into(),
-                    ));
-                }
-            }
-            Ok(Validation::Valid)
-        }),
-    ) {
-        let trimmed = value.trim().to_string();
-        if trimmed != current_params_str {
-            if trimmed.is_empty() {
-                effect.parameters = None;
-            } else {
-                let parsed: Vec<RtpcCompatibleValue> = trimmed
-                    .split(',')
-                    .map(|s| s.trim().parse::<f32>())
-                    .collect::<Result<Vec<_>, _>>()
-                    .map_err(|e| {
-                        CliError::new(
-                            codes::ERR_VALIDATION_FIELD,
-                            format!("Invalid parameter value: {}", e),
-                            "All parameters must be valid finite numbers",
-                        )
-                    })?
-                    .into_iter()
-                    .map(RtpcCompatibleValue::static_value)
-                    .collect();
-                effect.parameters = Some(parsed);
-            }
-            updated_fields.push("parameters".to_string());
-        }
-    }
-
-    Ok(updated_fields)
-}
-
-// =============================================================================
-// Delete
-// =============================================================================
-
-/// Delete an effect asset.
-async fn delete_effect(
-    name: &str,
-    force: bool,
-    input: &dyn Input,
-    output: &dyn Output,
-) -> Result<()> {
-    // Step 1: Detect project
-    let current_dir = env::current_dir()?;
-    let project_config = read_amproject_file(&current_dir)?;
-
-    // Step 2: Locate effect file
-    let sources_base = if project_config.sources_dir.is_empty() {
-        current_dir.clone()
-    } else {
-        current_dir.join(&project_config.sources_dir)
-    };
-    let effects_dir = sources_base.join("effects");
-    let effect_file_path = effects_dir.join(format!("{}.json", name));
-
-    if !effect_file_path.exists() {
-        return Err(asset_not_found(ASSET_NAME, name)
-            .with_suggestion("Use 'am asset effect list' to see available effects")
-            .into());
-    }
-
-    // Step 3: Read effect for response data
-    let content = fs::read_to_string(&effect_file_path).context(format!(
-        "Failed to read effect file: {}",
-        effect_file_path.display()
-    ))?;
-    let effect: Effect = serde_json::from_str(&content).context(format!(
-        "Failed to parse effect file: {}",
-        effect_file_path.display()
-    ))?;
-
-    // Step 4: Confirm deletion
-    let confirmed = if force {
-        true
-    } else {
-        match input.confirm(
-            &format!("Delete effect '{}'? This cannot be undone.", name),
-            Some(false),
-        ) {
-            Ok(value) => value,
-            Err(_) => {
-                // Non-interactive mode without --force
-                return Err(CliError::new(
-                    codes::ERR_VALIDATION_FIELD,
-                    "Deletion requires confirmation",
-                    "In non-interactive mode, use --force to confirm deletion",
-                )
-                .with_suggestion(format!(
-                    "Use 'am asset effect delete {} --force' to delete without prompting",
-                    name
-                ))
-                .into());
-            }
-        }
-    };
-
-    if !confirmed {
-        output.progress("Deletion cancelled.");
-        return Ok(());
-    }
-
-    // Step 5: Remove file
-    fs::remove_file(&effect_file_path).context(format!(
-        "Failed to delete effect file: {}",
-        effect_file_path.display()
-    ))?;
-
-    // Step 6: Output success
-    match output.mode() {
-        OutputMode::Json => {
-            output.success(
-                json!({
-                    "id": effect.id,
-                    "name": effect.name(),
-                    "deleted": true,
-                }),
-                None,
-            );
-        }
-        OutputMode::Interactive => {
-            output.success(
-                json!(format!("Effect '{}' deleted successfully", name)),
-                None,
-            );
-        }
-    }
-
-    Ok(())
-}
-
-// =============================================================================
-// Shared prompt helpers
-// =============================================================================
-
-/// Prompt for effect type.
-///
-/// In non-interactive mode, defaults to None (per AC2: sensible defaults).
-fn prompt_effect_type(input: &dyn Input) -> Result<Option<String>> {
-    let result = input.prompt_text("Effect type (e.g., reverb, eq)", Some("reverb"), None, None);
-
-    match result {
-        Ok(value) => {
-            let trimmed = value.trim().to_string();
-            if trimmed.is_empty() {
-                Ok(None)
-            } else {
-                Ok(Some(trimmed))
-            }
-        }
-        Err(_) => {
-            log::debug!("Non-interactive mode: using default effect type None");
-            Ok(None)
-        }
-    }
-}
-
-/// Prompt for parameters.
-///
-/// In non-interactive mode, defaults to None (per AC2: sensible defaults).
-fn prompt_parameters(input: &dyn Input) -> Result<Option<Vec<RtpcCompatibleValue>>> {
-    let result = input.prompt_text(
-        "Parameter values (comma-separated floats)",
-        Some("0.8, 0.5"),
-        None,
-        Some(&|value: &str| {
-            if value.trim().is_empty() {
-                return Ok(Validation::Valid);
-            }
-            for part in value.split(',') {
-                match part.trim().parse::<f32>() {
-                    Ok(v) if v.is_finite() => {}
-                    Ok(_) => {
-                        return Ok(Validation::Invalid(
-                            "Parameter values must be finite numbers".into(),
-                        ));
-                    }
-                    Err(_) => {
-                        return Ok(Validation::Invalid(
-                            format!("'{}' is not a valid number", part.trim()).into(),
-                        ));
-                    }
-                }
-            }
-            Ok(Validation::Valid)
-        }),
-    );
-
-    match result {
-        Ok(value) => {
-            let trimmed = value.trim();
-            if trimmed.is_empty() {
-                Ok(None)
-            } else {
-                let params: Vec<RtpcCompatibleValue> = trimmed
-                    .split(',')
-                    .map(|s| s.trim().parse::<f32>())
-                    .collect::<Result<Vec<_>, _>>()
-                    .map_err(|e| {
-                        CliError::new(
-                            codes::ERR_VALIDATION_FIELD,
-                            format!("Invalid parameter value: {}", e),
-                            "All parameters must be valid finite numbers",
-                        )
-                    })?
-                    .into_iter()
-                    .map(RtpcCompatibleValue::static_value)
-                    .collect();
-                if params.is_empty() {
-                    Ok(None)
-                } else {
-                    Ok(Some(params))
-                }
-            }
-        }
-        Err(_) => {
-            log::debug!("Non-interactive mode: using default parameters None");
-            Ok(None)
-        }
-    }
 }

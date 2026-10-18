@@ -162,6 +162,19 @@ const SWITCH_CONTAINER_RULES: &[RefRule] = &[
     ),
 ];
 
+/// The RTPC an effect parameter bound to an RTPC points at.
+///
+/// Not part of [`rules_for`]: it describes a `RtpcCompatibleValue` binding, which
+/// [`referrers`] already follows through [`NESTED_RTPC_VALUE_FIELDS`].
+/// `RtpcValue::Init` reads `rtpc()->id()` unconditionally for an RTPC-kind value and logs
+/// an error for an unknown id, so the binding is required and must resolve.
+pub const EFFECT_PARAMETER_RULE: RefRule = rule(
+    AssetType::Effect,
+    "parameters",
+    RefTarget::Asset(AssetType::Rtpc),
+    true,
+);
+
 /// Returns every reference rule of `asset_type` (empty if it has none).
 pub fn rules_for(asset_type: AssetType) -> Vec<RefRule> {
     match asset_type {
@@ -189,8 +202,7 @@ pub fn rule_for(asset_type: AssetType, field: &str) -> Option<RefRule> {
 /// are references to [`AssetType::Rtpc`] too. Kept as a table (instead of
 /// calling `forms::describe`) so that reference lookups do not need the SDK
 /// schemas; a test checks it against the schema. Fields inside nested tables
-/// or lists are listed in [`NESTED_RTPC_VALUE_FIELDS`] (effect parameters are
-/// not covered yet).
+/// or lists are listed in [`NESTED_RTPC_VALUE_FIELDS`].
 pub const RTPC_VALUE_FIELDS: &[(AssetType, &str)] = &[
     (AssetType::Sound, "gain"),
     (AssetType::Sound, "near_field_gain"),
@@ -214,6 +226,8 @@ pub const NESTED_RTPC_VALUE_FIELDS: &[(AssetType, &str)] = &[
     (AssetType::Collection, "sounds.pitch"),
     (AssetType::SwitchContainer, "entries.gain"),
     (AssetType::SwitchContainer, "entries.pitch"),
+    // `parameters` of an effect: one value per filter parameter.
+    (AssetType::Effect, "parameters"),
 ];
 
 /// Every asset type that can hold references.

@@ -17,8 +17,11 @@
 //! Represents an audio effect (reverb, EQ, etc.) that can be applied to sounds,
 //! collections, or buses to modify their audio characteristics for the Amplitude Audio SDK.
 
-use super::generated::{EffectDefinition, RtpcCompatibleValue};
+use super::extensions::EFFECT_FILTER_NAMES;
+use super::generated::{EffectDefinition, RtpcCompatibleValue, ValueKind};
 use super::{Asset, AssetType, ProjectContext, Schema, ValidationError};
+use crate::forms::references::EFFECT_PARAMETER_RULE;
+use crate::forms::validate_refs::validate_reference;
 
 // =============================================================================
 // Effect Type Alias
@@ -98,6 +101,45 @@ impl EffectBuilder {
 }
 
 // =============================================================================
+// Validation helpers
+// =============================================================================
+
+/// Checks one filter parameter: a finite static number, or a binding to an existing RTPC.
+fn check_parameter(
+    index: usize,
+    param: &RtpcCompatibleValue,
+    context: &ProjectContext,
+) -> Result<(), ValidationError> {
+    match param.kind {
+        ValueKind::Static if !param.value.is_finite() => {
+            Err(ValidationError::type_rule_violation(
+                format!("Parameter value is not finite at index {}", index),
+                "Parameter static values must be finite numbers",
+            )
+            .with_suggestion("Use a valid finite number for the parameter value")
+            .with_field("parameters"))
+        }
+        ValueKind::RTPC => {
+            // `RtpcValue::Init` dereferences `rtpc()` of an RTPC-kind value.
+            let Some(rtpc) = param.rtpc.as_ref() else {
+                return Err(ValidationError::type_rule_violation(
+                    format!("Parameter {} is bound to an RTPC but names none", index),
+                    "An RTPC-kind value needs an 'rtpc' object with the RTPC id; the SDK reads it without a check",
+                )
+                .with_suggestion("Bind the parameter with --param-rtpc INDEX=NAME, or make it a static number")
+                .with_field("parameters"));
+            };
+            match &context.validator {
+                Some(validator) => validate_reference(&EFFECT_PARAMETER_RULE, rtpc.id, validator)
+                    .map_err(|e| e.with_field("parameters")),
+                None => Ok(()),
+            }
+        }
+        _ => Ok(()),
+    }
+}
+
+// =============================================================================
 // Asset Trait Implementation
 // =============================================================================
 
@@ -123,7 +165,7 @@ impl Asset for Effect {
         Ok(())
     }
 
-    fn validate_rules(&self, _context: &ProjectContext) -> Result<(), ValidationError> {
+    fn validate_rules(&self, context: &ProjectContext) -> Result<(), ValidationError> {
         // Validate name is not empty
         if self.name.as_deref().unwrap_or("").is_empty() {
             return Err(ValidationError::type_rule_violation(
@@ -134,34 +176,33 @@ impl Asset for Effect {
             .with_field("name"));
         }
 
-        // Validate effect type: if present but empty, error
-        if let Some(ref effect_type) = self.effect
-            && effect_type.is_empty()
-        {
+        // `EffectImpl::LoadDefinition` reads `effect()->str()` without a null check, so a
+        // missing filter name crashes the load; an empty one never matches a filter.
+        let Some(effect_type) = self.effect.as_deref() else {
+            return Err(ValidationError::type_rule_violation(
+                "Effect type is missing",
+                "The SDK reads the filter name of every effect without checking that it exists",
+            )
+            .with_suggestion(format!(
+                "Set the 'effect' field to a registered filter, for example one of: {}",
+                EFFECT_FILTER_NAMES.join(", ")
+            ))
+            .with_field("effect"));
+        };
+        if effect_type.trim().is_empty() {
             return Err(ValidationError::type_rule_violation(
                 "Effect type is empty",
-                "Effect type must be a non-empty string when specified",
+                "Effect type must be the name of a registered filter",
             )
-            .with_suggestion(
-                "Set the 'effect' field to a valid type name (e.g., \"reverb\", \"eq\")",
-            )
+            .with_suggestion(format!(
+                "Set the 'effect' field to a registered filter, for example one of: {}",
+                EFFECT_FILTER_NAMES.join(", ")
+            ))
             .with_field("effect"));
         }
 
-        // Validate parameter values are finite
-        if let Some(ref params) = self.parameters {
-            for (i, param) in params.iter().enumerate() {
-                if let Some(value) = param.as_static()
-                    && !value.is_finite()
-                {
-                    return Err(ValidationError::type_rule_violation(
-                        format!("Parameter value is not finite at index {}", i),
-                        "Parameter static values must be finite numbers",
-                    )
-                    .with_suggestion("Use a valid finite number for the parameter value")
-                    .with_field("parameters"));
-                }
-            }
+        for (i, param) in self.parameters.iter().flatten().enumerate() {
+            check_parameter(i, param, context)?;
         }
 
         Ok(())

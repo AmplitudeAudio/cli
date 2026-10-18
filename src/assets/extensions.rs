@@ -81,6 +81,26 @@ pub const FADER_ALGORITHM_NAMES: &[&str] = &[
     "SCurveSharp",
 ];
 
+/// Names of the filters `Engine::RegisterDefaultExtensions` registers.
+///
+/// `EffectImpl::LoadDefinition` resolves the effect's `effect` string with `Filter::Find`
+/// against the registry, which also holds the filters plugins register at runtime. The CLI
+/// cannot see plugins, so a name outside this list is a warning, not an error.
+pub const EFFECT_FILTER_NAMES: &[&str] = &[
+    "BassBoost",
+    "BiquadResonant",
+    "CompressorFilter",
+    "DCRemoval",
+    "Delay",
+    "Equalizer",
+    "Flanger",
+    "Lofi",
+    "MonoPole",
+    "PitchShift",
+    "Robotize",
+    "WaveShaper",
+];
+
 impl FaderAlgorithm {
     /// Parse a fader algorithm from its string representation.
     ///
