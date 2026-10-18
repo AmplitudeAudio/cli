@@ -93,10 +93,13 @@ A pipeline needs exactly one Input and one Output node.
         args: UpdateArgs,
     },
 
-    /// Delete a pipeline asset (refused while other assets use it)
+    /// Delete a pipeline asset (refused while an asset references it by id)
     #[command(after_help = "Examples:
   am asset pipeline delete main
   am asset pipeline delete main --force
+
+Note: references from engine config files are not checked yet; make sure no
+'*.config.json' still names this pipeline before deleting it.
 ")]
     Delete {
         /// Name of the pipeline asset to delete
@@ -445,7 +448,13 @@ fn delete_pipeline(name: &str, force: bool, input: &dyn Input, output: &dyn Outp
     let (current_dir, dir, _) = pipelines_dir()?;
     let (file_path, pipeline, _) = locate(name, &dir)?;
 
-    // Referencing assets would be left dangling, so --force does not override this.
+    // Assets that reference the pipeline by id would be left dangling, so --force does
+    // not override this. No asset type references pipelines by id today, so this finds nothing.
+    // TODO(engine-config task): engine config references pipelines by name, not id, and is
+    // NOT checked yet, so deleting a pipeline can orphan it. Add a name-based referrer:
+    // `mixer.pipeline` holds the binary file name `<name>.ampipeline`; scan every
+    // `*.config.json` in the project root, map back to `<name>.json`, and refuse with
+    // ERR_ASSET_IN_USE even with --force.
     let validator = ProjectValidator::new(current_dir, output)?;
     let users = referrers_with_type(
         &validator,

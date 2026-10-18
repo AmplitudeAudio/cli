@@ -136,11 +136,11 @@ fn test_duplicate_node_ids_are_rejected() {
 }
 
 #[test]
-fn test_node_ids_must_fit_a_consume_entry() {
+fn test_large_node_ids_are_fine_when_nobody_consumes_them() {
+    // Node ids are 64-bit; only `consume` entries are 32-bit.
     let mut nodes = chain();
-    nodes[1].id = u64::from(u32::MAX) + 1;
-    nodes[2].consume = Some(vec![]);
-    assert_rejected(nodes, "4294967295");
+    nodes.push(node(u64::from(u32::MAX) + 1, "Clamp", &[1]));
+    rules(nodes).unwrap();
 }
 
 #[test]

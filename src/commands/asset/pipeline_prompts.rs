@@ -229,7 +229,17 @@ pub fn prompt_update_nodes(
 ) -> Result<Option<Vec<PipelineNodeDefinition>>> {
     let mut nodes = existing.to_vec();
     loop {
-        let actions = [ADD, EDIT, REMOVE, FINISH].map(String::from).to_vec();
+        // Offer only what can act on the current nodes.
+        let can_remove = nodes.iter().any(|n| !consumed_by_others(n, &nodes));
+        let actions: Vec<String> = [
+            (ADD, true),
+            (EDIT, !nodes.is_empty()),
+            (REMOVE, can_remove),
+            (FINISH, true),
+        ]
+        .into_iter()
+        .filter_map(|(name, offered)| offered.then(|| name.to_string()))
+        .collect();
         match input.select("What do you want to do?", &actions)?.as_str() {
             ADD => {
                 let node = prompt_node(input, next_node_id(&nodes), &nodes)?;

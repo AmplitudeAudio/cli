@@ -418,6 +418,7 @@ pub struct CaptureOutput {
     successes: RwLock<Vec<serde_json::Value>>,
     errors: RwLock<Vec<(String, i32)>>,
     progress_messages: RwLock<Vec<String>>,
+    warnings: RwLock<Vec<String>>,
     tables: RwLock<Vec<(Option<String>, serde_json::Value)>>,
 }
 
@@ -429,6 +430,7 @@ impl CaptureOutput {
             successes: RwLock::new(Vec::new()),
             errors: RwLock::new(Vec::new()),
             progress_messages: RwLock::new(Vec::new()),
+            warnings: RwLock::new(Vec::new()),
             tables: RwLock::new(Vec::new()),
         }
     }
@@ -456,6 +458,11 @@ impl CaptureOutput {
     /// Get all progress messages.
     pub fn all_progress(&self) -> Vec<String> {
         self.progress_messages.read().unwrap().clone()
+    }
+
+    /// Get all warnings.
+    pub fn all_warnings(&self) -> Vec<String> {
+        self.warnings.read().unwrap().clone()
     }
 
     /// Get the last table data, if any.
@@ -492,7 +499,9 @@ impl Output for CaptureOutput {
 
     fn print(&self, _message: &str) {}
 
-    fn warning(&self, _message: &str) {}
+    fn warning(&self, message: &str) {
+        self.warnings.write().unwrap().push(message.to_string());
+    }
 
     fn table(&self, title: Option<&str>, data: serde_json::Value) {
         self.tables

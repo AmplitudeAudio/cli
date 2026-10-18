@@ -99,9 +99,6 @@ pub fn builtin_node(name: &str) -> Option<InputArity> {
         .map(|(_, arity)| *arity)
 }
 
-/// Largest node id a `consume` entry (a 32-bit `uint`) can reference.
-const MAX_REFERENCEABLE_ID: u64 = u32::MAX as u64;
-
 fn violation(what: impl Into<String>, why: impl Into<String>, suggestion: &str) -> ValidationError {
     ValidationError::type_rule_violation(what, why)
         .with_suggestion(suggestion)
@@ -121,15 +118,6 @@ fn validate_node_fields(nodes: &[PipelineNodeDefinition]) -> Result<(), Validati
                 format!("Pipeline node at position {index} has no name"),
                 "The SDK reads the node name to find the node type, so every node needs one",
                 "Set the node's 'name' to a node type such as \"Input\", \"Reverb\" or \"Output\"",
-            ));
-        }
-        if node.id > MAX_REFERENCEABLE_ID {
-            return Err(violation(
-                format!("Pipeline node id {} is too large", node.id),
-                format!(
-                    "Nodes are referenced through 32-bit 'consume' entries, so ids stop at {MAX_REFERENCEABLE_ID}"
-                ),
-                "Use a smaller node id",
             ));
         }
         // `AddNode` silently ignores a repeated id.

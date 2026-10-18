@@ -295,24 +295,58 @@ async fn test_bad_node_syntax_and_bad_graph_write_nothing() {
 }
 
 #[tokio::test]
-async fn test_unknown_node_type_is_accepted() {
+async fn test_unknown_node_type_is_accepted_with_a_warning() {
     let fx = AssetTestFixture::new("pipe_plugin_node").unwrap();
-    let (result, _out) = run(
-        &fx,
-        &[
-            "create",
-            "main",
-            "--node",
-            "1:Input",
-            "--node",
-            "2:MyPluginNode:1",
-            "--node",
-            "3:Output:2",
-        ],
-    )
-    .await;
+    let args = [
+        "create",
+        "main",
+        "--node",
+        "1:Input",
+        "--node",
+        "2:MyPluginNode:1",
+        "--node",
+        "3:Output:2",
+    ];
+    let (result, out) = run(&fx, &args).await;
     result.unwrap();
     assert_eq!(node_ids(&read_pipeline(&fx, "main")), vec![1, 2, 3]);
+    let warnings = out.all_warnings();
+    assert_eq!(warnings.len(), 1, "{warnings:?}");
+    assert!(warnings[0].contains("MyPluginNode"));
+
+    let json = CaptureOutput::json();
+    let mut again = args.to_vec();
+    again[1] = "other";
+    run_with(&fx, &again, &NonInteractiveInput, &json)
+        .await
+        .unwrap();
+    let data = json.last_success().unwrap();
+    assert!(
+        data["warnings"][0]
+            .as_str()
+            .unwrap()
+            .contains("MyPluginNode")
+    );
+}
+
+#[tokio::test]
+async fn test_interactive_update_does_not_offer_edit_without_nodes() {
+    let fx = AssetTestFixture::new("pipe_update_empty").unwrap();
+    fx.write_asset_json(
+        "pipelines",
+        "empty",
+        json!({"id": 5, "name": "empty", "nodes": []}),
+    )
+    .unwrap();
+    let input = ScriptedInput::new(&["Done"], &[]);
+    let output = CaptureOutput::interactive();
+    run_with(&fx, &["update", "empty"], &input, &output)
+        .await
+        .unwrap();
+    input.assert_all_consumed();
+    let seen = input.options_seen.lock().unwrap();
+    assert!(!seen[0].iter().any(|o| o == "Edit a node"), "{seen:?}");
+    assert!(!seen[0].iter().any(|o| o == "Remove a node"), "{seen:?}");
 }
 
 #[tokio::test]
