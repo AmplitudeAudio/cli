@@ -31,7 +31,7 @@ use crate::{
         sdk::handler as handle_sdk_command, sudo::handler as handle_sudo_command,
         template::handler as handle_template_command,
     },
-    common::errors::{CliError, determine_exit_code, exit_codes},
+    common::errors::{as_cli_error, determine_exit_code, exit_codes},
     common::logger::{init_logger, setup_crash_logging, write_crash_log_on_error},
     database::{Database, setup_crash_db_cleanup},
     input::{Input, InputMode, create_input},
@@ -63,7 +63,7 @@ fn main() {
                 OutputMode::Interactive
             };
             let output = create_output(output_mode);
-            let error_code = e.downcast_ref::<CliError>().map(|ce| ce.code).unwrap_or(-1);
+            let error_code = as_cli_error(&e).map(|ce| ce.code).unwrap_or(-1);
             let exit_code = determine_exit_code(&e);
 
             output.error(&e, error_code, None);

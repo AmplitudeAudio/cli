@@ -17,7 +17,7 @@
 //! This module provides colored terminal output matching the existing
 //! CLI patterns using the `success!` macro and `log` macros.
 
-use crate::common::errors::CliError;
+use crate::common::errors::as_cli_error;
 use crate::presentation::Output;
 use crate::success;
 use anyhow::Error;
@@ -55,7 +55,7 @@ impl Output for InteractiveOutput {
 
     fn error(&self, err: &Error, _code: i32, _request_id: Option<i64>) {
         // Try to downcast to CliError for structured display with What/Why/Fix
-        if let Some(cli_err) = err.downcast_ref::<CliError>() {
+        if let Some(cli_err) = as_cli_error(err) {
             // Display "What failed" in red
             error!("{}: {}", "Error".red().bold(), cli_err.what);
 

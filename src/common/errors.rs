@@ -467,6 +467,18 @@ pub mod exit_codes {
     pub const SYSTEM_ERROR: i32 = 2;
 }
 
+/// Finds the structured `CliError` behind an `anyhow::Error`.
+///
+/// A `ValidationError` wraps a `CliError`; both are treated alike so validation
+/// codes, messages and suggestions reach the process exit code and the output layer.
+pub fn as_cli_error(error: &anyhow::Error) -> Option<&CliError> {
+    error.downcast_ref::<CliError>().or_else(|| {
+        error
+            .downcast_ref::<crate::assets::ValidationError>()
+            .map(|v| &v.inner)
+    })
+}
+
 /// Determine the appropriate exit code based on an error.
 ///
 /// Maps error codes to exit codes according to these rules:
@@ -484,7 +496,7 @@ pub mod exit_codes {
 ///
 /// The appropriate exit code (0, 1, or 2)
 pub fn determine_exit_code(error: &anyhow::Error) -> i32 {
-    if let Some(cli_err) = error.downcast_ref::<CliError>() {
+    if let Some(cli_err) = as_cli_error(error) {
         match cli_err.code {
             // SDK errors (-28xxx) are system/environment issues
             -28999..=-28000 => exit_codes::SYSTEM_ERROR,

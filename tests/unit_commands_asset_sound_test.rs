@@ -2318,3 +2318,82 @@ async fn test_p0_sound_update_with_unknown_bus_is_rejected_and_file_untouched() 
     assert_eq!(validation.code(), codes::ERR_VALIDATION_REFERENCE);
     assert_eq!(fs::read_to_string(&path).unwrap(), before);
 }
+
+/// Input that claims to be interactive but must never be asked anything.
+struct NeverPromptInput;
+
+impl am::input::Input for NeverPromptInput {
+    fn prompt_text(
+        &self,
+        prompt: &str,
+        _placeholder: Option<&str>,
+        _formatter: Option<&dyn Fn(&str) -> String>,
+        _validator: Option<
+            &dyn Fn(&str) -> Result<inquire::validator::Validation, inquire::CustomUserError>,
+        >,
+    ) -> anyhow::Result<String> {
+        panic!("unexpected text prompt: {prompt}");
+    }
+
+    fn select(&self, prompt: &str, _options: &[String]) -> anyhow::Result<String> {
+        panic!("unexpected select prompt: {prompt}");
+    }
+
+    fn confirm(&self, prompt: &str, _default: Option<bool>) -> anyhow::Result<bool> {
+        panic!("unexpected confirm prompt: {prompt}");
+    }
+
+    fn prompt_text_with_default(
+        &self,
+        prompt: &str,
+        _default: &str,
+        _validator: Option<
+            &dyn Fn(&str) -> Result<inquire::validator::Validation, inquire::CustomUserError>,
+        >,
+    ) -> anyhow::Result<String> {
+        panic!("unexpected text prompt: {prompt}");
+    }
+
+    fn multi_select(&self, prompt: &str, _options: &[String]) -> anyhow::Result<Vec<String>> {
+        panic!("unexpected multi-select prompt: {prompt}");
+    }
+}
+
+#[tokio::test]
+async fn test_p0_sound_create_json_output_never_prompts_even_with_interactive_input() {
+    let fixture = AssetTestFixture::new("strict").unwrap();
+    fixture.create_data_file("a.wav").unwrap();
+    let output = CaptureOutput::json();
+
+    let original_dir = std::env::current_dir().ok();
+    std::env::set_current_dir(fixture.project_root()).unwrap();
+    let result = handle_sound_command(&create_cmd(None), None, &NeverPromptInput, &output).await;
+    if let Some(dir) = original_dir {
+        let _ = std::env::set_current_dir(dir);
+    }
+
+    let err = result.expect_err("missing bus must fail in JSON mode");
+    assert!(format!("{err:#}").contains("--bus"), "got: {err:#}");
+    assert!(!fixture.sources_dir().join("sounds/boom.json").exists());
+}
+
+#[tokio::test]
+async fn test_p0_sound_create_in_project_without_buses_suggests_creating_one() {
+    let fixture = AssetTestFixture::new("strict").unwrap();
+    fixture.create_data_file("a.wav").unwrap();
+    fs::remove_file(fixture.project_root().join("main.buses.json")).unwrap();
+    let output = CaptureOutput::interactive();
+
+    let err = run_in(&fixture, &create_cmd(None), &output)
+        .await
+        .expect_err("no bus available");
+
+    let cli = err.downcast_ref::<CliError>().expect("a CliError");
+    assert!(
+        cli.suggestion.contains("create a bus first"),
+        "{}",
+        cli.suggestion
+    );
+    assert!(cli.suggestion.contains("--bus"), "{}", cli.suggestion);
+    assert!(!fixture.sources_dir().join("sounds/boom.json").exists());
+}

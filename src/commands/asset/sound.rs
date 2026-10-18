@@ -442,7 +442,9 @@ fn resolve_bus(
         "Missing required --bus",
         "Sounds must be routed to a bus and cannot prompt in non-interactive or JSON mode",
     )
-    .with_suggestion("Pass --bus <id> (see 'am asset bus list')")
+    .with_suggestion(
+        "Pass --bus <id> (see 'am asset bus list'); if the project has no bus yet, create a bus first",
+    )
     .into())
 }
 

@@ -20,7 +20,7 @@
 //! Unlike InteractiveOutput which uses log macros, JsonOutput writes directly
 //! to stdout to ensure the output is valid parseable JSON.
 
-use crate::common::errors::{CliError, error_suggestion, error_type_name};
+use crate::common::errors::{as_cli_error, error_suggestion, error_type_name};
 use crate::presentation::Output;
 use anyhow::{Error, Result};
 use serde::Serialize;
@@ -92,7 +92,7 @@ impl JsonOutput {
     /// Otherwise, falls back to the provided code and generates type/suggestion from that code.
     pub fn build_error_response(err: &Error, code: i32) -> JsonResponse<()> {
         // Try to downcast to CliError for rich error information
-        let error = if let Some(cli_err) = err.downcast_ref::<CliError>() {
+        let error = if let Some(cli_err) = as_cli_error(err) {
             JsonErrorDetails {
                 code: cli_err.code,
                 type_: cli_err.type_name(),
