@@ -15,7 +15,7 @@
 //! Hand-maintained table of `uint64` schema fields that reference other assets.
 //!
 //! The SDK schemas carry no machine-readable reference annotation, so this
-//! table is derived from the field audit (`docs/superpowers/specs/2026-10-18-asset-field-audit.md`).
+//! table is derived from an audit of the schema fields.
 //! A test checks that every rule's field still exists in the schema.
 //!
 //! Field naming convention: top-level fields use their schema name
