@@ -14,7 +14,8 @@
 
 //! RTPC (Real-Time Parameter Control) asset type.
 
-use super::generated::{RtpcDefinition, RtpcFadingSettings};
+use super::extensions::FADER_ALGORITHM_NAMES;
+use super::generated::{FadeTransitionSettings, RtpcDefinition, RtpcFadingSettings};
 use super::{Asset, AssetType, ProjectContext, Schema, ValidationError};
 
 /// RTPC definition.
@@ -136,15 +137,17 @@ impl Asset for Rtpc {
             }
         }
 
-        if self.min_value > self.max_value {
+        // The SDK normalizes a bound value with (value - min) / (max - min),
+        // so an empty range divides by zero.
+        if self.min_value >= self.max_value {
             return Err(ValidationError::type_rule_violation(
                 format!(
-                    "min_value ({}) is greater than max_value ({})",
+                    "min_value ({}) is not lower than max_value ({})",
                     self.min_value, self.max_value
                 ),
-                "RTPC min_value must not exceed max_value",
+                "RTPC min_value must be lower than max_value; the SDK divides by their difference",
             )
-            .with_suggestion("Swap or adjust 'min_value' and 'max_value'")
+            .with_suggestion("Adjust 'min_value' and 'max_value' so that min_value < max_value")
             .with_field("min_value"));
         }
 
@@ -160,6 +163,66 @@ impl Asset for Rtpc {
             .with_field("default_value"));
         }
 
+        self.validate_fade_settings()
+    }
+}
+
+fn fade_error(what: impl Into<String>, why: impl Into<String>) -> ValidationError {
+    ValidationError::type_rule_violation(what, why).with_field("fade_settings")
+}
+
+impl Rtpc {
+    /// When fading is enabled the SDK reads both transitions and their fader
+    /// names without a null check.
+    fn validate_fade_settings(&self) -> Result<(), ValidationError> {
+        let Some(fade) = &self.fade_settings else {
+            return Ok(());
+        };
+        for (label, transition) in [
+            ("fade_attack", &fade.fade_attack),
+            ("fade_release", &fade.fade_release),
+        ] {
+            match transition {
+                None if fade.enabled => {
+                    return Err(fade_error(
+                        format!("Fading is enabled without {label}"),
+                        "The SDK dereferences both fade transitions unconditionally when fading is enabled",
+                    )
+                    .with_suggestion(format!(
+                        "Set '{label}' (duration and fader), or disable fading"
+                    )));
+                }
+                None => {}
+                Some(t) => validate_transition(label, t, fade.enabled)?,
+            }
+        }
         Ok(())
+    }
+}
+
+fn validate_transition(
+    label: &str,
+    transition: &FadeTransitionSettings,
+    enabled: bool,
+) -> Result<(), ValidationError> {
+    if !transition.duration.is_finite() || transition.duration < 0.0 {
+        return Err(fade_error(
+            format!("Invalid {label} duration: {}", transition.duration),
+            "A fade duration must be a finite, non-negative number of seconds",
+        )
+        .with_suggestion(format!("Set the {label} duration to a value >= 0")));
+    }
+    match transition.fader.as_deref() {
+        Some(name) if FADER_ALGORITHM_NAMES.contains(&name) => Ok(()),
+        Some(name) => Err(fade_error(
+            format!("Unknown fader '{name}' in {label}"),
+            format!("Valid faders: {}", FADER_ALGORITHM_NAMES.join(", ")),
+        )),
+        None if enabled => Err(fade_error(
+            format!("{label} has no fader"),
+            "The SDK reads the fader name unconditionally when fading is enabled",
+        )
+        .with_suggestion(format!("Set a fader for {label} (e.g. Linear)"))),
+        None => Ok(()),
     }
 }

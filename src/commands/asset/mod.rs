@@ -23,6 +23,9 @@ mod attenuation_prompts;
 mod collection;
 mod effect;
 mod event;
+mod rtpc;
+mod rtpc_args;
+mod rtpc_prompts;
 mod sound;
 mod sound_args;
 mod sound_prompts;
@@ -34,6 +37,7 @@ pub use attenuation::{AttenuationCommands, handler as handle_attenuation_command
 pub use collection::{CollectionCommands, handler as handle_collection_command};
 pub use effect::{EffectCommands, handler as handle_effect_command};
 pub use event::{EventCommands, handler as handle_event_command};
+pub use rtpc::{RtpcCommands, handler as handle_rtpc_command};
 pub use sound::{SoundCommands, handler as handle_sound_command};
 pub use soundbank::{SoundbankCommands, handler as handle_soundbank_command};
 pub use switch::{SwitchCommands, handler as handle_switch_command};
@@ -133,6 +137,11 @@ pub enum AssetCommands {
         #[command(subcommand)]
         command: AttenuationCommands,
     },
+    /// RTPC (real-time parameter control) asset management
+    Rtpc {
+        #[command(subcommand)]
+        command: RtpcCommands,
+    },
 }
 
 /// Handle asset commands by routing to the appropriate subcommand handler.
@@ -166,6 +175,9 @@ pub async fn handler(
         }
         AssetCommands::Attenuation { command } => {
             handle_attenuation_command(command, database, input, output).await
+        }
+        AssetCommands::Rtpc { command } => {
+            handle_rtpc_command(command, database, input, output).await
         }
     }
 }

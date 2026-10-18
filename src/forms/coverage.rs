@@ -85,8 +85,16 @@ pub fn supported_fields(asset_type: AssetType) -> &'static [&'static str] {
             "air_absorption",
             "spread_curve",
         ],
-        // CRUD commands for these types arrive in later tasks.
-        AssetType::Rtpc | AssetType::Pipeline => &[],
+        AssetType::Rtpc => &[
+            "id",
+            "name",
+            "min_value",
+            "max_value",
+            "default_value",
+            "fade_settings",
+        ],
+        // CRUD commands for this type arrive in a later task.
+        AssetType::Pipeline => &[],
     }
 }
 
@@ -112,13 +120,6 @@ pub const KNOWN_GAPS: &[(AssetType, &str)] = &[
     (AssetType::SwitchContainer, "scope"),
     (AssetType::SwitchContainer, "fader"),
     (AssetType::SwitchContainer, "update_behavior"),
-    // Rtpc
-    (AssetType::Rtpc, "id"),
-    (AssetType::Rtpc, "name"),
-    (AssetType::Rtpc, "min_value"),
-    (AssetType::Rtpc, "max_value"),
-    (AssetType::Rtpc, "default_value"),
-    (AssetType::Rtpc, "fade_settings"),
     // Pipeline
     (AssetType::Pipeline, "id"),
     (AssetType::Pipeline, "name"),
