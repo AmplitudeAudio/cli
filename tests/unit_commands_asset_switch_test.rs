@@ -33,7 +33,7 @@ fn test_p0_switch_create_command_parses_with_name_only() {
         Commands::Asset {
             command:
                 AssetCommands::Switch {
-                    command: SwitchCommands::Create { name, states },
+                    command: SwitchCommands::Create { name, states, .. },
                 },
         } => {
             assert_eq!(name, "surface_type");
@@ -60,7 +60,7 @@ fn test_p0_switch_create_command_parses_with_states_flag() {
         Commands::Asset {
             command:
                 AssetCommands::Switch {
-                    command: SwitchCommands::Create { name, states },
+                    command: SwitchCommands::Create { name, states, .. },
                 },
         } => {
             assert_eq!(name, "surface_type");
@@ -104,7 +104,7 @@ fn test_p0_switch_update_command_parses_with_name_only() {
         Commands::Asset {
             command:
                 AssetCommands::Switch {
-                    command: SwitchCommands::Update { name, states },
+                    command: SwitchCommands::Update { name, states, .. },
                 },
         } => {
             assert_eq!(name, "surface_type");
@@ -131,7 +131,7 @@ fn test_p0_switch_update_command_parses_with_states_flag() {
         Commands::Asset {
             command:
                 AssetCommands::Switch {
-                    command: SwitchCommands::Update { name, states },
+                    command: SwitchCommands::Update { name, states, .. },
                 },
         } => {
             assert_eq!(name, "surface_type");
@@ -232,7 +232,7 @@ fn test_p1_switch_create_single_state() {
         Commands::Asset {
             command:
                 AssetCommands::Switch {
-                    command: SwitchCommands::Create { name, states },
+                    command: SwitchCommands::Create { name, states, .. },
                 },
         } => {
             assert_eq!(name, "surface_type");
@@ -259,7 +259,7 @@ fn test_p1_switch_create_many_states() {
         Commands::Asset {
             command:
                 AssetCommands::Switch {
-                    command: SwitchCommands::Create { name, states },
+                    command: SwitchCommands::Create { name, states, .. },
                 },
         } => {
             assert_eq!(name, "surface_type");

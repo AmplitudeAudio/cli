@@ -362,6 +362,42 @@ pub fn referrers_with_type(
     found
 }
 
+/// Lists the switch containers of switch `switch_id` that use state `state_id`, as their
+/// default state or as a state of an entry.
+///
+/// A state id is only meaningful inside its switch (two switches may reuse an id), so
+/// containers of other switches never count.
+pub fn switch_state_referrers(
+    validator: &ProjectValidator,
+    switch_id: u64,
+    state_id: u64,
+) -> Vec<AssetRef> {
+    if state_id == 0 {
+        return Vec::new();
+    }
+    let dir = validator
+        .sources_dir()
+        .join(AssetType::SwitchContainer.directory_name());
+    let mut found = Vec::new();
+    for entry in walkdir::WalkDir::new(dir).into_iter().flatten() {
+        let Some(value) = read_json(entry.path()) else {
+            continue;
+        };
+        let in_switch = ids_at_path(&value, "switch_group").contains(&switch_id);
+        let uses_state = ids_at_path(&value, "default_switch_state").contains(&state_id)
+            || ids_at_path(&value, "entries.switch_states").contains(&state_id);
+        let own_id = value.get("id").and_then(|v| v.as_u64());
+        let name = value.get("name").and_then(|v| v.as_str());
+        if let (true, Some(id), Some(name)) = (in_switch && uses_state, own_id, name) {
+            found.push(AssetRef {
+                id,
+                name: name.to_string(),
+            });
+        }
+    }
+    found
+}
+
 /// Lists the assets whose reference fields point at object `id` of `target`.
 ///
 /// Scans every asset JSON file under the project's sources directories and
