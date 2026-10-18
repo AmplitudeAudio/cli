@@ -14,8 +14,6 @@
 
 //! Shared helpers of the collection command tests.
 
-#![allow(dead_code)]
-
 use std::path::Path;
 
 use am::app::{App, Commands};

@@ -97,7 +97,12 @@ fn finding(
     }
 }
 
-fn unreadable(project_root: &Path, dir: &Path, kind: RootFileKind, problem: &str) -> RootFileFinding {
+fn unreadable(
+    project_root: &Path,
+    dir: &Path,
+    kind: RootFileKind,
+    problem: &str,
+) -> RootFileFinding {
     RootFileFinding {
         file: relative(project_root, dir),
         kind,

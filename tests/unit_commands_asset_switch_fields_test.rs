@@ -33,11 +33,21 @@ use serde_json::json;
 #[test]
 fn test_create_parses_the_state_flags() {
     match parse(&[
-        "create", "sw", "--state", "wood,id=5", "--state", "stone", "--states-from-json", "s.json",
+        "create",
+        "sw",
+        "--state",
+        "wood,id=5",
+        "--state",
+        "stone",
+        "--states-from-json",
+        "s.json",
     ]) {
         SwitchCommands::Create { extra, states, .. } => {
             assert!(states.is_none());
-            assert_eq!(extra.state, vec!["wood,id=5".to_string(), "stone".to_string()]);
+            assert_eq!(
+                extra.state,
+                vec!["wood,id=5".to_string(), "stone".to_string()]
+            );
             assert_eq!(extra.states_from_json.unwrap().to_str(), Some("s.json"));
         }
         _ => panic!("expected create"),
@@ -47,12 +57,24 @@ fn test_create_parses_the_state_flags() {
 #[test]
 fn test_update_parses_the_edit_flags() {
     match parse(&[
-        "update", "sw", "--add-state", "grass", "--remove-state", "wood", "--remove-state", "12",
-        "--rename-state", "stone=rock", "--clear-states",
+        "update",
+        "sw",
+        "--add-state",
+        "grass",
+        "--remove-state",
+        "wood",
+        "--remove-state",
+        "12",
+        "--rename-state",
+        "stone=rock",
+        "--clear-states",
     ]) {
         SwitchCommands::Update { edit, .. } => {
             assert_eq!(edit.add_state, vec!["grass".to_string()]);
-            assert_eq!(edit.remove_state, vec!["wood".to_string(), "12".to_string()]);
+            assert_eq!(
+                edit.remove_state,
+                vec!["wood".to_string(), "12".to_string()]
+            );
             assert_eq!(edit.rename_state, vec!["stone=rock".to_string()]);
             assert!(edit.clear_states);
         }
@@ -80,7 +102,18 @@ async fn test_create_with_states_names_keeps_working() {
 #[tokio::test]
 async fn test_create_with_state_flag_accepts_explicit_ids() {
     let fx = fixture("sw_create_state");
-    create_ok(&fx, &["--state", "wood,id=5", "--state", "stone", "--state", "metal,id=9"]).await;
+    create_ok(
+        &fx,
+        &[
+            "--state",
+            "wood,id=5",
+            "--state",
+            "stone",
+            "--state",
+            "metal,id=9",
+        ],
+    )
+    .await;
     let states = states_of(&fx, "sw");
     assert_eq!(states[0], (5, "wood".to_string()));
     assert_eq!(states[2], (9, "metal".to_string()));
@@ -92,7 +125,11 @@ async fn test_create_with_state_flag_accepts_explicit_ids() {
 async fn test_create_from_json_accepts_names_objects_and_sdk_switches() {
     let fx = fixture("sw_create_json");
     let file = fx.project_root().join("s.json");
-    std::fs::write(&file, r#"["wood", {"name": "stone", "id": 7}, {"name": "metal"}]"#).unwrap();
+    std::fs::write(
+        &file,
+        r#"["wood", {"name": "stone", "id": 7}, {"name": "metal"}]"#,
+    )
+    .unwrap();
     create_ok(&fx, &["--states-from-json", file.to_str().unwrap()]).await;
     let states = states_of(&fx, "sw");
     assert_eq!(states.len(), 3);
@@ -116,8 +153,14 @@ async fn test_create_missing_states_names_the_flags_and_writes_nothing() {
     let (result, _) = run(&fx, &["create", "sw"], &NonInteractiveInput).await;
     let err = result.unwrap_err();
     let text = format!("{err:#}");
-    assert!(text.contains("--states") && text.contains("--state"), "{text}");
-    assert_eq!(as_cli_error(&err).unwrap().code, codes::ERR_VALIDATION_FIELD);
+    assert!(
+        text.contains("--states") && text.contains("--state"),
+        "{text}"
+    );
+    assert_eq!(
+        as_cli_error(&err).unwrap().code,
+        codes::ERR_VALIDATION_FIELD
+    );
     assert!(!switch_path(&fx, "sw").exists());
 }
 
@@ -135,7 +178,10 @@ async fn test_json_mode_never_prompts() {
     let (result, _) = run_with(&fx, &["update", "sw"], &input, CaptureOutput::json()).await;
     result.unwrap();
     assert!(input.prompts.lock().unwrap().is_empty());
-    assert_eq!(std::fs::read_to_string(switch_path(&fx, "sw")).unwrap(), before);
+    assert_eq!(
+        std::fs::read_to_string(switch_path(&fx, "sw")).unwrap(),
+        before
+    );
 }
 
 #[tokio::test]
@@ -151,7 +197,11 @@ async fn test_create_rejects_bad_state_syntax() {
     ] {
         let (result, _) = run(&fx, &["create", "sw", "--state", bad], &NonInteractiveInput).await;
         let err = result.unwrap_err();
-        assert_eq!(as_cli_error(&err).unwrap().code, codes::ERR_VALIDATION_FIELD, "{bad}");
+        assert_eq!(
+            as_cli_error(&err).unwrap().code,
+            codes::ERR_VALIDATION_FIELD,
+            "{bad}"
+        );
         assert!(format!("{err:#}").contains(needle), "{bad}: {err:#}");
         assert!(!switch_path(&fx, "sw").exists());
     }
@@ -208,7 +258,14 @@ async fn test_create_json_reports_state_count() {
 async fn rich_switch(fx: &AssetTestFixture) {
     create_ok(
         fx,
-        &["--state", "wood,id=11", "--state", "stone,id=12", "--state", "metal,id=13"],
+        &[
+            "--state",
+            "wood,id=11",
+            "--state",
+            "stone,id=12",
+            "--state",
+            "metal,id=13",
+        ],
     )
     .await;
 }
@@ -229,7 +286,10 @@ async fn test_update_states_keeps_the_ids_of_the_names_that_stay() {
     assert_eq!(states[0], (13, "metal".to_string()));
     assert_eq!(states[1], (11, "wood".to_string()));
     assert_eq!(states[2].1, "grass");
-    assert_eq!(out.last_success().unwrap()["updated_fields"], json!(["states"]));
+    assert_eq!(
+        out.last_success().unwrap()["updated_fields"],
+        json!(["states"])
+    );
     assert_flatc(&fx, "sw");
 }
 
@@ -240,7 +300,13 @@ async fn test_update_rename_add_and_remove() {
     let (result, _) = run(
         &fx,
         &[
-            "update", "sw", "--rename-state", "stone=rock", "--remove-state", "13", "--add-state",
+            "update",
+            "sw",
+            "--rename-state",
+            "stone=rock",
+            "--remove-state",
+            "13",
+            "--add-state",
             "grass,id=40",
         ],
         &NonInteractiveInput,
@@ -277,9 +343,17 @@ async fn test_update_leaving_no_states_is_rejected_and_writes_nothing() {
     let fx = fixture("sw_up_empty");
     rich_switch(&fx).await;
     let before = std::fs::read_to_string(switch_path(&fx, "sw")).unwrap();
-    let (result, _) = run(&fx, &["update", "sw", "--clear-states"], &NonInteractiveInput).await;
+    let (result, _) = run(
+        &fx,
+        &["update", "sw", "--clear-states"],
+        &NonInteractiveInput,
+    )
+    .await;
     assert!(result.is_err());
-    assert_eq!(std::fs::read_to_string(switch_path(&fx, "sw")).unwrap(), before);
+    assert_eq!(
+        std::fs::read_to_string(switch_path(&fx, "sw")).unwrap(),
+        before
+    );
 }
 
 #[tokio::test]
@@ -287,7 +361,10 @@ async fn test_update_unknown_state_fails_and_writes_nothing() {
     let fx = fixture("sw_up_unknown");
     rich_switch(&fx).await;
     let before = std::fs::read_to_string(switch_path(&fx, "sw")).unwrap();
-    for flag in [["--remove-state", "grass"], ["--rename-state", "grass=lawn"]] {
+    for flag in [
+        ["--remove-state", "grass"],
+        ["--rename-state", "grass=lawn"],
+    ] {
         let mut args = vec!["update", "sw"];
         args.extend(flag);
         let (result, _) = run(&fx, &args, &NonInteractiveInput).await;
@@ -296,7 +373,10 @@ async fn test_update_unknown_state_fails_and_writes_nothing() {
             codes::ERR_VALIDATION_FIELD
         );
     }
-    assert_eq!(std::fs::read_to_string(switch_path(&fx, "sw")).unwrap(), before);
+    assert_eq!(
+        std::fs::read_to_string(switch_path(&fx, "sw")).unwrap(),
+        before
+    );
 }
 
 #[tokio::test]
@@ -342,17 +422,32 @@ async fn test_update_refuses_to_drop_a_state_a_switch_container_uses() {
         assert!(format!("{err:#}").contains("footsteps"), "{err:#}");
     }
     // Replacing the list so that a used id disappears is refused too.
-    let (result, _) = run(&fx, &["update", "sw", "--states", "metal"], &NonInteractiveInput).await;
+    let (result, _) = run(
+        &fx,
+        &["update", "sw", "--states", "metal"],
+        &NonInteractiveInput,
+    )
+    .await;
     assert_eq!(
         as_cli_error(&result.unwrap_err()).unwrap().code,
         codes::ERR_ASSET_IN_USE
     );
-    assert_eq!(std::fs::read_to_string(switch_path(&fx, "sw")).unwrap(), before);
+    assert_eq!(
+        std::fs::read_to_string(switch_path(&fx, "sw")).unwrap(),
+        before
+    );
 
     // An unused state can go, and a rename (same id) is always fine.
     let (result, _) = run(
         &fx,
-        &["update", "sw", "--remove-state", "metal", "--rename-state", "stone=rock"],
+        &[
+            "update",
+            "sw",
+            "--remove-state",
+            "metal",
+            "--rename-state",
+            "stone=rock",
+        ],
         &NonInteractiveInput,
     )
     .await;
@@ -371,7 +466,12 @@ async fn test_update_ignores_containers_of_other_switches() {
                "default_switch_state": 11, "entries": [{"object": 101, "switch_states": [12]}]}),
     )
     .unwrap();
-    let (result, _) = run(&fx, &["update", "sw", "--remove-state", "stone"], &NonInteractiveInput).await;
+    let (result, _) = run(
+        &fx,
+        &["update", "sw", "--remove-state", "stone"],
+        &NonInteractiveInput,
+    )
+    .await;
     result.unwrap();
 }
 
@@ -398,13 +498,29 @@ async fn test_update_keeps_unknown_keys_and_untouched_states_verbatim() {
     assert_eq!(raw["_a"], json!({"note": "kept"}));
     assert_eq!(raw["_z"], 3);
 
-    let (result, _) = run(&fx, &["update", "hand", "--add-state", "c"], &NonInteractiveInput).await;
+    let (result, _) = run(
+        &fx,
+        &["update", "hand", "--add-state", "c"],
+        &NonInteractiveInput,
+    )
+    .await;
     result.unwrap();
     let raw = read_raw(&fx, "hand");
-    let keys: Vec<&str> = raw.as_object().unwrap().keys().map(String::as_str).collect();
+    let keys: Vec<&str> = raw
+        .as_object()
+        .unwrap()
+        .keys()
+        .map(String::as_str)
+        .collect();
     let at = |k: &str| keys.iter().position(|x| *x == k).unwrap();
-    assert!(at("states") < at("_a"), "unknown keys follow the modelled ones: {keys:?}");
-    assert!(at("_a") < at("_z"), "unknown keys keep their relative order: {keys:?}");
+    assert!(
+        at("states") < at("_a"),
+        "unknown keys follow the modelled ones: {keys:?}"
+    );
+    assert!(
+        at("_a") < at("_z"),
+        "unknown keys keep their relative order: {keys:?}"
+    );
     assert_eq!(raw["_a"], json!({"note": "kept"}));
     assert_eq!(raw["states"].as_array().unwrap().len(), 3);
 }

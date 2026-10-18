@@ -17,9 +17,9 @@
 use am::assets::AssetType;
 use am::config::sdk::discover_sdk;
 use am::forms::coverage::{
-    BUS_KNOWN_GAPS, BUS_SUPPORTED_FIELDS, COLLECTION_TABLES, DUCK_BUS_KNOWN_GAPS, DUCK_BUS_SUPPORTED_FIELDS,
-    ENGINE_CONFIG_TABLES, KNOWN_GAPS, PIPELINE_NODE_KNOWN_GAPS, PIPELINE_NODE_SUPPORTED_FIELDS,
-    supported_fields,
+    BUS_KNOWN_GAPS, BUS_SUPPORTED_FIELDS, COLLECTION_TABLES, DUCK_BUS_KNOWN_GAPS,
+    DUCK_BUS_SUPPORTED_FIELDS, ENGINE_CONFIG_TABLES, KNOWN_GAPS, PIPELINE_NODE_KNOWN_GAPS,
+    PIPELINE_NODE_SUPPORTED_FIELDS, supported_fields,
 };
 use am::presentation::JsonOutput;
 use am::schema::loader::{SchemaRegistry, load_schemas, table_field_names};
@@ -296,8 +296,7 @@ fn test_engine_config_enum_lists_match_the_schema() {
     for (name, table) in cases {
         let mut reflected = enum_members(&sdk, "engine_config_definition.bfbs", name)
             .unwrap_or_else(|e| panic!("{e}"));
-        let mut ours: Vec<(String, i64)> =
-            table.iter().map(|(n, v)| (n.to_string(), *v)).collect();
+        let mut ours: Vec<(String, i64)> = table.iter().map(|(n, v)| (n.to_string(), *v)).collect();
         reflected.sort();
         ours.sort();
         assert_eq!(ours, reflected, "enum {name} drifted from the schema");

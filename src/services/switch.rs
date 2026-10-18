@@ -159,7 +159,10 @@ fn unknown_state(flag: &str, key: &str, states: &[SwitchStateDefinition]) -> Val
         format!("The switch has no state '{key}'"),
         format!("{flag} names a state that does not exist"),
     )
-    .with_suggestion(format!("Use a state name or ID ({})", describe_states(states)))
+    .with_suggestion(format!(
+        "Use a state name or ID ({})",
+        describe_states(states)
+    ))
     .with_field("states")
 }
 

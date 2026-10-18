@@ -38,7 +38,12 @@ async fn test_interactive_create_walks_the_states_and_their_ids() {
         states_of(&fx, "sw"),
         vec![(7, "wood".to_string()), (8, "stone".to_string())]
     );
-    for label in ["state name", "another state", "accept defaults", "ID of state 'wood'"] {
+    for label in [
+        "state name",
+        "another state",
+        "accept defaults",
+        "ID of state 'wood'",
+    ] {
         assert!(input.saw_prompt(label), "no prompt mentions '{label}'");
     }
     assert_flatc(&fx, "sw");
@@ -68,7 +73,18 @@ async fn test_interactive_create_does_not_ask_for_what_flags_gave() {
 #[tokio::test]
 async fn test_interactive_update_adds_renames_and_removes() {
     let fx = fixture("sw_up_walk");
-    create_ok(&fx, &["--state", "wood,id=11", "--state", "stone,id=12", "--state", "metal,id=13"]).await;
+    create_ok(
+        &fx,
+        &[
+            "--state",
+            "wood,id=11",
+            "--state",
+            "stone,id=12",
+            "--state",
+            "metal,id=13",
+        ],
+    )
+    .await;
     let input = ScriptedInput::new(
         &[
             "Add a state",
@@ -114,7 +130,10 @@ async fn test_interactive_update_doing_nothing_leaves_the_file_alone() {
     let (result, _) = run(&fx, &["update", "sw"], &input).await;
     result.unwrap();
     input.assert_all_consumed();
-    assert_eq!(std::fs::read_to_string(switch_path(&fx, "sw")).unwrap(), before);
+    assert_eq!(
+        std::fs::read_to_string(switch_path(&fx, "sw")).unwrap(),
+        before
+    );
 }
 
 #[tokio::test]
@@ -161,7 +180,13 @@ async fn test_interactive_update_repairs_a_switch_without_states() {
     fx.write_asset_json("switches", "legacy", json!({"id": 900, "name": "legacy"}))
         .unwrap();
     let input = ScriptedInput::new(&["Add a state", "Done"], &["wood"]);
-    let (result, out) = run_with(&fx, &["update", "legacy"], &input, CaptureOutput::interactive()).await;
+    let (result, out) = run_with(
+        &fx,
+        &["update", "legacy"],
+        &input,
+        CaptureOutput::interactive(),
+    )
+    .await;
     result.unwrap();
     drop(out);
     assert_eq!(states_of(&fx, "legacy").len(), 1);
@@ -183,5 +208,8 @@ async fn test_interactive_update_refuses_to_drop_a_used_state() {
     let input = ScriptedInput::new(&["Remove a state", "wood (ID 11)", "Done"], &[]);
     let (result, _) = run(&fx, &["update", "sw"], &input).await;
     assert!(format!("{:#}", result.unwrap_err()).contains("footsteps"));
-    assert_eq!(std::fs::read_to_string(switch_path(&fx, "sw")).unwrap(), before);
+    assert_eq!(
+        std::fs::read_to_string(switch_path(&fx, "sw")).unwrap(),
+        before
+    );
 }

@@ -93,7 +93,10 @@ impl Catalog {
 
     /// Every runtime name `asset` can be listed under (effects have two accepted spellings).
     pub fn runtime_names(list: SoundbankList, asset: &SourceAsset) -> Vec<String> {
-        let stem = asset.relative.strip_suffix(".json").unwrap_or(&asset.relative);
+        let stem = asset
+            .relative
+            .strip_suffix(".json")
+            .unwrap_or(&asset.relative);
         list.accepted_extensions()
             .iter()
             .map(|ext| format!("{stem}{ext}"))
@@ -228,12 +231,10 @@ pub fn build_soundbank(
     ctx: &ProjectContext,
 ) -> Result<Soundbank, ValidationError> {
     let id = unique_id("soundbank", &values.name, ctx)?;
-    let bank = values
-        .lists
-        .into_iter()
-        .fold(Soundbank::builder(id, &values.name).build(), |bank, (list, entries)| {
-            bank.with_list(list, entries)
-        });
+    let bank = values.lists.into_iter().fold(
+        Soundbank::builder(id, &values.name).build(),
+        |bank, (list, entries)| bank.with_list(list, entries),
+    );
     bank.validate_rules(ctx)?;
     Ok(bank)
 }
@@ -262,7 +263,7 @@ fn apply_list(
     change: &ListPatch,
 ) -> Result<Vec<String>, ValidationError> {
     let mut entries: Vec<String> = Vec::new();
-    let mut push_new = |entries: &mut Vec<String>, entry: String| {
+    let push_new = |entries: &mut Vec<String>, entry: String| {
         if !entries.contains(&entry) {
             entries.push(entry);
         }
@@ -273,7 +274,9 @@ fn apply_list(
                 push_new(&mut entries, catalog.resolve(list, token)?);
             }
         }
-        None => existing.iter().for_each(|e| push_new(&mut entries, e.clone())),
+        None => existing
+            .iter()
+            .for_each(|e| push_new(&mut entries, e.clone())),
     }
     for token in &change.remove {
         let token = token.trim();

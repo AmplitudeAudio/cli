@@ -55,7 +55,10 @@ fn add(items: &[&str]) -> ListPatch {
 #[test]
 fn test_names_resolve_to_runtime_names() {
     let c = catalog();
-    assert_eq!(c.resolve(SoundbankList::Sounds, "boom").unwrap(), "boom.amsound");
+    assert_eq!(
+        c.resolve(SoundbankList::Sounds, "boom").unwrap(),
+        "boom.amsound"
+    );
     // nested sources keep their directory, and a dotted stem keeps its dots
     assert_eq!(
         c.resolve(SoundbankList::Sounds, "step").unwrap(),
@@ -79,7 +82,10 @@ fn test_paths_and_runtime_names_resolve_too() {
         "boom.amsound"
     );
     // a runtime name of another type is not a sound
-    assert!(c.resolve(SoundbankList::Sounds, "crowd.amcollection").is_err());
+    assert!(
+        c.resolve(SoundbankList::Sounds, "crowd.amcollection")
+            .is_err()
+    );
 }
 
 #[test]
@@ -89,7 +95,10 @@ fn test_unknown_name_lists_the_available_names() {
         .unwrap_err();
     assert_eq!(err.code(), codes::ERR_VALIDATION_REFERENCE);
     let text = format!("{err:?}");
-    assert!(text.contains("ghost") && text.contains("boom") && text.contains("step"), "{text}");
+    assert!(
+        text.contains("ghost") && text.contains("boom") && text.contains("step"),
+        "{text}"
+    );
     assert_eq!(err.field.as_deref(), Some("sounds"));
 }
 
@@ -108,7 +117,10 @@ fn test_duplicate_names_are_ambiguous() {
     let err = c.resolve(SoundbankList::Sounds, "hit").unwrap_err();
     let text = format!("{err:?}");
     assert!(text.contains("a/hit") && text.contains("b/hit"), "{text}");
-    assert_eq!(c.resolve(SoundbankList::Sounds, "a/hit").unwrap(), "a/hit.amsound");
+    assert_eq!(
+        c.resolve(SoundbankList::Sounds, "a/hit").unwrap(),
+        "a/hit.amsound"
+    );
 }
 
 #[test]
@@ -116,7 +128,12 @@ fn test_from_patch_without_assets_builds_an_empty_bank() {
     let values = SoundbankValues::from_patch("b", &SoundbankPatch::default(), &catalog()).unwrap();
     let bank = build_soundbank(values, &ProjectContext::empty()).unwrap();
     for list in SoundbankList::ALL {
-        assert_eq!(bank.list_option(list), &Some(Vec::new()), "{}", list.field());
+        assert_eq!(
+            bank.list_option(list),
+            &Some(Vec::new()),
+            "{}",
+            list.field()
+        );
     }
 }
 
@@ -210,7 +227,10 @@ fn test_removing_what_the_bank_does_not_hold_lists_the_entries() {
     );
     let err = apply_patch(&bank(), &patch, &catalog()).unwrap_err();
     let text = format!("{err:?}");
-    assert!(text.contains("nothing") && text.contains("crowd.amcollection"), "{text}");
+    assert!(
+        text.contains("nothing") && text.contains("crowd.amcollection"),
+        "{text}"
+    );
 }
 
 #[test]

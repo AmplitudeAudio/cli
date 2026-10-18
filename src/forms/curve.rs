@@ -28,8 +28,9 @@ use crate::input::Input;
 const PART_FORMAT: &str = "start_x,start_y,end_x,end_y,fader";
 
 fn invalid(what: impl Into<String>, why: impl Into<String>) -> CliError {
-    CliError::new(ERR_VALIDATION_FIELD, what, why)
-        .with_suggestion(format!("Use the format `{PART_FORMAT}`, e.g. `0,0,1,1,Linear`"))
+    CliError::new(ERR_VALIDATION_FIELD, what, why).with_suggestion(format!(
+        "Use the format `{PART_FORMAT}`, e.g. `0,0,1,1,Linear`"
+    ))
 }
 
 fn parse_number(text: &str, name: &str, whole: &str) -> Result<f64> {
@@ -69,8 +70,14 @@ fn build_part(sx: f64, sy: f64, ex: f64, ey: f64, fader: String) -> Result<Curve
         .into());
     }
     Ok(CurvePartDefinition {
-        start: Some(CurvePointDefinition { x: sx, y: sy as f32 }),
-        end: Some(CurvePointDefinition { x: ex, y: ey as f32 }),
+        start: Some(CurvePointDefinition {
+            x: sx,
+            y: sy as f32,
+        }),
+        end: Some(CurvePointDefinition {
+            x: ex,
+            y: ey as f32,
+        }),
         fader: Some(fader),
     })
 }
@@ -127,7 +134,10 @@ pub fn validate_curve(curve: &CurveDefinition) -> Result<()> {
             .as_deref()
             .is_some_and(|f| FADER_ALGORITHM_NAMES.contains(&f));
         if !valid {
-            let found = part.fader.as_deref().map_or("missing".to_string(), |f| format!("'{f}'"));
+            let found = part
+                .fader
+                .as_deref()
+                .map_or("missing".to_string(), |f| format!("'{f}'"));
             return Err(invalid(
                 format!("Invalid fader on curve part {number}"),
                 format!(
@@ -204,7 +214,10 @@ fn prompt_part(input: &dyn Input, number: usize) -> Result<CurvePartDefinition> 
     let start_y = ask_number(input, &format!("Part {number}: start y"))?;
     let end_x = ask_number(input, &format!("Part {number}: end x"))?;
     let end_y = ask_number(input, &format!("Part {number}: end y"))?;
-    let faders: Vec<String> = FADER_ALGORITHM_NAMES.iter().map(|s| s.to_string()).collect();
+    let faders: Vec<String> = FADER_ALGORITHM_NAMES
+        .iter()
+        .map(|s| s.to_string())
+        .collect();
     let fader = input.select(&format!("Part {number}: fader"), &faders)?;
     build_part(start_x, start_y, end_x, end_y, parse_fader(&fader)?)
 }

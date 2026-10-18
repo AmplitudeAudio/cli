@@ -91,7 +91,10 @@ pub struct ParamsPatch {
 impl ParamsPatch {
     /// Whether the patch leaves the list alone.
     pub fn is_empty(&self) -> bool {
-        self.replace.is_none() && self.bind.is_empty() && self.remove.is_empty() && self.add.is_empty()
+        self.replace.is_none()
+            && self.bind.is_empty()
+            && self.remove.is_empty()
+            && self.add.is_empty()
     }
 
     /// The values the patch brings in, for checking before anything else is asked.

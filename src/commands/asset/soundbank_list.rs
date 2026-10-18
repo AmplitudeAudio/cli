@@ -394,18 +394,17 @@ fn check_orphaned_assets(soundbank: &Soundbank, project_root: &std::path::Path) 
     if let Ok(entries) = fs::read_dir(&soundbanks_dir) {
         for entry in entries.flatten() {
             let path = entry.path();
-            if path.extension().is_some_and(|e| e == "json") {
-                if let Ok(content) = fs::read_to_string(&path) {
-                    if let Ok(other) = serde_json::from_str::<Soundbank>(&content) {
-                        // Skip self
-                        if other.id == soundbank.id {
-                            continue;
-                        }
-                        // Collect all asset paths from other soundbanks
-                        for (_, asset_path) in get_soundbank_assets(&other) {
-                            other_assets.insert(asset_path);
-                        }
-                    }
+            if path.extension().is_some_and(|e| e == "json")
+                && let Ok(content) = fs::read_to_string(&path)
+                && let Ok(other) = serde_json::from_str::<Soundbank>(&content)
+            {
+                // Skip self
+                if other.id == soundbank.id {
+                    continue;
+                }
+                // Collect all asset paths from other soundbanks
+                for (_, asset_path) in get_soundbank_assets(&other) {
+                    other_assets.insert(asset_path);
                 }
             }
         }

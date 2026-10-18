@@ -136,10 +136,7 @@ pub fn parse_fader(value: &str) -> Result<String> {
             CliError::new(
                 codes::ERR_VALIDATION_FIELD,
                 format!("Unknown fader algorithm: '{value}'"),
-                format!(
-                    "Fader must be one of: {}",
-                    FADER_ALGORITHM_NAMES.join(", ")
-                ),
+                format!("Fader must be one of: {}", FADER_ALGORITHM_NAMES.join(", ")),
             )
             .with_suggestion("Use --fader with one of the listed names")
             .into()
@@ -174,7 +171,10 @@ pub(super) fn resolve_reference(
 
     let label = target_label(rule.target);
     let available = if candidates.is_empty() {
-        format!("the project has no {label} yet; create one with `{}`", create_command(rule.target))
+        format!(
+            "the project has no {label} yet; create one with `{}`",
+            create_command(rule.target)
+        )
     } else {
         format!(
             "available: {}",
@@ -188,7 +188,10 @@ pub(super) fn resolve_reference(
     Err(CliError::new(
         codes::ERR_VALIDATION_REFERENCE,
         format!("No {label} named '{raw}'"),
-        format!("'{}' must be the name or ID of an existing {label}", rule.field),
+        format!(
+            "'{}' must be the name or ID of an existing {label}",
+            rule.field
+        ),
     )
     .with_suggestion(available)
     .into())

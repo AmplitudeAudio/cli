@@ -90,7 +90,10 @@ pub struct SwitchContainerExtraArgs {
     /// [,fade-out=SECONDS[:FADER]][,gain=G|gain-rtpc=NAME][,pitch=P|pitch-rtpc=NAME]
     /// where OBJECT is a sound or collection name, sound:NAME, collection:NAME or an ID.
     /// Repeatable; on update the given entries replace all existing ones
-    #[arg(long = "entry", value_name = "OBJECT,states=STATE|STATE[,KEY=VALUE...]")]
+    #[arg(
+        long = "entry",
+        value_name = "OBJECT,states=STATE|STATE[,KEY=VALUE...]"
+    )]
     pub entry: Vec<String>,
 
     /// Read the entries from a JSON file instead of --entry: a list of
@@ -157,7 +160,10 @@ fn parse_update_behavior(value: &str) -> Result<SwitchContainerUpdateBehavior> {
         None => Err(CliError::new(
             codes::ERR_VALIDATION_FIELD,
             format!("Invalid update behavior: '{value}'"),
-            format!("Update behavior must be one of: {}", UPDATE_BEHAVIOR_NAMES.join(", ")),
+            format!(
+                "Update behavior must be one of: {}",
+                UPDATE_BEHAVIOR_NAMES.join(", ")
+            ),
         )
         .with_suggestion("Use --update-behavior with one of the listed values")
         .into()),
@@ -251,8 +257,9 @@ pub fn validate_flag_references(
         validate_reference(&rule, id, validator)?;
     }
 
-    let rule = rule_for(AssetType::SwitchContainer, "entries.object")
-        .ok_or_else(|| anyhow::anyhow!("Switch container has no reference rule for 'entries.object'"))?;
+    let rule = rule_for(AssetType::SwitchContainer, "entries.object").ok_or_else(|| {
+        anyhow::anyhow!("Switch container has no reference rule for 'entries.object'")
+    })?;
     for (index, object) in resolved.entries.incoming_objects().into_iter().enumerate() {
         validate_reference(&rule, object, validator)
             .map_err(|e| e.with_field(format!("entries[{index}].object")))?;

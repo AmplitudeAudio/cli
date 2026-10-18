@@ -36,7 +36,12 @@ fn st(v: f32) -> RtpcCompatibleValue {
 }
 
 fn bound(id: u64) -> RtpcCompatibleValue {
-    RtpcCompatibleValue::rtpc(id, CurveDefinition { parts: Some(Vec::new()) })
+    RtpcCompatibleValue::rtpc(
+        id,
+        CurveDefinition {
+            parts: Some(Vec::new()),
+        },
+    )
 }
 
 fn patch(effect: Option<&str>, params: Vec<RtpcCompatibleValue>) -> EffectPatch {
@@ -106,7 +111,11 @@ fn test_build_requires_an_effect_type() {
 #[test]
 fn test_build_generates_an_id_and_keeps_the_values() {
     let fx = fixture("svc_fx_build");
-    let effect = build(&fx, &patch(Some("Delay"), vec![st(0.5), bound(401), st(2.0)])).unwrap();
+    let effect = build(
+        &fx,
+        &patch(Some("Delay"), vec![st(0.5), bound(401), st(2.0)]),
+    )
+    .unwrap();
     assert_ne!(effect.id, 0);
     assert_eq!(effect.name.as_deref(), Some("fx"));
     assert_eq!(effect.effect.as_deref(), Some("Delay"));
@@ -187,27 +196,55 @@ fn test_apply_params_orders_replace_bind_remove_add() {
 
 #[test]
 fn test_apply_params_bind_may_append_right_after_the_end() {
-    let out = apply_params(&[st(1.0)], &ParamsPatch { bind: vec![(1, bound(402))], ..Default::default() }).unwrap();
+    let out = apply_params(
+        &[st(1.0)],
+        &ParamsPatch {
+            bind: vec![(1, bound(402))],
+            ..Default::default()
+        },
+    )
+    .unwrap();
     assert_eq!(out.len(), 2);
     assert_eq!(out[1].rtpc.as_ref().map(|r| r.id), Some(402));
 }
 
 #[test]
 fn test_apply_params_bind_beyond_the_end_fails() {
-    let err = apply_params(&[st(1.0)], &ParamsPatch { bind: vec![(3, bound(402))], ..Default::default() }).unwrap_err();
+    let err = apply_params(
+        &[st(1.0)],
+        &ParamsPatch {
+            bind: vec![(3, bound(402))],
+            ..Default::default()
+        },
+    )
+    .unwrap_err();
     assert_eq!(err.code(), codes::ERR_VALIDATION_FIELD);
     assert_eq!(err.field.as_deref(), Some("parameters"));
 }
 
 #[test]
 fn test_apply_params_remove_out_of_range_fails() {
-    let err = apply_params(&[st(1.0)], &ParamsPatch { remove: vec![1], ..Default::default() }).unwrap_err();
+    let err = apply_params(
+        &[st(1.0)],
+        &ParamsPatch {
+            remove: vec![1],
+            ..Default::default()
+        },
+    )
+    .unwrap_err();
     assert_eq!(err.code(), codes::ERR_VALIDATION_FIELD);
 }
 
 #[test]
 fn test_apply_params_empty_replace_clears() {
-    let out = apply_params(&[st(1.0)], &ParamsPatch { replace: Some(vec![]), ..Default::default() }).unwrap();
+    let out = apply_params(
+        &[st(1.0)],
+        &ParamsPatch {
+            replace: Some(vec![]),
+            ..Default::default()
+        },
+    )
+    .unwrap();
     assert!(out.is_empty());
 }
 
@@ -227,7 +264,10 @@ fn test_apply_patch_keeps_unset_fields_and_the_original() {
     assert_eq!(existing.effect.as_deref(), Some("Delay"));
 
     let only_add = EffectPatch {
-        parameters: ParamsPatch { add: vec![st(3.0)], ..Default::default() },
+        parameters: ParamsPatch {
+            add: vec![st(3.0)],
+            ..Default::default()
+        },
         ..Default::default()
     };
     let out = apply_patch(&existing, &only_add).unwrap();
@@ -240,7 +280,10 @@ fn test_patch_reports_the_fields_it_sets() {
     assert!(EffectPatch::default().is_empty());
     let p = EffectPatch {
         effect: Some("Lofi".to_string()),
-        parameters: ParamsPatch { remove: vec![0], ..Default::default() },
+        parameters: ParamsPatch {
+            remove: vec![0],
+            ..Default::default()
+        },
     };
     assert_eq!(p.changed_fields(), vec!["effect_type", "parameters"]);
 }

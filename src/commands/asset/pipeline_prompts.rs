@@ -238,7 +238,8 @@ pub fn prompt_update_nodes(
             (FINISH, true),
         ]
         .into_iter()
-        .filter_map(|(name, offered)| offered.then(|| name.to_string()))
+        .filter(|&(_, offered)| offered)
+        .map(|(name, _)| name.to_string())
         .collect();
         match input.select("What do you want to do?", &actions)?.as_str() {
             ADD => {

@@ -43,7 +43,12 @@ async fn test_interactive_create_walks_the_filter_and_every_parameter() {
     assert_eq!(params.len(), 2);
     assert_eq!(params[0].as_static(), Some(0.7));
     assert_eq!(params[1].rtpc.as_ref().unwrap().id, 401);
-    for label in ["effect filter", "accept defaults", "add a parameter", "another parameter"] {
+    for label in [
+        "effect filter",
+        "accept defaults",
+        "add a parameter",
+        "another parameter",
+    ] {
         assert!(input.saw_prompt(label), "no prompt mentions '{label}'");
     }
     assert_flatc(&fx, "fx1");
@@ -57,7 +62,10 @@ async fn test_interactive_create_offers_every_registered_filter_and_a_plugin_ent
     result.unwrap();
     let options = input.options_seen.lock().unwrap()[0].clone();
     for name in ["BassBoost", "Delay", "Equalizer", "WaveShaper"] {
-        assert!(options.iter().any(|o| o == name), "{name} missing from {options:?}");
+        assert!(
+            options.iter().any(|o| o == name),
+            "{name} missing from {options:?}"
+        );
     }
     assert!(options.last().unwrap().to_lowercase().contains("plugin"));
 }
@@ -69,7 +77,10 @@ async fn test_interactive_create_accepting_defaults_leaves_the_parameters_out() 
     let (result, _) = run(&fx, &["create", "fx1", "--effect-type", "Flanger"], &input).await;
     result.unwrap();
     input.assert_all_consumed();
-    assert!(!input.saw_prompt("effect filter"), "the flag already answered it");
+    assert!(
+        !input.saw_prompt("effect filter"),
+        "the flag already answered it"
+    );
     let effect = read_effect(&fx, "fx1");
     assert_eq!(effect.effect.as_deref(), Some("Flanger"));
     assert!(effect.parameters.unwrap_or_default().is_empty());
@@ -78,7 +89,8 @@ async fn test_interactive_create_accepting_defaults_leaves_the_parameters_out() 
 #[tokio::test]
 async fn test_interactive_create_with_plugin_filter_asks_for_the_name_and_warns() {
     let fx = fixture("fx_plugin");
-    let input = ScriptedInput::new(&["Other (plugin filter)"], &["MyPlugin"]).with_confirms(&[true]);
+    let input =
+        ScriptedInput::new(&["Other (plugin filter)"], &["MyPlugin"]).with_confirms(&[true]);
     let (result, out) = run(&fx, &["create", "fx1"], &input).await;
     result.unwrap();
     assert_eq!(read_effect(&fx, "fx1").effect.as_deref(), Some("MyPlugin"));
@@ -144,13 +156,29 @@ async fn test_interactive_update_keeping_everything_changes_nothing() {
     let (result, _) = run(&fx, &["update", "fx1"], &input).await;
     result.unwrap();
     input.assert_all_consumed();
-    assert_eq!(std::fs::read_to_string(effect_path(&fx, "fx1")).unwrap(), before);
+    assert_eq!(
+        std::fs::read_to_string(effect_path(&fx, "fx1")).unwrap(),
+        before
+    );
 }
 
 #[tokio::test]
 async fn test_interactive_update_edits_and_removes_parameters() {
     let fx = fixture("fx_up_edit_remove");
-    create_ok(&fx, &["--param", "0.5", "--param", "1", "--param-rtpc", "1=wind", "--param", "9"]).await;
+    create_ok(
+        &fx,
+        &[
+            "--param",
+            "0.5",
+            "--param",
+            "1",
+            "--param-rtpc",
+            "1=wind",
+            "--param",
+            "9",
+        ],
+    )
+    .await;
     // create: [0.5, bound(wind), ... ] -> --param 0.5, 1, 9 then bind index 1
     let before = read_effect(&fx, "fx1").parameters.unwrap();
     assert_eq!(before.len(), 3);
@@ -179,8 +207,12 @@ async fn test_interactive_update_edits_and_removes_parameters() {
 #[tokio::test]
 async fn test_interactive_update_repairs_a_file_without_effect_type() {
     let fx = fixture("fx_up_unset");
-    fx.write_asset_json("effects", "legacy", json!({"id": 901, "name": "legacy", "_a": 1}))
-        .unwrap();
+    fx.write_asset_json(
+        "effects",
+        "legacy",
+        json!({"id": 901, "name": "legacy", "_a": 1}),
+    )
+    .unwrap();
     let input = ScriptedInput::new(&["Equalizer", "Done"], &[]);
     let (result, _) = run(&fx, &["update", "legacy"], &input).await;
     result.unwrap();
@@ -205,4 +237,5 @@ async fn test_interactive_update_keeps_a_plugin_filter_name() {
     result.unwrap();
     input.assert_all_consumed();
     assert!(input.saw_prompt("plugin: MyPlugin"));
-    assert_eq!(read_raw(&fx, "plug"), before);}
+    assert_eq!(read_raw(&fx, "plug"), before);
+}

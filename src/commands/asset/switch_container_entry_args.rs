@@ -31,8 +31,8 @@ use crate::forms::rtpc_value::rtpc_value_from_flags;
 use crate::services::switch_container_entries::{DEFAULT_FADE_FADER, EntriesPatch, EntrySpec};
 
 use super::sound_args::parse_fader;
-use super::switch_container_entry_json::entries_from_json;
 use super::switch_container_args::{SwitchContainerEntryEditArgs, SwitchContainerExtraArgs};
+use super::switch_container_entry_json::entries_from_json;
 
 const SYNTAX: &str = "Entry syntax: OBJECT,states=STATE|STATE[,continue=true][,fade-in=SECONDS[:FADER]][,fade-out=SECONDS[:FADER]][,gain=G|gain-rtpc=NAME][,pitch=P|pitch-rtpc=NAME]";
 /// An entry whose states are still names (or ids) to look up in the container's switch.
@@ -55,11 +55,6 @@ pub struct RawEntriesPatch {
 }
 
 impl RawEntriesPatch {
-    /// Whether the flags leave the entry list alone.
-    pub fn is_empty(&self) -> bool {
-        self.replace.is_none() && self.remove.is_empty() && self.add.is_empty() && self.map.is_empty()
-    }
-
     /// The objects of the entries the patch brings in, in order (replacements first).
     pub fn incoming_objects(&self) -> Vec<u64> {
         self.replace
@@ -116,8 +111,8 @@ pub fn resolve_object(validator: &ProjectValidator, raw: &str) -> Result<u64> {
         return Ok(id);
     }
 
-    let target = rule_for(AssetType::SwitchContainer, "entries.object")
-        .map_or(sounds, |rule| rule.target);
+    let target =
+        rule_for(AssetType::SwitchContainer, "entries.object").map_or(sounds, |rule| rule.target);
     let available: Vec<String> = validator.list(target).into_iter().map(|c| c.name).collect();
     let hint = if available.is_empty() {
         format!(
@@ -288,7 +283,9 @@ pub fn parse_map(raw: &str, validator: &ProjectValidator) -> Result<(String, u64
             format!("Invalid mapping format: '{raw}'"),
             "Mappings must be in format 'state=object'",
         )
-        .with_suggestion("Use --map state_name=sound_or_collection_name (e.g. --map wood=footstep_wood)")
+        .with_suggestion(
+            "Use --map state_name=sound_or_collection_name (e.g. --map wood=footstep_wood)",
+        )
     })?;
     if state.trim().is_empty() {
         return Err(CliError::new(
@@ -379,7 +376,10 @@ pub fn bind_entries(
     raw: &RawEntriesPatch,
 ) -> Result<EntriesPatch> {
     let bind_all = |entries: &[RawEntry]| -> Result<Vec<EntrySpec>> {
-        entries.iter().map(|e| bind_entry(validator, group, e)).collect()
+        entries
+            .iter()
+            .map(|e| bind_entry(validator, group, e))
+            .collect()
     };
     Ok(EntriesPatch {
         replace: raw.replace.as_deref().map(bind_all).transpose()?,

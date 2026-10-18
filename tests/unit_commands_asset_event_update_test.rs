@@ -98,7 +98,14 @@ async fn test_update_action_flags_replace_all_actions() {
     rich_event(&fx).await;
     let (result, _) = run(
         &fx,
-        &["update", "ev", "--action", "pause:step2", "--action", "wait:5"],
+        &[
+            "update",
+            "ev",
+            "--action",
+            "pause:step2",
+            "--action",
+            "wait:5",
+        ],
         &NonInteractiveInput,
     )
     .await;
@@ -109,10 +116,19 @@ async fn test_update_action_flags_replace_all_actions() {
     assert_eq!(actions[1].targets, Some(vec![5]));
 
     let file = fx.project_root().join("actions.json");
-    std::fs::write(&file, json!([{"type": "Resume", "targets": ["crowd"]}]).to_string()).unwrap();
+    std::fs::write(
+        &file,
+        json!([{"type": "Resume", "targets": ["crowd"]}]).to_string(),
+    )
+    .unwrap();
     let (result, _) = run(
         &fx,
-        &["update", "ev", "--actions-from-json", file.to_str().unwrap()],
+        &[
+            "update",
+            "ev",
+            "--actions-from-json",
+            file.to_str().unwrap(),
+        ],
         &NonInteractiveInput,
     )
     .await;
@@ -128,7 +144,13 @@ async fn test_update_clear_actions_with_new_ones_replaces_the_list() {
     rich_event(&fx).await;
     let (result, _) = run(
         &fx,
-        &["update", "ev", "--clear-actions", "--add-action", "play:step2"],
+        &[
+            "update",
+            "ev",
+            "--clear-actions",
+            "--add-action",
+            "play:step2",
+        ],
         &NonInteractiveInput,
     )
     .await;
@@ -143,9 +165,17 @@ async fn test_update_leaving_no_actions_is_rejected_and_writes_nothing() {
     let fx = fixture("ev_up_empty");
     rich_event(&fx).await;
     let before = std::fs::read_to_string(event_path(&fx, "ev")).unwrap();
-    let (result, _) = run(&fx, &["update", "ev", "--clear-actions"], &NonInteractiveInput).await;
+    let (result, _) = run(
+        &fx,
+        &["update", "ev", "--clear-actions"],
+        &NonInteractiveInput,
+    )
+    .await;
     assert!(format!("{:#}", result.unwrap_err()).contains("no actions"));
-    assert_eq!(std::fs::read_to_string(event_path(&fx, "ev")).unwrap(), before);
+    assert_eq!(
+        std::fs::read_to_string(event_path(&fx, "ev")).unwrap(),
+        before
+    );
 }
 
 #[tokio::test]
@@ -155,9 +185,18 @@ async fn test_update_rejects_bad_edits_and_writes_nothing() {
     let before = std::fs::read_to_string(event_path(&fx, "ev")).unwrap();
 
     let cases: [(&[&str], i32); 4] = [
-        (&["--add-action", "play:999"], codes::ERR_VALIDATION_REFERENCE),
-        (&["--add-action", "mute-bus:step1"], codes::ERR_VALIDATION_REFERENCE),
-        (&["--add-action", "stop:0"], codes::ERR_VALIDATION_EMPTY_REFERENCE),
+        (
+            &["--add-action", "play:999"],
+            codes::ERR_VALIDATION_REFERENCE,
+        ),
+        (
+            &["--add-action", "mute-bus:step1"],
+            codes::ERR_VALIDATION_REFERENCE,
+        ),
+        (
+            &["--add-action", "stop:0"],
+            codes::ERR_VALIDATION_EMPTY_REFERENCE,
+        ),
         (&["--remove-action", "9"], codes::ERR_VALIDATION_FIELD),
     ];
     for (flags, code) in cases {
@@ -170,7 +209,10 @@ async fn test_update_rejects_bad_edits_and_writes_nothing() {
             Some(code),
             "{flags:?}: {err:#}"
         );
-        assert_eq!(std::fs::read_to_string(event_path(&fx, "ev")).unwrap(), before);
+        assert_eq!(
+            std::fs::read_to_string(event_path(&fx, "ev")).unwrap(),
+            before
+        );
     }
 }
 
@@ -196,7 +238,11 @@ async fn test_update_preserves_unknown_keys_and_their_order() {
     raw["_a"] = json!("hand written");
     raw["x_extra"] = json!({"a": [1, 2]});
     raw["actions"][0]["x_note"] = json!("keep me");
-    std::fs::write(event_path(&fx, "ev"), serde_json::to_string_pretty(&raw).unwrap()).unwrap();
+    std::fs::write(
+        event_path(&fx, "ev"),
+        serde_json::to_string_pretty(&raw).unwrap(),
+    )
+    .unwrap();
 
     let (result, _) = run(
         &fx,
@@ -209,13 +255,19 @@ async fn test_update_preserves_unknown_keys_and_their_order() {
     let after = read_raw(&fx, "ev");
     assert_eq!(after["_a"], "hand written");
     assert_eq!(after["x_extra"], json!({"a": [1, 2]}));
-    assert_eq!(after["actions"], raw["actions"], "untouched actions stay as written");
+    assert_eq!(
+        after["actions"], raw["actions"],
+        "untouched actions stay as written"
+    );
     assert_eq!(after["run_mode"], "Parallel");
     let keys: Vec<&String> = after.as_object().unwrap().keys().collect();
     let position = |name: &str| keys.iter().position(|k| k.as_str() == name).unwrap();
     assert!(position("actions") < position("_a"), "{keys:?}");
     assert!(position("run_mode") < position("_a"), "{keys:?}");
-    assert!(position("x_extra") > position("_a"), "unknown keys keep their relative order");
+    assert!(
+        position("x_extra") > position("_a"),
+        "unknown keys keep their relative order"
+    );
     assert_eq!(after["id"], raw["id"]);
     assert_eq!(after["name"], raw["name"]);
 }
@@ -226,7 +278,11 @@ async fn test_update_editing_actions_still_keeps_unknown_top_level_keys() {
     rich_event(&fx).await;
     let mut raw = read_raw(&fx, "ev");
     raw["_a"] = json!(1);
-    std::fs::write(event_path(&fx, "ev"), serde_json::to_string_pretty(&raw).unwrap()).unwrap();
+    std::fs::write(
+        event_path(&fx, "ev"),
+        serde_json::to_string_pretty(&raw).unwrap(),
+    )
+    .unwrap();
     let (result, _) = run(
         &fx,
         &["update", "ev", "--add-action", "play:step2"],

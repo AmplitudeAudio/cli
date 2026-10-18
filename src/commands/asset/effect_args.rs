@@ -120,9 +120,7 @@ pub fn parse_param_rtpc(
             format!("{why}; the syntax is INDEX=RTPC (for example 0=speed)"),
         )
     };
-    let (index, name) = raw
-        .split_once('=')
-        .ok_or_else(|| bad("there is no '='"))?;
+    let (index, name) = raw.split_once('=').ok_or_else(|| bad("there is no '='"))?;
     let index = index
         .trim()
         .parse::<usize>()
@@ -144,7 +142,11 @@ fn json_error(path: &Path, why: impl Into<String>) -> CliError {
     )
 }
 
-fn json_param(path: &Path, item: &Value, validator: &ProjectValidator) -> Result<RtpcCompatibleValue> {
+fn json_param(
+    path: &Path,
+    item: &Value,
+    validator: &ProjectValidator,
+) -> Result<RtpcCompatibleValue> {
     match item {
         Value::Number(n) => parse_static(&n.to_string(), &path.display().to_string()),
         Value::String(text) if text.trim().starts_with(RTPC_PREFIX) => parse_param(text, validator),
@@ -154,7 +156,10 @@ fn json_param(path: &Path, item: &Value, validator: &ProjectValidator) -> Result
         )
         .into()),
         Value::Object(map) => {
-            if !matches!(map.get("kind").and_then(|k| k.as_str()), Some("Static" | "RTPC")) {
+            if !matches!(
+                map.get("kind").and_then(|k| k.as_str()),
+                Some("Static" | "RTPC")
+            ) {
                 return Err(json_error(
                     path,
                     "a parameter object needs a 'kind' of \"Static\" or \"RTPC\"",
@@ -167,7 +172,11 @@ fn json_param(path: &Path, item: &Value, validator: &ProjectValidator) -> Result
             let value: RtpcCompatibleValue = serde_json::from_value(Value::Object(object))
                 .map_err(|e| json_error(path, format!("invalid parameter object: {e}")))?;
             if value.kind == ValueKind::RTPC && value.rtpc.is_none() {
-                return Err(json_error(path, "an RTPC parameter needs an 'rtpc' object with its id").into());
+                return Err(json_error(
+                    path,
+                    "an RTPC parameter needs an 'rtpc' object with its id",
+                )
+                .into());
             }
             Ok(value)
         }
@@ -190,7 +199,9 @@ pub fn parameters_from_json(
         Value::Object(map) => match map.get("parameters") {
             Some(Value::Array(items)) => items,
             _ => {
-                return Err(json_error(path, "expected a list, or an object with 'parameters'").into());
+                return Err(
+                    json_error(path, "expected a list, or an object with 'parameters'").into(),
+                );
             }
         },
         _ => return Err(json_error(path, "expected a list of parameters").into()),
@@ -215,7 +226,10 @@ fn parse_effect_type(raw: &str) -> Result<String> {
     Ok(trimmed.to_string())
 }
 
-fn replace_list(flags: &EffectFlags, validator: &ProjectValidator) -> Result<Option<Vec<RtpcCompatibleValue>>> {
+fn replace_list(
+    flags: &EffectFlags,
+    validator: &ProjectValidator,
+) -> Result<Option<Vec<RtpcCompatibleValue>>> {
     let sources = [
         flags.param.is_some(),
         flags.extra.parameters_from_json.is_some(),
@@ -247,7 +261,11 @@ fn replace_list(flags: &EffectFlags, validator: &ProjectValidator) -> Result<Opt
 /// checked. Fails fast on the first unusable value.
 pub fn resolve_patch(flags: &EffectFlags, validator: &ProjectValidator) -> Result<EffectPatch> {
     Ok(EffectPatch {
-        effect: flags.effect_type.as_deref().map(parse_effect_type).transpose()?,
+        effect: flags
+            .effect_type
+            .as_deref()
+            .map(parse_effect_type)
+            .transpose()?,
         parameters: ParamsPatch {
             replace: replace_list(flags, validator)?,
             bind: flags

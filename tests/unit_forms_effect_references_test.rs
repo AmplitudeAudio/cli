@@ -55,29 +55,48 @@ fn fixture(name: &str) -> AssetTestFixture {
         json!({"id": 67, "name": "plain", "effect": "Lofi", "parameters": [{"kind": "Static", "value": 1.0}]}),
     )
     .unwrap();
-    fx.write_asset_json("switches", "surface", json!({"id": 10, "name": "surface", "states": [
-        {"id": 11, "name": "wood"}]}))
-        .unwrap();
+    fx.write_asset_json(
+        "switches",
+        "surface",
+        json!({"id": 10, "name": "surface", "states": [
+        {"id": 11, "name": "wood"}]}),
+    )
+    .unwrap();
     fx
 }
 
 #[test]
 fn test_effect_is_referenced_by_sounds_collections_and_switch_containers() {
     let fx = fixture("ref_fx_users");
-    fx.write_asset_json("sounds", "s", json!({"id": 1, "name": "s", "bus": 1, "effect": 66}))
-        .unwrap();
-    fx.write_asset_json("collections", "c", json!({"id": 2, "name": "c", "bus": 1, "effect": 66}))
-        .unwrap();
+    fx.write_asset_json(
+        "sounds",
+        "s",
+        json!({"id": 1, "name": "s", "bus": 1, "effect": 66}),
+    )
+    .unwrap();
+    fx.write_asset_json(
+        "collections",
+        "c",
+        json!({"id": 2, "name": "c", "bus": 1, "effect": 66}),
+    )
+    .unwrap();
     fx.write_asset_json(
         "switch_containers",
         "sc",
         json!({"id": 3, "name": "sc", "bus": 1, "switch_group": 10, "effect": 66}),
     )
     .unwrap();
-    fx.write_asset_json("sounds", "other", json!({"id": 4, "name": "other", "bus": 1, "effect": 67}))
-        .unwrap();
+    fx.write_asset_json(
+        "sounds",
+        "other",
+        json!({"id": 4, "name": "other", "bus": 1, "effect": 67}),
+    )
+    .unwrap();
 
-    assert_eq!(names(referrers(&validator(&fx), EFFECT, 66)), vec!["c", "s", "sc"]);
+    assert_eq!(
+        names(referrers(&validator(&fx), EFFECT, 66)),
+        vec!["c", "s", "sc"]
+    );
     assert_eq!(names(referrers(&validator(&fx), EFFECT, 67)), vec!["other"]);
 }
 

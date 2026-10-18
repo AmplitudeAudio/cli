@@ -29,7 +29,8 @@ use super::sound_args::parse_scope;
 pub const SETTING_KEYS: &[&str] = &["active", "scope"];
 
 /// The action type names as written in flags, in schema order.
-pub const CLI_TYPE_NAMES: &str = "none, play, pause, resume, stop, seek, mute-bus, unmute-bus, wait";
+pub const CLI_TYPE_NAMES: &str =
+    "none, play, pause, resume, stop, seek, mute-bus, unmute-bus, wait";
 
 /// The syntax reminder attached to action errors.
 pub const SYNTAX: &str = "Action syntax: TYPE:TARGET[,TARGET...][,active=BOOL][,scope=world|entity] \
@@ -57,7 +58,12 @@ pub fn parse_type(name: &str) -> Result<EventActionType> {
 
 /// The kind named by a `kind:` prefix, if `prefix` is one.
 fn kind_from_prefix(prefix: &str) -> Option<RefTarget> {
-    match prefix.trim().replace(['-', '_'], "").to_ascii_lowercase().as_str() {
+    match prefix
+        .trim()
+        .replace(['-', '_'], "")
+        .to_ascii_lowercase()
+        .as_str()
+    {
         "sound" => Some(RefTarget::Asset(AssetType::Sound)),
         "collection" => Some(RefTarget::Asset(AssetType::Collection)),
         "switchcontainer" => Some(RefTarget::Asset(AssetType::SwitchContainer)),
@@ -84,13 +90,19 @@ fn find_named(validator: &ProjectValidator, kind: RefTarget, name: &str) -> Opti
     None
 }
 
-fn wrong_kind(name: &str, actual: RefTarget, action: EventActionType, wanted: RefTarget) -> CliError {
+fn wrong_kind(
+    name: &str,
+    actual: RefTarget,
+    action: EventActionType,
+    wanted: RefTarget,
+) -> CliError {
     reference_error(
-        format!("'{name}' is a {}, not a {}", target_label(actual), target_label(wanted)),
         format!(
-            "{action:?} actions target a {}",
+            "'{name}' is a {}, not a {}",
+            target_label(actual),
             target_label(wanted)
         ),
+        format!("{action:?} actions target a {}", target_label(wanted)),
         format!("Choose a {}", target_label(wanted)),
     )
 }
@@ -107,7 +119,11 @@ pub fn resolve_target(
     let raw = raw.trim();
     let Some(wanted) = action.target_kinds() else {
         return raw.parse::<u64>().map_err(|_| {
-            field_error(format!("Invalid target '{raw}'"), "Targets must be positive integers").into()
+            field_error(
+                format!("Invalid target '{raw}'"),
+                "Targets must be positive integers",
+            )
+            .into()
         });
     };
 
@@ -162,11 +178,18 @@ pub fn resolve_target(
     let label = target_label(wanted);
     let candidates = validator.list(wanted);
     let suggestion = if candidates.is_empty() {
-        format!("the project has no {label} yet; create one with `{}`", create_command(wanted))
+        format!(
+            "the project has no {label} yet; create one with `{}`",
+            create_command(wanted)
+        )
     } else {
         format!(
             "available: {}",
-            candidates.iter().map(|c| c.name.as_str()).collect::<Vec<_>>().join(", ")
+            candidates
+                .iter()
+                .map(|c| c.name.as_str())
+                .collect::<Vec<_>>()
+                .join(", ")
         )
     };
     Err(reference_error(

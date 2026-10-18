@@ -43,7 +43,8 @@ const SPREAD_LABEL: &str = "Spread in degrees (0-360)";
 
 pub(super) const SCOPE_LABELS: [&str; 2] = ["World", "Entity"];
 pub(super) const SCOPES: [Scope; 2] = [Scope::World, Scope::Entity];
-pub(super) const SPATIALIZATION_LABELS: [&str; 4] = ["None", "Position", "Position + Orientation", "HRTF"];
+pub(super) const SPATIALIZATION_LABELS: [&str; 4] =
+    ["None", "Position", "Position + Orientation", "HRTF"];
 pub(super) const SPATIALIZATIONS: [Spatialization; 4] = [
     Spatialization::None,
     Spatialization::Position,
@@ -269,11 +270,13 @@ pub fn complete_create_patch(
     };
     let spatialization = match patch.spatialization {
         Some(mode) => mode,
-        None => SPATIALIZATIONS[select_index(
-            input,
-            "Spatialization mode",
-            &to_labels(&SPATIALIZATION_LABELS),
-        )?],
+        None => {
+            SPATIALIZATIONS[select_index(
+                input,
+                "Spatialization mode",
+                &to_labels(&SPATIALIZATION_LABELS),
+            )?]
+        }
     };
 
     Ok(SoundPatch {
@@ -398,11 +401,18 @@ pub(super) fn ask_rtpc(
     default: f32,
     range: Option<(f32, f32)>,
 ) -> Result<Option<RtpcCompatibleValue>> {
-    let question = format!("Change {}? (current: {})", label.to_lowercase(), describe_value(current));
+    let question = format!(
+        "Change {}? (current: {})",
+        label.to_lowercase(),
+        describe_value(current)
+    );
     if !input.confirm(&question, Some(false))? {
         return Ok(None);
     }
-    let start = current.as_ref().and_then(|v| v.as_static()).unwrap_or(default);
+    let start = current
+        .as_ref()
+        .and_then(|v| v.as_static())
+        .unwrap_or(default);
     prompt_checked_rtpc(input, validator, label, start, range).map(Some)
 }
 
@@ -412,22 +422,40 @@ pub fn prompt_update_patch(
     validator: &ProjectValidator,
     sound: &Sound,
 ) -> Result<SoundPatch> {
-    let audio_file = ask_text(input, "Audio file path", sound.path.as_deref().unwrap_or(""))?;
+    let audio_file = ask_text(
+        input,
+        "Audio file path",
+        sound.path.as_deref().unwrap_or(""),
+    )?;
     let bus = ask_reference(input, validator, AssetType::Sound, "bus", sound.bus)?;
-    let attenuation = ask_reference(input, validator, AssetType::Sound, "attenuation", sound.attenuation)?;
+    let attenuation = ask_reference(
+        input,
+        validator,
+        AssetType::Sound,
+        "attenuation",
+        sound.attenuation,
+    )?;
     let effect = ask_reference(input, validator, AssetType::Sound, "effect", sound.effect)?;
 
     let current_scope = SCOPES.iter().position(|s| *s == sound.scope).unwrap_or(0);
-    let scope = ask_choice(input, "Scope", &to_labels(&SCOPE_LABELS), current_scope)?
-        .map(|i| SCOPES[i]);
+    let scope =
+        ask_choice(input, "Scope", &to_labels(&SCOPE_LABELS), current_scope)?.map(|i| SCOPES[i]);
 
     let faders = to_labels(FADER_ALGORITHM_NAMES);
     let current_fader = faders
         .iter()
         .position(|f| Some(f.as_str()) == sound.fader.as_deref());
-    let fader = ask_choice_or_unset(input, "Fader", &faders, current_fader)?.map(|i| faders[i].clone());
+    let fader =
+        ask_choice_or_unset(input, "Fader", &faders, current_fader)?.map(|i| faders[i].clone());
 
-    let gain = ask_rtpc(input, validator, "Gain", &sound.gain, DEFAULT_GAIN, Some((0.0, 1.0)))?;
+    let gain = ask_rtpc(
+        input,
+        validator,
+        "Gain",
+        &sound.gain,
+        DEFAULT_GAIN,
+        Some((0.0, 1.0)),
+    )?;
     let pitch = ask_rtpc(input, validator, "Pitch", &sound.pitch, DEFAULT_PITCH, None)?;
     let near_field_gain = ask_rtpc(
         input,

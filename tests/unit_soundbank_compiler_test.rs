@@ -28,9 +28,22 @@ async fn test_every_listed_name_is_the_file_the_compiler_writes() {
     create_ok(
         &fx,
         &[
-            "--sound", "boom,step", "--collection", "crowd", "--event", "hit", "--switch",
-            "surface", "--switch-container", "footsteps", "--effect", "echo", "--attenuator",
-            "room", "--rtpc", "wind",
+            "--sound",
+            "boom,step",
+            "--collection",
+            "crowd",
+            "--event",
+            "hit",
+            "--switch",
+            "surface",
+            "--switch-container",
+            "footsteps",
+            "--effect",
+            "echo",
+            "--attenuator",
+            "room",
+            "--rtpc",
+            "wind",
         ],
     )
     .await;

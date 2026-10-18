@@ -19,8 +19,8 @@ use std::path::Path;
 use anyhow::Result;
 use serde_json::Value;
 
-use crate::assets::generated::{FadeTransitionSettings, RtpcCompatibleValue};
 use crate::assets::ProjectValidator;
+use crate::assets::generated::{FadeTransitionSettings, RtpcCompatibleValue};
 use crate::common::errors::{CliError, codes};
 use crate::services::switch_container_entries::{DEFAULT_FADE_FADER, EntrySpec};
 
@@ -68,7 +68,10 @@ fn json_fade(path: &Path, key: &str, value: &Value) -> Result<FadeTransitionSett
         });
     }
     let object = value.as_object().ok_or_else(|| {
-        json_error(path, format!("'{key}' must be a duration or {{\"duration\": N, \"fader\": NAME}}"))
+        json_error(
+            path,
+            format!("'{key}' must be a duration or {{\"duration\": N, \"fader\": NAME}}"),
+        )
     })?;
     let duration = match object.get("duration") {
         None => 0.0,
@@ -93,9 +96,12 @@ fn json_fade(path: &Path, key: &str, value: &Value) -> Result<FadeTransitionSett
 }
 
 fn json_states(path: &Path, value: Option<&Value>) -> Result<Vec<String>> {
-    let items = value
-        .and_then(Value::as_array)
-        .ok_or_else(|| json_error(path, "every entry needs 'switch_states' (a list of names or IDs)"))?;
+    let items = value.and_then(Value::as_array).ok_or_else(|| {
+        json_error(
+            path,
+            "every entry needs 'switch_states' (a list of names or IDs)",
+        )
+    })?;
     let states = items
         .iter()
         .map(|item| match item {
@@ -120,7 +126,10 @@ fn json_entry(path: &Path, item: &Value, validator: &ProjectValidator) -> Result
     if let Some(unknown) = object.keys().find(|k| !JSON_KEYS.contains(&k.as_str())) {
         return Err(json_error(
             path,
-            format!("unknown entry key '{unknown}' (valid: {})", JSON_KEYS.join(", ")),
+            format!(
+                "unknown entry key '{unknown}' (valid: {})",
+                JSON_KEYS.join(", ")
+            ),
         )
         .into());
     }
@@ -137,10 +146,22 @@ fn json_entry(path: &Path, item: &Value, validator: &ProjectValidator) -> Result
             .as_bool()
             .ok_or_else(|| json_error(path, "'continue_between_states' must be true or false"))?;
     }
-    spec.fade_in = object.get("fade_in").map(|v| json_fade(path, "fade_in", v)).transpose()?;
-    spec.fade_out = object.get("fade_out").map(|v| json_fade(path, "fade_out", v)).transpose()?;
-    spec.gain = object.get("gain").map(|v| json_value(path, "gain", v)).transpose()?;
-    spec.pitch = object.get("pitch").map(|v| json_value(path, "pitch", v)).transpose()?;
+    spec.fade_in = object
+        .get("fade_in")
+        .map(|v| json_fade(path, "fade_in", v))
+        .transpose()?;
+    spec.fade_out = object
+        .get("fade_out")
+        .map(|v| json_fade(path, "fade_out", v))
+        .transpose()?;
+    spec.gain = object
+        .get("gain")
+        .map(|v| json_value(path, "gain", v))
+        .transpose()?;
+    spec.pitch = object
+        .get("pitch")
+        .map(|v| json_value(path, "pitch", v))
+        .transpose()?;
     Ok(RawEntry {
         spec,
         states: json_states(path, object.get("switch_states"))?,
@@ -158,7 +179,9 @@ pub fn entries_from_json(path: &Path, validator: &ProjectValidator) -> Result<Ve
         Value::Array(items) => items,
         Value::Object(map) => match map.get("entries") {
             Some(Value::Array(items)) => items,
-            _ => return Err(json_error(path, "expected a list, or an object with 'entries'").into()),
+            _ => {
+                return Err(json_error(path, "expected a list, or an object with 'entries'").into());
+            }
         },
         _ => return Err(json_error(path, "expected a list of entries").into()),
     };
@@ -167,4 +190,3 @@ pub fn entries_from_json(path: &Path, validator: &ProjectValidator) -> Result<Ve
         .map(|i| json_entry(path, i, validator))
         .collect()
 }
-

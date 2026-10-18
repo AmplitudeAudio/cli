@@ -148,12 +148,11 @@ pub fn validate_action_shape(
             "Add target names or IDs to the action".to_string(),
         )
     };
-    Err(ValidationError::type_rule_violation(
-        format!("Action {} has no targets", index + 1),
-        why,
+    Err(
+        ValidationError::type_rule_violation(format!("Action {} has no targets", index + 1), why)
+            .with_suggestion(suggestion)
+            .with_field(format!("actions[{index}].targets")),
     )
-    .with_suggestion(suggestion)
-    .with_field(format!("actions[{index}].targets")))
 }
 
 fn wrong_kind_error(

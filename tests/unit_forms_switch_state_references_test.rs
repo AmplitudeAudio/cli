@@ -57,10 +57,19 @@ fn test_state_referrers_match_the_default_state_and_the_entry_states_of_that_swi
     .unwrap();
 
     let v = validator(&fx);
-    assert_eq!(names(switch_state_referrers(&v, 10, 11)), vec!["by_default", "by_entry"]);
+    assert_eq!(
+        names(switch_state_referrers(&v, 10, 11)),
+        vec!["by_default", "by_entry"]
+    );
     assert_eq!(names(switch_state_referrers(&v, 10, 12)), vec!["by_entry"]);
     assert_eq!(names(switch_state_referrers(&v, 10, 13)), vec!["by_entry"]);
-    assert_eq!(names(switch_state_referrers(&v, 20, 12)), vec!["other_switch"]);
+    assert_eq!(
+        names(switch_state_referrers(&v, 20, 12)),
+        vec!["other_switch"]
+    );
     assert!(switch_state_referrers(&v, 10, 99).is_empty());
-    assert!(switch_state_referrers(&v, 10, 0).is_empty(), "0 is never a reference");
+    assert!(
+        switch_state_referrers(&v, 10, 0).is_empty(),
+        "0 is never a reference"
+    );
 }

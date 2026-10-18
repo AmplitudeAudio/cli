@@ -14,8 +14,6 @@
 
 //! Shared helpers of the effect command tests.
 
-#![allow(dead_code)]
-
 use am::app::{App, Commands};
 use am::assets::Effect;
 use am::commands::asset::{AssetCommands, EffectCommands, handle_effect_command};

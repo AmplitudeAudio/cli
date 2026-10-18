@@ -38,10 +38,23 @@ async fn fixture_with_bank(name: &str) -> AssetTestFixture {
 #[tokio::test]
 async fn test_update_adds_and_removes_by_list_flag() {
     let fx = fixture_with_bank("sb_up_edit").await;
-    update_ok(&fx, &["--add-sound", "step", "--add-event", "hit", "--remove-collection", "crowd"])
-        .await;
+    update_ok(
+        &fx,
+        &[
+            "--add-sound",
+            "step",
+            "--add-event",
+            "hit",
+            "--remove-collection",
+            "crowd",
+        ],
+    )
+    .await;
     // removing the only collection is fine: the bank still holds sounds and an event
-    assert_eq!(entries(&fx, "bank", "sounds"), ["boom.amsound", "fx/step.wav.amsound"]);
+    assert_eq!(
+        entries(&fx, "bank", "sounds"),
+        ["boom.amsound", "fx/step.wav.amsound"]
+    );
     assert_eq!(entries(&fx, "bank", "events"), ["hit.amevent"]);
     assert!(entries(&fx, "bank", "collections").is_empty());
     assert_flatc(&fx, "bank");
@@ -50,7 +63,11 @@ async fn test_update_adds_and_removes_by_list_flag() {
 #[tokio::test]
 async fn test_update_replaces_and_clears_lists() {
     let fx = fixture_with_bank("sb_up_replace").await;
-    update_ok(&fx, &["--sound", "step", "--clear-collections", "--effect", "echo"]).await;
+    update_ok(
+        &fx,
+        &["--sound", "step", "--clear-collections", "--effect", "echo"],
+    )
+    .await;
     assert_eq!(entries(&fx, "bank", "sounds"), ["fx/step.wav.amsound"]);
     assert!(entries(&fx, "bank", "collections").is_empty());
     assert_eq!(entries(&fx, "bank", "effects"), ["echo.amfx"]);
@@ -74,22 +91,44 @@ async fn test_update_is_idempotent_for_present_assets() {
 async fn test_update_unknown_asset_fails_listing_names_and_writes_nothing() {
     let fx = fixture_with_bank("sb_up_unknown").await;
     let before = std::fs::read_to_string(bank_path(&fx, "bank")).unwrap();
-    let (result, _) = run(&fx, &["update", "bank", "--add-event", "ghost"], &NonInteractiveInput).await;
+    let (result, _) = run(
+        &fx,
+        &["update", "bank", "--add-event", "ghost"],
+        &NonInteractiveInput,
+    )
+    .await;
     let err = result.unwrap_err();
     let text = format!("{err:#}");
-    assert_eq!(as_cli_error(&err).unwrap().code, codes::ERR_VALIDATION_REFERENCE);
+    assert_eq!(
+        as_cli_error(&err).unwrap().code,
+        codes::ERR_VALIDATION_REFERENCE
+    );
     assert!(text.contains("ghost") && text.contains("hit"), "{text}");
-    assert_eq!(std::fs::read_to_string(bank_path(&fx, "bank")).unwrap(), before);
+    assert_eq!(
+        std::fs::read_to_string(bank_path(&fx, "bank")).unwrap(),
+        before
+    );
 }
 
 #[tokio::test]
 async fn test_update_removing_a_missing_entry_fails_and_writes_nothing() {
     let fx = fixture_with_bank("sb_up_missing").await;
     let before = std::fs::read_to_string(bank_path(&fx, "bank")).unwrap();
-    let (result, _) = run(&fx, &["update", "bank", "--remove-sound", "step"], &NonInteractiveInput).await;
+    let (result, _) = run(
+        &fx,
+        &["update", "bank", "--remove-sound", "step"],
+        &NonInteractiveInput,
+    )
+    .await;
     let text = format!("{:#}", result.unwrap_err());
-    assert!(text.contains("not in the soundbank") && text.contains("boom.amsound"), "{text}");
-    assert_eq!(std::fs::read_to_string(bank_path(&fx, "bank")).unwrap(), before);
+    assert!(
+        text.contains("not in the soundbank") && text.contains("boom.amsound"),
+        "{text}"
+    );
+    assert_eq!(
+        std::fs::read_to_string(bank_path(&fx, "bank")).unwrap(),
+        before
+    );
 }
 
 #[tokio::test]
@@ -99,8 +138,14 @@ async fn test_update_can_clear_a_bank_to_empty() {
     update_ok(&fx, &["--clear-sounds"]).await;
     let raw = read_raw(&fx, "bank");
     for field in [
-        "sounds", "collections", "events", "switches", "switch_containers", "effects",
-        "attenuators", "rtpc",
+        "sounds",
+        "collections",
+        "events",
+        "switches",
+        "switch_containers",
+        "effects",
+        "attenuators",
+        "rtpc",
     ] {
         assert_eq!(raw[field], json!([]), "{field}");
     }
@@ -136,7 +181,11 @@ async fn test_update_keeps_unknown_keys_and_untouched_lists_verbatim() {
     let map = raw.as_object_mut().unwrap();
     map.insert("_a".into(), json!("note"));
     map.insert("_z".into(), json!({"keep": [1, 2]}));
-    std::fs::write(bank_path(&fx, "bank"), serde_json::to_string_pretty(&raw).unwrap()).unwrap();
+    std::fs::write(
+        bank_path(&fx, "bank"),
+        serde_json::to_string_pretty(&raw).unwrap(),
+    )
+    .unwrap();
     let before = read_raw(&fx, "bank");
 
     update_ok(&fx, &["--add-event", "hit"]).await;
@@ -150,8 +199,14 @@ async fn test_update_keeps_unknown_keys_and_untouched_lists_verbatim() {
     assert_eq!(after["events"], json!(["hit.amevent"]));
     let keys: Vec<&String> = after.as_object().unwrap().keys().collect();
     let at = |k: &str| keys.iter().position(|x| x.as_str() == k).unwrap();
-    assert!(at("sounds") < at("_a"), "unknown keys follow the modelled ones: {keys:?}");
-    assert!(at("_a") < at("_z"), "unknown keys keep their relative order: {keys:?}");
+    assert!(
+        at("sounds") < at("_a"),
+        "unknown keys follow the modelled ones: {keys:?}"
+    );
+    assert!(
+        at("_a") < at("_z"),
+        "unknown keys keep their relative order: {keys:?}"
+    );
 }
 
 #[tokio::test]
@@ -166,7 +221,14 @@ async fn test_update_repairs_a_bank_missing_lists() {
     update_ok(&fx, &["--add-event", "hit"]).await;
     // ...and update writes the lists the SDK dereferences
     let raw = read_raw(&fx, "bank");
-    for field in ["collections", "switches", "switch_containers", "effects", "attenuators", "rtpc"] {
+    for field in [
+        "collections",
+        "switches",
+        "switch_containers",
+        "effects",
+        "attenuators",
+        "rtpc",
+    ] {
         assert_eq!(raw[field], json!([]), "{field}");
     }
     assert_eq!(raw["events"], json!(["hit.amevent"]));
@@ -178,21 +240,40 @@ async fn test_update_reports_the_changed_lists() {
     let fx = fixture_with_bank("sb_up_report").await;
     let (result, out) = run_with(
         &fx,
-        &["update", "bank", "--add-event", "hit", "--clear-collections", "--add-sound", "step"],
+        &[
+            "update",
+            "bank",
+            "--add-event",
+            "hit",
+            "--clear-collections",
+            "--add-sound",
+            "step",
+        ],
         &NonInteractiveInput,
         CaptureOutput::json(),
     )
     .await;
     result.unwrap();
     let data = out.last_success().unwrap();
-    assert_eq!(data["updated_fields"], json!(["sounds", "collections", "events"]));
+    assert_eq!(
+        data["updated_fields"],
+        json!(["sounds", "collections", "events"])
+    );
 }
 
 #[tokio::test]
 async fn test_update_of_a_missing_bank_fails() {
     let fx = fixture("sb_up_nobank");
-    let (result, _) = run(&fx, &["update", "ghost", "--add-sound", "boom"], &NonInteractiveInput).await;
-    assert_eq!(as_cli_error(&result.unwrap_err()).unwrap().code, codes::ERR_ASSET_NOT_FOUND);
+    let (result, _) = run(
+        &fx,
+        &["update", "ghost", "--add-sound", "boom"],
+        &NonInteractiveInput,
+    )
+    .await;
+    assert_eq!(
+        as_cli_error(&result.unwrap_err()).unwrap().code,
+        codes::ERR_ASSET_NOT_FOUND
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -219,7 +300,10 @@ async fn test_interactive_create_picks_assets_type_by_type() {
     let (result, _) = run(&fx, &["create", "bank"], &input).await;
     result.unwrap();
     input.assert_all_consumed();
-    assert_eq!(entries(&fx, "bank", "sounds"), ["boom.amsound", "fx/step.wav.amsound"]);
+    assert_eq!(
+        entries(&fx, "bank", "sounds"),
+        ["boom.amsound", "fx/step.wav.amsound"]
+    );
     assert_eq!(entries(&fx, "bank", "events"), ["hit.amevent"]);
     assert_eq!(entries(&fx, "bank", "rtpc"), ["wind.amrtpc"]);
     assert!(entries(&fx, "bank", "effects").is_empty());
@@ -282,7 +366,11 @@ async fn test_interactive_update_adds_and_removes() {
     assert_eq!(entries(&fx, "bank", "sounds"), ["boom.amsound"]);
     // assets already in the bank are not offered again
     let offered = input.options_seen.lock().unwrap().clone();
-    assert!(offered.iter().all(|o| !o.contains(&"boom".to_string()) || o.len() > 1));
+    assert!(
+        offered
+            .iter()
+            .all(|o| !o.contains(&"boom".to_string()) || o.len() > 1)
+    );
 }
 
 #[tokio::test]
@@ -300,7 +388,12 @@ async fn test_interactive_update_repairs_legacy_entries() {
     )
     .unwrap();
     // the legacy entry makes the bank invalid until it is removed
-    let (result, _) = run(&fx, &["update", "bank", "--add-event", "hit"], &NonInteractiveInput).await;
+    let (result, _) = run(
+        &fx,
+        &["update", "bank", "--add-event", "hit"],
+        &NonInteractiveInput,
+    )
+    .await;
     assert!(format!("{:#}", result.unwrap_err()).contains(".amsound"));
 
     let input = ScriptedInput::new(
@@ -347,6 +440,13 @@ async fn test_project_validate_accepts_an_empty_bank() {
         switch_containers_only: false,
         events_only: false,
         soundbanks_only: true,
+        attenuations_only: false,
+        rtpc_only: false,
+        pipelines_only: false,
+        buses_only: false,
+        engine_configs_only: false,
     };
-    handler(&command, None, &NonInteractiveInput, &out).await.unwrap();
+    handler(&command, None, &NonInteractiveInput, &out)
+        .await
+        .unwrap();
 }

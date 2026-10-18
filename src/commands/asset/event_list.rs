@@ -176,9 +176,6 @@ pub(super) async fn list_events(output: &dyn Output) -> Result<()> {
         return Ok(());
     }
 
-    // Build validator for resolving target names
-    let validator = ProjectValidator::new(current_dir, output).ok();
-
     // Step 7: Output based on mode
     match output.mode() {
         OutputMode::Json => {

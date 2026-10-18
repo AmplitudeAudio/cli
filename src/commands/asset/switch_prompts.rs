@@ -36,7 +36,9 @@ const MENU: [&str; 5] = [
 ];
 const UNNAMED: &str = "(unnamed)";
 
-fn name_validator(taken: Vec<String>) -> impl Fn(&str) -> Result<Validation, inquire::CustomUserError> {
+fn name_validator(
+    taken: Vec<String>,
+) -> impl Fn(&str) -> Result<Validation, inquire::CustomUserError> {
     move |value: &str| {
         let value = value.trim();
         Ok(if value.is_empty() {
@@ -117,7 +119,11 @@ pub fn complete_create_patch(
 }
 
 fn label(state: &SwitchStateDefinition) -> String {
-    format!("{} (ID {})", state.name.as_deref().unwrap_or(UNNAMED), state.id)
+    format!(
+        "{} (ID {})",
+        state.name.as_deref().unwrap_or(UNNAMED),
+        state.id
+    )
 }
 
 fn prompt_add(
@@ -138,7 +144,11 @@ fn prompt_add(
     })
 }
 
-fn prompt_rename(input: &dyn Input, state: &SwitchStateDefinition, others: Vec<String>) -> Result<String> {
+fn prompt_rename(
+    input: &dyn Input,
+    state: &SwitchStateDefinition,
+    others: Vec<String>,
+) -> Result<String> {
     let validator = name_validator(others);
     let current = state.name.clone().unwrap_or_default();
     Ok(input
@@ -147,7 +157,11 @@ fn prompt_rename(input: &dyn Input, state: &SwitchStateDefinition, others: Vec<S
         .to_string())
 }
 
-fn prompt_new_id(input: &dyn Input, state: &SwitchStateDefinition, others: Vec<u64>) -> Result<u64> {
+fn prompt_new_id(
+    input: &dyn Input,
+    state: &SwitchStateDefinition,
+    others: Vec<u64>,
+) -> Result<u64> {
     let validator = id_validator(others);
     let text = input.prompt_text_with_default("New ID", &state.id.to_string(), Some(&validator))?;
     Ok(text.trim().parse::<u64>()?)

@@ -271,10 +271,10 @@ pub fn lists_from_json(path: &Path) -> Result<Vec<(SoundbankList, Vec<String>)>>
     let Value::Object(map) = value else {
         return Err(json_error(path, "expected an object of lists").into());
     };
-    if let Some(unknown) = map
-        .keys()
-        .find(|k| !IGNORED_JSON_KEYS.contains(&k.as_str()) && !SoundbankList::ALL.iter().any(|l| l.field() == k.as_str()))
-    {
+    if let Some(unknown) = map.keys().find(|k| {
+        !IGNORED_JSON_KEYS.contains(&k.as_str())
+            && !SoundbankList::ALL.iter().any(|l| l.field() == k.as_str())
+    }) {
         let valid = SoundbankList::ALL.map(SoundbankList::field).join(", ");
         return Err(json_error(path, format!("unknown key '{unknown}' (valid: {valid})")).into());
     }
@@ -293,7 +293,10 @@ pub fn lists_from_json(path: &Path) -> Result<Vec<(SoundbankList, Vec<String>)>>
                     .filter(|s| !s.is_empty())
                     .map(str::to_string)
                     .ok_or_else(|| {
-                        json_error(path, format!("'{}' holds a value that is not a name", list.field()))
+                        json_error(
+                            path,
+                            format!("'{}' holds a value that is not a name", list.field()),
+                        )
                     })
             })
             .collect::<Result<Vec<_>, _>>()?;
@@ -321,7 +324,10 @@ fn replacement(
     list: SoundbankList,
 ) -> Result<Option<Vec<String>>> {
     let from_flag = flags.lists.get(list);
-    let from_json = json.iter().find(|(l, _)| *l == list).map(|(_, n)| n.clone());
+    let from_json = json
+        .iter()
+        .find(|(l, _)| *l == list)
+        .map(|(_, n)| n.clone());
     let cleared = flags.edit.cleared(list);
     let sources = [!from_flag.is_empty(), from_json.is_some(), cleared];
     if sources.iter().filter(|set| **set).count() > 1 {

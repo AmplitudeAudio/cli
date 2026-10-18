@@ -56,7 +56,11 @@ fn build(fx: &AssetTestFixture, patch: &EventPatch) -> Result<Event, am::assets:
 #[test]
 fn test_build_defaults_to_parallel_and_generates_an_id() {
     let fx = fixture("svc_ev_default");
-    let event = build(&fx, &patch_with(vec![action(EventActionType::Play, &[101])])).unwrap();
+    let event = build(
+        &fx,
+        &patch_with(vec![action(EventActionType::Play, &[101])]),
+    )
+    .unwrap();
     assert_ne!(event.id, 0);
     assert_eq!(event.name(), "ev");
     assert_eq!(event.run_mode, EventActionRunningMode::Parallel);
@@ -124,7 +128,11 @@ fn test_bus_target_on_a_playback_action_is_rejected_with_its_path() {
 #[test]
 fn test_sound_target_on_a_bus_action_is_rejected() {
     let fx = fixture("svc_ev_sound_mute");
-    let err = build(&fx, &patch_with(vec![action(EventActionType::MuteBus, &[101])])).unwrap_err();
+    let err = build(
+        &fx,
+        &patch_with(vec![action(EventActionType::MuteBus, &[101])]),
+    )
+    .unwrap_err();
     assert_eq!(err.code(), codes::ERR_VALIDATION_REFERENCE);
     assert_eq!(err.field.as_deref(), Some("actions[0].targets[0]"));
     assert!(err.why().contains("bus"));
@@ -133,7 +141,11 @@ fn test_sound_target_on_a_bus_action_is_rejected() {
 #[test]
 fn test_dangling_and_zero_targets_are_rejected() {
     let fx = fixture("svc_ev_dangling");
-    let dangling = build(&fx, &patch_with(vec![action(EventActionType::Stop, &[999])])).unwrap_err();
+    let dangling = build(
+        &fx,
+        &patch_with(vec![action(EventActionType::Stop, &[999])]),
+    )
+    .unwrap_err();
     assert_eq!(dangling.code(), codes::ERR_VALIDATION_REFERENCE);
     assert_eq!(dangling.field.as_deref(), Some("actions[0].targets[0]"));
 
@@ -175,13 +187,21 @@ fn test_targets_are_required_except_for_none() {
 fn test_wait_targets_are_milliseconds_not_references() {
     let fx = fixture("svc_ev_wait");
     // 987654 is no asset: for Wait it is just a duration.
-    build(&fx, &patch_with(vec![action(EventActionType::Wait, &[987654])])).unwrap();
+    build(
+        &fx,
+        &patch_with(vec![action(EventActionType::Wait, &[987654])]),
+    )
+    .unwrap();
 }
 
 #[test]
 fn test_apply_patch_run_mode_only_keeps_the_actions() {
     let fx = fixture("svc_ev_runmode");
-    let before = build(&fx, &patch_with(vec![action(EventActionType::Play, &[101])])).unwrap();
+    let before = build(
+        &fx,
+        &patch_with(vec![action(EventActionType::Play, &[101])]),
+    )
+    .unwrap();
     let patch = EventPatch {
         run_mode: Some(EventActionRunningMode::Sequential),
         ..Default::default()
@@ -234,7 +254,11 @@ fn test_apply_patch_replace_remove_add_in_order() {
 #[test]
 fn test_apply_patch_remove_out_of_range_is_an_error() {
     let fx = fixture("svc_ev_range");
-    let before = build(&fx, &patch_with(vec![action(EventActionType::Play, &[101])])).unwrap();
+    let before = build(
+        &fx,
+        &patch_with(vec![action(EventActionType::Play, &[101])]),
+    )
+    .unwrap();
     let err = apply_patch(
         &before,
         &EventPatch {

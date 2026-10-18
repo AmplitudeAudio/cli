@@ -67,7 +67,11 @@ fn names(states: &[SwitchStateDefinition]) -> Vec<&str> {
 fn test_build_assigns_distinct_ids_and_keeps_explicit_ones() {
     let fx = AssetTestFixture::new("svc_sw_build").unwrap();
     let patch = SwitchPatch {
-        states: replace(vec![spec("wood", Some(5)), spec("stone", None), spec("metal", None)]),
+        states: replace(vec![
+            spec("wood", Some(5)),
+            spec("stone", None),
+            spec("metal", None),
+        ]),
     };
     let switch = build(&fx, &patch).unwrap();
     assert_ne!(switch.id, 0);
@@ -86,7 +90,10 @@ fn test_build_without_states_names_the_flags() {
     assert_eq!(err.code(), codes::ERR_VALIDATION_FIELD);
     assert_eq!(err.field.as_deref(), Some("states"));
     let text = format!("{} {}", err.inner.what, err.inner.why);
-    assert!(text.contains("--states") || text.contains("--state"), "{text}");
+    assert!(
+        text.contains("--states") || text.contains("--state"),
+        "{text}"
+    );
 }
 
 #[test]
@@ -98,7 +105,13 @@ fn test_build_rejects_duplicate_names_zero_and_duplicate_ids() {
         vec![spec("wood", Some(4)), spec("stone", Some(4))],
         vec![spec("   ", None)],
     ] {
-        let err = build(&fx, &SwitchPatch { states: replace(specs.clone()) }).unwrap_err();
+        let err = build(
+            &fx,
+            &SwitchPatch {
+                states: replace(specs.clone()),
+            },
+        )
+        .unwrap_err();
         assert_eq!(err.field.as_deref(), Some("states"), "{specs:?}");
     }
 }
@@ -108,7 +121,11 @@ fn test_replace_keeps_the_ids_of_states_that_keep_their_name() {
     let out = apply_states(
         "sw",
         &existing(),
-        &replace(vec![spec("metal", None), spec("wood", None), spec("grass", None)]),
+        &replace(vec![
+            spec("metal", None),
+            spec("wood", None),
+            spec("grass", None),
+        ]),
     )
     .unwrap();
     assert_eq!(names(&out), vec!["metal", "wood", "grass"]);
@@ -134,7 +151,10 @@ fn test_rename_keeps_the_id_and_resolves_names_or_ids() {
     };
     let out = apply_states("sw", &existing(), &patch).unwrap();
     assert_eq!(names(&out), vec!["timber", "rock", "metal"]);
-    assert_eq!(out.iter().map(|s| s.id).collect::<Vec<_>>(), vec![11, 12, 13]);
+    assert_eq!(
+        out.iter().map(|s| s.id).collect::<Vec<_>>(),
+        vec![11, 12, 13]
+    );
 }
 
 #[test]
@@ -145,7 +165,11 @@ fn test_rename_unknown_state_lists_the_states() {
     };
     let err = apply_states("sw", &existing(), &patch).unwrap_err();
     assert_eq!(err.code(), codes::ERR_VALIDATION_FIELD);
-    assert!(err.inner.suggestion.contains("wood"), "{}", err.inner.suggestion);
+    assert!(
+        err.inner.suggestion.contains("wood"),
+        "{}",
+        err.inner.suggestion
+    );
 }
 
 #[test]

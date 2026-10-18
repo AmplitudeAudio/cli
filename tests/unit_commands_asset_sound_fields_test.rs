@@ -283,7 +283,10 @@ async fn test_create_rejects_nan_pitch() {
     .await;
     let err = result.unwrap_err();
     assert!(!sound_path(&fx, "boom").exists());
-    assert_eq!(as_cli_error(&err).unwrap().code, codes::ERR_VALIDATION_FIELD);
+    assert_eq!(
+        as_cli_error(&err).unwrap().code,
+        codes::ERR_VALIDATION_FIELD
+    );
 }
 
 #[tokio::test]
@@ -513,7 +516,10 @@ async fn test_interactive_spread_prompt_does_not_suggest_full_circle() {
     input.assert_all_consumed();
     assert!(input.saw_prompt("Spread in degrees (0-360)"));
     let sound = read_sound(&fx, "boom");
-    assert_eq!(sound.spread.as_ref().and_then(|s| s.as_static()), Some(60.0));
+    assert_eq!(
+        sound.spread.as_ref().and_then(|s| s.as_static()),
+        Some(60.0)
+    );
 }
 
 #[tokio::test]
@@ -672,14 +678,7 @@ async fn test_update_can_clear_optional_reference_with_none() {
     let (created, _) = run(
         &fx,
         &[
-            "create",
-            "boom",
-            "--file",
-            "a.wav",
-            "--bus",
-            "sfx",
-            "--effect",
-            "echo",
+            "create", "boom", "--file", "a.wav", "--bus", "sfx", "--effect", "echo",
         ],
         &NonInteractiveInput,
     )
@@ -793,7 +792,14 @@ async fn test_interactive_update_repairs_a_sound_without_fader_and_bus() {
     .unwrap();
     // "Constant" is the first fader option: picking it must count as a change.
     let input = ScriptedInput::new(
-        &["sfx", "(keep current)", "(keep current)", "World", "Constant", "None"],
+        &[
+            "sfx",
+            "(keep current)",
+            "(keep current)",
+            "World",
+            "Constant",
+            "None",
+        ],
         &["a.wav"],
     )
     .with_confirms(&[false, false, false, false, false, false, false]);
@@ -826,7 +832,12 @@ async fn test_update_keeps_a_hand_written_rtpc_gain_without_value() {
         )
         .unwrap();
 
-    let (result, _) = run(&fx, &["update", "wind", "--priority", "10"], &NonInteractiveInput).await;
+    let (result, _) = run(
+        &fx,
+        &["update", "wind", "--priority", "10"],
+        &NonInteractiveInput,
+    )
+    .await;
     result.unwrap_or_else(|e| panic!("{e:#}"));
     let sound = read_sound(&fx, "wind");
     let gain = sound.gain.expect("gain stays");

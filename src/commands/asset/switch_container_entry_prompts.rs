@@ -61,10 +61,22 @@ pub fn pick_state(
 }
 
 fn prompt_states(input: &dyn Input, validator: &ProjectValidator, group: u64) -> Result<Vec<u64>> {
-    let mut states = vec![pick_state(input, validator, group, "Switch state of this entry", &[])?];
+    let mut states = vec![pick_state(
+        input,
+        validator,
+        group,
+        "Switch state of this entry",
+        &[],
+    )?];
     let available = validator.switch_states(group).map_or(0, |s| s.len());
     while states.len() < available && input.confirm("Play it in another state too?", Some(false))? {
-        states.push(pick_state(input, validator, group, "Another switch state", &states)?);
+        states.push(pick_state(
+            input,
+            validator,
+            group,
+            "Another switch state",
+            &states,
+        )?);
     }
     Ok(states)
 }
@@ -76,10 +88,15 @@ fn prompt_seconds(input: &dyn Input, label: &str) -> Result<f64> {
         None,
         Some(&|value: &str| match value.trim().parse::<f64>() {
             Ok(v) if v.is_finite() && v >= 0.0 => Ok(Validation::Valid),
-            _ => Ok(Validation::Invalid("Enter a number of seconds, not negative".into())),
+            _ => Ok(Validation::Invalid(
+                "Enter a number of seconds, not negative".into(),
+            )),
         }),
     )?;
-    Ok(text.trim().parse().unwrap_or(f64::from(SUGGESTED_FADE_SECONDS)))
+    Ok(text
+        .trim()
+        .parse()
+        .unwrap_or(f64::from(SUGGESTED_FADE_SECONDS)))
 }
 
 /// Asks whether the entry fades and, if so, for the duration and the fader.

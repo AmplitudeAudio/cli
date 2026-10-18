@@ -85,7 +85,9 @@ fn test_runtime_names_use_the_sdk_extensions() {
     );
     assert_eq!(SoundbankList::Sounds.source_relative("boom.json"), None);
     assert_eq!(
-        SoundbankList::Effects.source_relative("echo.amenv").as_deref(),
+        SoundbankList::Effects
+            .source_relative("echo.amenv")
+            .as_deref(),
         Some("echo.json")
     );
 }

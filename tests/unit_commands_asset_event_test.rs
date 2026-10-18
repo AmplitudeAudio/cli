@@ -210,7 +210,16 @@ async fn test_create_name_shared_by_two_kinds_asks_for_a_kind_prefix() {
     assert!(message.contains("collection:boom"), "{message}");
     assert!(!event_path(&fx, "ev").exists());
 
-    create_ok(&fx, &["--action", "play:sound:boom", "--action", "stop:collection:boom"]).await;
+    create_ok(
+        &fx,
+        &[
+            "--action",
+            "play:sound:boom",
+            "--action",
+            "stop:collection:boom",
+        ],
+    )
+    .await;
     let actions = read_event(&fx, "ev").actions.unwrap();
     assert_eq!(actions[0].targets, Some(vec![103]));
     assert_eq!(actions[1].targets, Some(vec![203]));
@@ -228,7 +237,12 @@ async fn test_create_wrong_target_kind_for_the_action_type_is_rejected() {
         "mute-bus:101",
         "play:2",
     ] {
-        let (result, _) = run(&fx, &["create", "ev", "--action", spec], &NonInteractiveInput).await;
+        let (result, _) = run(
+            &fx,
+            &["create", "ev", "--action", spec],
+            &NonInteractiveInput,
+        )
+        .await;
         let err = result.expect_err(spec);
         assert_eq!(
             as_cli_error(&err).unwrap().code,
@@ -299,7 +313,12 @@ async fn test_create_wait_takes_milliseconds() {
     assert_eq!(actions[1].targets, Some(vec![0]));
 
     for bad in ["wait:soon", "wait:-5", "wait:"] {
-        let (result, _) = run(&fx, &["create", "bad", "--action", bad], &NonInteractiveInput).await;
+        let (result, _) = run(
+            &fx,
+            &["create", "bad", "--action", bad],
+            &NonInteractiveInput,
+        )
+        .await;
         let err = result.expect_err(bad);
         assert_eq!(
             as_cli_error(&err).unwrap().code,
@@ -321,7 +340,12 @@ async fn test_create_rejects_malformed_action_specs() {
         ("play:step1,scope=world,scope=entity", "twice"),
         ("play:", "target"),
     ] {
-        let (result, _) = run(&fx, &["create", "ev", "--action", spec], &NonInteractiveInput).await;
+        let (result, _) = run(
+            &fx,
+            &["create", "ev", "--action", spec],
+            &NonInteractiveInput,
+        )
+        .await;
         let err = result.expect_err(spec);
         let message = format!("{err:#}");
         assert!(message.contains(needle), "{spec}: {message}");
@@ -339,7 +363,14 @@ async fn test_create_invalid_run_mode_is_rejected() {
     let fx = fixture("ev_run_mode");
     let (result, _) = run(
         &fx,
-        &["create", "ev", "--run-mode", "random", "--action", "play:step1"],
+        &[
+            "create",
+            "ev",
+            "--run-mode",
+            "random",
+            "--action",
+            "play:step1",
+        ],
         &NonInteractiveInput,
     )
     .await;
@@ -401,7 +432,14 @@ async fn test_create_json_output_reports_the_event() {
     let fx = fixture("ev_json_out");
     let (result, out) = run_with(
         &fx,
-        &["create", "ev", "--action", "play:step1", "--action", "wait:10"],
+        &[
+            "create",
+            "ev",
+            "--action",
+            "play:step1",
+            "--action",
+            "wait:10",
+        ],
         &NonInteractiveInput,
         CaptureOutput::json(),
     )
@@ -467,7 +505,10 @@ async fn test_create_from_json_rejects_bad_files() {
     for (body, needle) in [
         ("not json", "JSON"),
         (r#"[{"targets": [101]}]"#, "type"),
-        (r#"[{"type": "Play", "targets": [101], "volume": 1}]"#, "volume"),
+        (
+            r#"[{"type": "Play", "targets": [101], "volume": 1}]"#,
+            "volume",
+        ),
         (r#"[{"type": "Jump", "targets": [101]}]"#, "Jump"),
         (r#"[{"type": "Play", "targets": [true]}]"#, "target"),
         (r#"[{"type": "Play", "targets": ["nope"]}]"#, "nope"),
@@ -476,7 +517,12 @@ async fn test_create_from_json_rejects_bad_files() {
         std::fs::write(&file, body).unwrap();
         let (result, _) = run(
             &fx,
-            &["create", "ev", "--actions-from-json", file.to_str().unwrap()],
+            &[
+                "create",
+                "ev",
+                "--actions-from-json",
+                file.to_str().unwrap(),
+            ],
             &NonInteractiveInput,
         )
         .await;
@@ -550,7 +596,11 @@ async fn test_bus_target_outside_the_active_bus_file_warns() {
         Some(vec![9, 2])
     );
     let warnings = out.all_warnings();
-    assert_eq!(warnings.len(), 1, "only the outside bus warns: {warnings:?}");
+    assert_eq!(
+        warnings.len(),
+        1,
+        "only the outside bus warns: {warnings:?}"
+    );
     assert!(warnings[0].contains("main.buses.json"), "{warnings:?}");
     let data = out.last_success().unwrap();
     assert!(data["warnings"][0].as_str().unwrap().contains("ambient"));

@@ -33,8 +33,16 @@ use serde_json::json;
 #[test]
 fn test_create_parses_every_parameter_flag() {
     match parse(&[
-        "create", "fx", "--effect-type", "Delay", "--param", "0.5", "--param-rtpc", "1=speed",
-        "--parameters-from-json", "p.json",
+        "create",
+        "fx",
+        "--effect-type",
+        "Delay",
+        "--param",
+        "0.5",
+        "--param-rtpc",
+        "1=speed",
+        "--parameters-from-json",
+        "p.json",
     ]) {
         EffectCommands::Create { extra, param, .. } => {
             assert_eq!(param, Some(vec![0.5]));
@@ -48,11 +56,23 @@ fn test_create_parses_every_parameter_flag() {
 #[test]
 fn test_update_parses_the_edit_flags() {
     match parse(&[
-        "update", "fx", "--add-param", "0.2", "--add-param", "rtpc:wind", "--remove-param", "0",
-        "--remove-param", "2", "--clear-params",
+        "update",
+        "fx",
+        "--add-param",
+        "0.2",
+        "--add-param",
+        "rtpc:wind",
+        "--remove-param",
+        "0",
+        "--remove-param",
+        "2",
+        "--clear-params",
     ]) {
         EffectCommands::Update { edit, .. } => {
-            assert_eq!(edit.add_param, vec!["0.2".to_string(), "rtpc:wind".to_string()]);
+            assert_eq!(
+                edit.add_param,
+                vec!["0.2".to_string(), "rtpc:wind".to_string()]
+            );
             assert_eq!(edit.remove_param, vec![0, 2]);
             assert!(edit.clear_params);
         }
@@ -67,7 +87,11 @@ fn test_update_parses_the_edit_flags() {
 #[tokio::test]
 async fn test_create_writes_static_and_bound_parameters_in_order() {
     let fx = fixture("fx_create_mixed");
-    create_ok(&fx, &["--param", "0.5", "--param", "2", "--param-rtpc", "1=speed"]).await;
+    create_ok(
+        &fx,
+        &["--param", "0.5", "--param", "2", "--param-rtpc", "1=speed"],
+    )
+    .await;
     let raw = read_raw(&fx, "fx1");
     assert_eq!(raw["effect"], "Delay");
     let params = raw["parameters"].as_array().unwrap();
@@ -104,13 +128,21 @@ async fn test_create_with_unregistered_filter_warns_but_succeeds() {
     )
     .await;
     result.unwrap();
-    assert_eq!(read_effect(&fx, "fx1").effect.as_deref(), Some("MyPluginReverb"));
+    assert_eq!(
+        read_effect(&fx, "fx1").effect.as_deref(),
+        Some("MyPluginReverb")
+    );
     let warnings = out.all_warnings();
-    assert!(warnings.iter().any(|w| w.contains("MyPluginReverb")), "{warnings:?}");
-    assert!(out.last_success().unwrap()["warnings"][0]
-        .as_str()
-        .unwrap()
-        .contains("MyPluginReverb"));
+    assert!(
+        warnings.iter().any(|w| w.contains("MyPluginReverb")),
+        "{warnings:?}"
+    );
+    assert!(
+        out.last_success().unwrap()["warnings"][0]
+            .as_str()
+            .unwrap()
+            .contains("MyPluginReverb")
+    );
     assert_flatc(&fx, "fx1");
 }
 
@@ -135,7 +167,10 @@ async fn test_create_missing_effect_type_names_the_flag_and_writes_nothing() {
     let (result, _) = run(&fx, &["create", "fx1"], &NonInteractiveInput).await;
     let err = result.unwrap_err();
     assert!(format!("{err:#}").contains("--effect-type"));
-    assert_eq!(as_cli_error(&err).unwrap().code, codes::ERR_VALIDATION_FIELD);
+    assert_eq!(
+        as_cli_error(&err).unwrap().code,
+        codes::ERR_VALIDATION_FIELD
+    );
     assert!(!effect_path(&fx, "fx1").exists());
 }
 
@@ -149,7 +184,14 @@ async fn test_json_mode_never_prompts() {
 
     let (result, _) = run_with(
         &fx,
-        &["create", "fx1", "--effect-type", "Delay", "--param-rtpc", "0=nope"],
+        &[
+            "create",
+            "fx1",
+            "--effect-type",
+            "Delay",
+            "--param-rtpc",
+            "0=nope",
+        ],
         &input,
         CaptureOutput::json(),
     )
@@ -164,14 +206,27 @@ async fn test_create_unknown_rtpc_name_is_a_reference_error() {
     let fx = fixture("fx_unknown_rtpc");
     let (result, _) = run(
         &fx,
-        &["create", "fx1", "--effect-type", "Delay", "--param-rtpc", "0=nope"],
+        &[
+            "create",
+            "fx1",
+            "--effect-type",
+            "Delay",
+            "--param-rtpc",
+            "0=nope",
+        ],
         &NonInteractiveInput,
     )
     .await;
     let err = result.unwrap_err();
-    assert_eq!(as_cli_error(&err).unwrap().code, codes::ERR_VALIDATION_REFERENCE);
+    assert_eq!(
+        as_cli_error(&err).unwrap().code,
+        codes::ERR_VALIDATION_REFERENCE
+    );
     let suggestion = &as_cli_error(&err).unwrap().suggestion;
-    assert!(suggestion.contains("speed"), "lists what exists: {suggestion}");
+    assert!(
+        suggestion.contains("speed"),
+        "lists what exists: {suggestion}"
+    );
     assert!(!effect_path(&fx, "fx1").exists());
 }
 
@@ -180,7 +235,14 @@ async fn test_create_numeric_rtpc_id_that_does_not_exist_is_a_reference_error() 
     let fx = fixture("fx_dangling_rtpc");
     let (result, _) = run(
         &fx,
-        &["create", "fx1", "--effect-type", "Delay", "--param-rtpc", "0=999"],
+        &[
+            "create",
+            "fx1",
+            "--effect-type",
+            "Delay",
+            "--param-rtpc",
+            "0=999",
+        ],
         &NonInteractiveInput,
     )
     .await;
@@ -196,12 +258,22 @@ async fn test_create_bind_index_beyond_the_list_fails() {
     let fx = fixture("fx_bind_range");
     let (result, _) = run(
         &fx,
-        &["create", "fx1", "--effect-type", "Delay", "--param-rtpc", "2=speed"],
+        &[
+            "create",
+            "fx1",
+            "--effect-type",
+            "Delay",
+            "--param-rtpc",
+            "2=speed",
+        ],
         &NonInteractiveInput,
     )
     .await;
     let err = result.unwrap_err();
-    assert_eq!(as_cli_error(&err).unwrap().code, codes::ERR_VALIDATION_FIELD);
+    assert_eq!(
+        as_cli_error(&err).unwrap().code,
+        codes::ERR_VALIDATION_FIELD
+    );
     assert!(!effect_path(&fx, "fx1").exists());
 }
 
@@ -211,12 +283,23 @@ async fn test_create_rejects_malformed_param_rtpc() {
     for bad in ["speed", "x=speed", "=speed", "0="] {
         let (result, _) = run(
             &fx,
-            &["create", "fx1", "--effect-type", "Delay", "--param-rtpc", bad],
+            &[
+                "create",
+                "fx1",
+                "--effect-type",
+                "Delay",
+                "--param-rtpc",
+                bad,
+            ],
             &NonInteractiveInput,
         )
         .await;
         let err = result.unwrap_err();
-        assert_eq!(as_cli_error(&err).unwrap().code, codes::ERR_VALIDATION_FIELD, "{bad}");
+        assert_eq!(
+            as_cli_error(&err).unwrap().code,
+            codes::ERR_VALIDATION_FIELD,
+            "{bad}"
+        );
         assert!(format!("{err:#}").contains("INDEX=RTPC"), "{bad}: {err:#}");
     }
 }
@@ -254,7 +337,13 @@ async fn test_create_conflicting_replace_flags_are_rejected() {
     let (result, _) = run(
         &fx,
         &[
-            "create", "fx1", "--effect-type", "Delay", "--param", "1", "--parameters-from-json",
+            "create",
+            "fx1",
+            "--effect-type",
+            "Delay",
+            "--param",
+            "1",
+            "--parameters-from-json",
             file.to_str().unwrap(),
         ],
         &NonInteractiveInput,
@@ -299,7 +388,10 @@ async fn test_create_from_sdk_effect_object_reads_its_parameters() {
     .unwrap();
     create_ok(&fx, &["--parameters-from-json", file.to_str().unwrap()]).await;
     assert_eq!(read_effect(&fx, "fx1").effect.as_deref(), Some("Delay"));
-    assert_eq!(read_effect(&fx, "fx1").parameters.unwrap()[0].as_static(), Some(3.0));
+    assert_eq!(
+        read_effect(&fx, "fx1").parameters.unwrap()[0].as_static(),
+        Some(3.0)
+    );
 }
 
 #[tokio::test]
@@ -314,7 +406,11 @@ async fn test_create_from_json_with_dangling_rtpc_fails() {
     let (result, _) = run(
         &fx,
         &[
-            "create", "fx1", "--effect-type", "Delay", "--parameters-from-json",
+            "create",
+            "fx1",
+            "--effect-type",
+            "Delay",
+            "--parameters-from-json",
             file.to_str().unwrap(),
         ],
         &NonInteractiveInput,
@@ -341,14 +437,22 @@ async fn test_create_from_json_rejects_unusable_files() {
         let (result, _) = run(
             &fx,
             &[
-                "create", "fx1", "--effect-type", "Delay", "--parameters-from-json",
+                "create",
+                "fx1",
+                "--effect-type",
+                "Delay",
+                "--parameters-from-json",
                 file.to_str().unwrap(),
             ],
             &NonInteractiveInput,
         )
         .await;
         let err = result.unwrap_err();
-        assert_eq!(as_cli_error(&err).unwrap().code, codes::ERR_VALIDATION_FIELD, "{content}");
+        assert_eq!(
+            as_cli_error(&err).unwrap().code,
+            codes::ERR_VALIDATION_FIELD,
+            "{content}"
+        );
         assert!(format!("{err:#}").contains(needle), "{content}: {err:#}");
     }
 }
@@ -361,7 +465,16 @@ async fn test_create_from_json_rejects_unusable_files() {
 async fn rich_effect(fx: &AssetTestFixture) {
     create_ok(
         fx,
-        &["--param", "0.5", "--param", "2", "--param", "3", "--param-rtpc", "1=speed"],
+        &[
+            "--param",
+            "0.5",
+            "--param",
+            "2",
+            "--param",
+            "3",
+            "--param-rtpc",
+            "1=speed",
+        ],
     )
     .await;
 }
@@ -382,7 +495,10 @@ async fn test_update_effect_type_changes_only_that_field() {
     let mut expected = before.clone();
     expected.effect = Some("Lofi".to_string());
     assert_eq!(read_effect(&fx, "fx1"), expected);
-    assert_eq!(out.last_success().unwrap()["updated_fields"], json!(["effect_type"]));
+    assert_eq!(
+        out.last_success().unwrap()["updated_fields"],
+        json!(["effect_type"])
+    );
     assert_flatc(&fx, "fx1");
 }
 
@@ -395,8 +511,16 @@ async fn test_update_bind_add_and_remove_keep_the_other_parameters() {
     let (result, out) = run_with(
         &fx,
         &[
-            "update", "fx1", "--param-rtpc", "0=wind", "--remove-param", "2", "--add-param",
-            "rtpc:speed", "--add-param", "9.5",
+            "update",
+            "fx1",
+            "--param-rtpc",
+            "0=wind",
+            "--remove-param",
+            "2",
+            "--add-param",
+            "rtpc:speed",
+            "--add-param",
+            "9.5",
         ],
         &NonInteractiveInput,
         CaptureOutput::json(),
@@ -407,10 +531,16 @@ async fn test_update_bind_add_and_remove_keep_the_other_parameters() {
     let after = read_effect(&fx, "fx1").parameters.unwrap();
     assert_eq!(after.len(), 4);
     assert_eq!(after[0].rtpc.as_ref().unwrap().id, 402);
-    assert_eq!(after[1], before[1], "the bound parameter is kept as written");
+    assert_eq!(
+        after[1], before[1],
+        "the bound parameter is kept as written"
+    );
     assert_eq!(after[2].rtpc.as_ref().unwrap().id, 401);
     assert_eq!(after[3].as_static(), Some(9.5));
-    assert_eq!(out.last_success().unwrap()["updated_fields"], json!(["parameters"]));
+    assert_eq!(
+        out.last_success().unwrap()["updated_fields"],
+        json!(["parameters"])
+    );
     assert_flatc(&fx, "fx1");
 }
 
@@ -418,13 +548,28 @@ async fn test_update_bind_add_and_remove_keep_the_other_parameters() {
 async fn test_update_param_replaces_and_clear_params_empties() {
     let fx = fixture("fx_up_replace");
     rich_effect(&fx).await;
-    let (result, _) = run(&fx, &["update", "fx1", "--param", "7"], &NonInteractiveInput).await;
+    let (result, _) = run(
+        &fx,
+        &["update", "fx1", "--param", "7"],
+        &NonInteractiveInput,
+    )
+    .await;
     result.unwrap();
     assert_eq!(read_effect(&fx, "fx1").parameters.unwrap().len(), 1);
 
-    let (result, _) = run(&fx, &["update", "fx1", "--clear-params"], &NonInteractiveInput).await;
+    let (result, _) = run(
+        &fx,
+        &["update", "fx1", "--clear-params"],
+        &NonInteractiveInput,
+    )
+    .await;
     result.unwrap();
-    assert!(read_effect(&fx, "fx1").parameters.unwrap_or_default().is_empty());
+    assert!(
+        read_effect(&fx, "fx1")
+            .parameters
+            .unwrap_or_default()
+            .is_empty()
+    );
     assert_flatc(&fx, "fx1");
 }
 
@@ -436,7 +581,12 @@ async fn test_update_from_json_replaces_the_list() {
     std::fs::write(&file, "[1.5, \"rtpc:wind\"]").unwrap();
     let (result, _) = run(
         &fx,
-        &["update", "fx1", "--parameters-from-json", file.to_str().unwrap()],
+        &[
+            "update",
+            "fx1",
+            "--parameters-from-json",
+            file.to_str().unwrap(),
+        ],
         &NonInteractiveInput,
     )
     .await;
@@ -451,12 +601,20 @@ async fn test_update_remove_out_of_range_fails_and_writes_nothing() {
     let fx = fixture("fx_up_range");
     rich_effect(&fx).await;
     let before = std::fs::read_to_string(effect_path(&fx, "fx1")).unwrap();
-    let (result, _) = run(&fx, &["update", "fx1", "--remove-param", "9"], &NonInteractiveInput).await;
+    let (result, _) = run(
+        &fx,
+        &["update", "fx1", "--remove-param", "9"],
+        &NonInteractiveInput,
+    )
+    .await;
     assert_eq!(
         as_cli_error(&result.unwrap_err()).unwrap().code,
         codes::ERR_VALIDATION_FIELD
     );
-    assert_eq!(std::fs::read_to_string(effect_path(&fx, "fx1")).unwrap(), before);
+    assert_eq!(
+        std::fs::read_to_string(effect_path(&fx, "fx1")).unwrap(),
+        before
+    );
 }
 
 #[tokio::test]
@@ -464,12 +622,20 @@ async fn test_update_unknown_rtpc_is_a_reference_error_and_writes_nothing() {
     let fx = fixture("fx_up_dangling");
     rich_effect(&fx).await;
     let before = std::fs::read_to_string(effect_path(&fx, "fx1")).unwrap();
-    let (result, _) = run(&fx, &["update", "fx1", "--add-param", "rtpc:nope"], &NonInteractiveInput).await;
+    let (result, _) = run(
+        &fx,
+        &["update", "fx1", "--add-param", "rtpc:nope"],
+        &NonInteractiveInput,
+    )
+    .await;
     assert_eq!(
         as_cli_error(&result.unwrap_err()).unwrap().code,
         codes::ERR_VALIDATION_REFERENCE
     );
-    assert_eq!(std::fs::read_to_string(effect_path(&fx, "fx1")).unwrap(), before);
+    assert_eq!(
+        std::fs::read_to_string(effect_path(&fx, "fx1")).unwrap(),
+        before
+    );
 }
 
 #[tokio::test]
@@ -488,13 +654,29 @@ async fn test_update_keeps_unknown_keys_and_their_position() {
         }),
     )
     .unwrap();
-    let (result, _) = run(&fx, &["update", "hand", "--effect-type", "Lofi"], &NonInteractiveInput).await;
+    let (result, _) = run(
+        &fx,
+        &["update", "hand", "--effect-type", "Lofi"],
+        &NonInteractiveInput,
+    )
+    .await;
     result.unwrap();
     let raw = read_raw(&fx, "hand");
-    let keys: Vec<&str> = raw.as_object().unwrap().keys().map(String::as_str).collect();
+    let keys: Vec<&str> = raw
+        .as_object()
+        .unwrap()
+        .keys()
+        .map(String::as_str)
+        .collect();
     let at = |k: &str| keys.iter().position(|x| *x == k).unwrap();
-    assert!(at("parameters") < at("_a"), "unknown keys follow the modelled ones: {keys:?}");
-    assert!(at("_a") < at("_z"), "unknown keys keep their relative order: {keys:?}");
+    assert!(
+        at("parameters") < at("_a"),
+        "unknown keys follow the modelled ones: {keys:?}"
+    );
+    assert!(
+        at("_a") < at("_z"),
+        "unknown keys keep their relative order: {keys:?}"
+    );
     assert_eq!(raw["_a"], json!({"note": "kept"}));
     assert_eq!(raw["_z"], 3);
     assert_eq!(raw["effect"], "Lofi");
@@ -513,7 +695,10 @@ async fn test_update_never_prompts_in_json_mode() {
     let (result, _) = run_with(&fx, &["update", "fx1"], &input, CaptureOutput::json()).await;
     result.unwrap();
     assert!(input.prompts.lock().unwrap().is_empty());
-    assert_eq!(std::fs::read_to_string(effect_path(&fx, "fx1")).unwrap(), before);
+    assert_eq!(
+        std::fs::read_to_string(effect_path(&fx, "fx1")).unwrap(),
+        before
+    );
 }
 
 #[tokio::test]
@@ -521,7 +706,12 @@ async fn test_update_of_a_file_without_effect_type_asks_for_the_flag_non_interac
     let fx = fixture("fx_up_legacy");
     fx.write_asset_json("effects", "legacy", json!({"id": 901, "name": "legacy"}))
         .unwrap();
-    let (result, _) = run(&fx, &["update", "legacy", "--param", "1"], &NonInteractiveInput).await;
+    let (result, _) = run(
+        &fx,
+        &["update", "legacy", "--param", "1"],
+        &NonInteractiveInput,
+    )
+    .await;
     let err = result.unwrap_err();
     assert!(format!("{err:#}").contains("effect"), "{err:#}");
 

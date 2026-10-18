@@ -51,7 +51,8 @@ pub fn complete_create_patch(
     };
 
     let walkthrough_needed = patch.run_mode.is_none() || prompted;
-    let accept_defaults = !walkthrough_needed || input.confirm(ACCEPT_DEFAULTS_PROMPT, Some(false))?;
+    let accept_defaults =
+        !walkthrough_needed || input.confirm(ACCEPT_DEFAULTS_PROMPT, Some(false))?;
 
     let mut run_mode = patch.run_mode;
     if !accept_defaults {

@@ -40,7 +40,13 @@ const SHAPES: &[(&str, &[&str])] = &[
 ];
 
 /// Every distinct shape field across all shapes.
-const ALL_FIELDS: &[&str] = &["radius", "height", "half_width", "half_height", "half_depth"];
+const ALL_FIELDS: &[&str] = &[
+    "radius",
+    "height",
+    "half_width",
+    "half_height",
+    "half_depth",
+];
 
 /// Shape selection plus the shape-specific numeric options, flattened into clap.
 #[derive(Args, Debug, Clone, Default)]
@@ -146,7 +152,10 @@ fn find_shape(name: &str) -> Result<(&'static str, &'static [&'static str])> {
 type Values = Vec<(&'static str, f32)>;
 
 fn value_of(values: &Values, field: &str) -> f32 {
-    values.iter().find(|(f, _)| *f == field).map_or(0.0, |(_, v)| *v)
+    values
+        .iter()
+        .find(|(f, _)| *f == field)
+        .map_or(0.0, |(_, v)| *v)
 }
 
 fn build_zone(shape: &str, inner: Values, outer: Values) -> ZoneDefinition {
@@ -157,12 +166,38 @@ fn build_zone(shape: &str, inner: Values, outer: Values) -> ZoneDefinition {
     }
     match shape {
         "box" => ZoneDefinition::Box(BoxZoneSettings {
-            inner: side!(inner, BoxShapeDefinition { half_width, half_height, half_depth }),
-            outer: side!(outer, BoxShapeDefinition { half_width, half_height, half_depth }),
+            inner: side!(
+                inner,
+                BoxShapeDefinition {
+                    half_width,
+                    half_height,
+                    half_depth
+                }
+            ),
+            outer: side!(
+                outer,
+                BoxShapeDefinition {
+                    half_width,
+                    half_height,
+                    half_depth
+                }
+            ),
         }),
         "capsule" => ZoneDefinition::Capsule(CapsuleZoneSettings {
-            inner: side!(inner, CapsuleShapeDefinition { radius, half_height }),
-            outer: side!(outer, CapsuleShapeDefinition { radius, half_height }),
+            inner: side!(
+                inner,
+                CapsuleShapeDefinition {
+                    radius,
+                    half_height
+                }
+            ),
+            outer: side!(
+                outer,
+                CapsuleShapeDefinition {
+                    radius,
+                    half_height
+                }
+            ),
         }),
         "cone" => ZoneDefinition::Cone(ConeZoneSettings {
             inner: side!(inner, ConeShapeDefinition { radius, height }),
@@ -215,7 +250,10 @@ pub fn zone_from_flags(args: &ZoneArgs) -> Result<ZoneDefinition> {
     let shape_name = args.shape.as_deref().ok_or_else(|| {
         error(
             "Missing --shape",
-            format!("zone flags need --shape, one of: {}", shape_names().join(", ")),
+            format!(
+                "zone flags need --shape, one of: {}",
+                shape_names().join(", ")
+            ),
         )
         .with_suggestion("Pass --shape box|capsule|cone|sphere")
     })?;
@@ -294,7 +332,12 @@ fn validate_number(text: &str) -> Result<Validation, inquire::CustomUserError> {
     })
 }
 
-fn prompt_side(input: &dyn Input, side: Side, shape: &str, fields: &[&'static str]) -> Result<Values> {
+fn prompt_side(
+    input: &dyn Input,
+    side: Side,
+    shape: &str,
+    fields: &[&'static str],
+) -> Result<Values> {
     let label_prefix = match side {
         Side::Inner => "Inner",
         Side::Outer => "Outer",

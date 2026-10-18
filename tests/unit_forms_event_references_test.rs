@@ -78,7 +78,10 @@ fn test_validate_reference_resolves_through_any_of() {
         validate_reference(&rule, id, &validator).unwrap_or_else(|e| panic!("{id}: {e:?}"));
     }
     let missing = validate_reference(&rule, 999, &validator).unwrap_err();
-    assert_eq!(missing.code(), am::common::errors::codes::ERR_VALIDATION_REFERENCE);
+    assert_eq!(
+        missing.code(),
+        am::common::errors::codes::ERR_VALIDATION_REFERENCE
+    );
     assert!(missing.what().contains("999"));
     let zero = validate_reference(&rule, 0, &validator).unwrap_err();
     assert_eq!(
@@ -107,7 +110,11 @@ fn test_validator_lists_the_union_of_any_of_members_sorted() {
             .map(|r| r.name),
         Some("sfx".to_string())
     );
-    assert!(validator.resolve(RefTarget::AnyOf(&[COLLECTION]), 101).is_none());
+    assert!(
+        validator
+            .resolve(RefTarget::AnyOf(&[COLLECTION]), 101)
+            .is_none()
+    );
 }
 
 #[test]
@@ -146,7 +153,11 @@ fn test_referrers_find_events_targeting_a_sound_collection_switch_container_or_b
         names
     };
 
-    assert_eq!(names(SOUND, 101), vec!["uses_all"], "a Wait duration is not a sound reference");
+    assert_eq!(
+        names(SOUND, 101),
+        vec!["uses_all"],
+        "a Wait duration is not a sound reference"
+    );
     assert!(names(SOUND, 102).is_empty());
     assert_eq!(names(COLLECTION, 201), vec!["uses_all"]);
     assert_eq!(names(SWITCH_CONTAINER, 301), vec!["uses_all"]);

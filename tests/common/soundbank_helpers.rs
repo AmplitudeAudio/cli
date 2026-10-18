@@ -14,8 +14,6 @@
 
 //! Shared helpers of the soundbank command tests.
 
-#![allow(dead_code)]
-
 use am::app::{App, Commands};
 use am::commands::asset::{AssetCommands, SoundbankCommands, handle_soundbank_command};
 use am::input::{Input, NonInteractiveInput};

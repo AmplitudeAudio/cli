@@ -33,9 +33,30 @@ use common::soundbank_helpers::*;
 #[test]
 fn test_create_parses_every_list_flag() {
     match parse(&[
-        "create", "b", "--sound", "a,b", "--sound", "c", "--collection", "d", "--event", "e",
-        "--switch", "f", "--switch-container", "g", "--effect", "h", "--attenuator", "i",
-        "--rtpc", "j", "--include", "sound:k", "--from-json", "l.json",
+        "create",
+        "b",
+        "--sound",
+        "a,b",
+        "--sound",
+        "c",
+        "--collection",
+        "d",
+        "--event",
+        "e",
+        "--switch",
+        "f",
+        "--switch-container",
+        "g",
+        "--effect",
+        "h",
+        "--attenuator",
+        "i",
+        "--rtpc",
+        "j",
+        "--include",
+        "sound:k",
+        "--from-json",
+        "l.json",
     ]) {
         SoundbankCommands::Create {
             lists,
@@ -61,16 +82,56 @@ fn test_create_parses_every_list_flag() {
 #[test]
 fn test_update_parses_every_edit_flag() {
     match parse(&[
-        "update", "b", "--add-sound", "a", "--add-collection", "a", "--add-event", "a",
-        "--add-switch", "a", "--add-switch-container", "a", "--add-effect", "a",
-        "--add-attenuator", "a", "--add-rtpc", "a", "--remove-sound", "r,s",
-        "--remove-collection", "r", "--remove-event", "r", "--remove-switch", "r",
-        "--remove-switch-container", "r", "--remove-effect", "r", "--remove-attenuator", "r",
-        "--remove-rtpc", "r", "--clear-sounds", "--clear-collections", "--clear-events",
-        "--clear-switches", "--clear-switch-containers", "--clear-effects",
-        "--clear-attenuators", "--clear-rtpc", "-a", "sound:x", "-r", "sound:y",
+        "update",
+        "b",
+        "--add-sound",
+        "a",
+        "--add-collection",
+        "a",
+        "--add-event",
+        "a",
+        "--add-switch",
+        "a",
+        "--add-switch-container",
+        "a",
+        "--add-effect",
+        "a",
+        "--add-attenuator",
+        "a",
+        "--add-rtpc",
+        "a",
+        "--remove-sound",
+        "r,s",
+        "--remove-collection",
+        "r",
+        "--remove-event",
+        "r",
+        "--remove-switch",
+        "r",
+        "--remove-switch-container",
+        "r",
+        "--remove-effect",
+        "r",
+        "--remove-attenuator",
+        "r",
+        "--remove-rtpc",
+        "r",
+        "--clear-sounds",
+        "--clear-collections",
+        "--clear-events",
+        "--clear-switches",
+        "--clear-switch-containers",
+        "--clear-effects",
+        "--clear-attenuators",
+        "--clear-rtpc",
+        "-a",
+        "sound:x",
+        "-r",
+        "sound:y",
     ]) {
-        SoundbankCommands::Update { edit, add, remove, .. } => {
+        SoundbankCommands::Update {
+            edit, add, remove, ..
+        } => {
             assert_eq!(edit.add_sound, vec!["a"]);
             assert_eq!(edit.add_rtpc, vec!["a"]);
             assert_eq!(edit.remove_sound, vec!["r", "s"]);
@@ -95,17 +156,36 @@ async fn test_create_with_every_list_flag_writes_runtime_names() {
     create_ok(
         &fx,
         &[
-            "--sound", "boom,step", "--collection", "crowd", "--event", "hit", "--switch",
-            "surface", "--switch-container", "footsteps", "--effect", "echo", "--attenuator",
-            "room", "--rtpc", "wind",
+            "--sound",
+            "boom,step",
+            "--collection",
+            "crowd",
+            "--event",
+            "hit",
+            "--switch",
+            "surface",
+            "--switch-container",
+            "footsteps",
+            "--effect",
+            "echo",
+            "--attenuator",
+            "room",
+            "--rtpc",
+            "wind",
         ],
     )
     .await;
-    assert_eq!(entries(&fx, "bank", "sounds"), ["boom.amsound", "fx/step.wav.amsound"]);
+    assert_eq!(
+        entries(&fx, "bank", "sounds"),
+        ["boom.amsound", "fx/step.wav.amsound"]
+    );
     assert_eq!(entries(&fx, "bank", "collections"), ["crowd.amcollection"]);
     assert_eq!(entries(&fx, "bank", "events"), ["hit.amevent"]);
     assert_eq!(entries(&fx, "bank", "switches"), ["surface.amswitch"]);
-    assert_eq!(entries(&fx, "bank", "switch_containers"), ["footsteps.amswitchcontainer"]);
+    assert_eq!(
+        entries(&fx, "bank", "switch_containers"),
+        ["footsteps.amswitchcontainer"]
+    );
     assert_eq!(entries(&fx, "bank", "effects"), ["echo.amfx"]);
     assert_eq!(entries(&fx, "bank", "attenuators"), ["room.amattenuation"]);
     assert_eq!(entries(&fx, "bank", "rtpc"), ["wind.amrtpc"]);
@@ -118,10 +198,19 @@ async fn test_created_bank_always_carries_all_eight_lists() {
     create_ok(&fx, &["--sound", "boom"]).await;
     let raw = read_raw(&fx, "bank");
     for field in [
-        "sounds", "collections", "events", "switches", "switch_containers", "effects",
-        "attenuators", "rtpc",
+        "sounds",
+        "collections",
+        "events",
+        "switches",
+        "switch_containers",
+        "effects",
+        "attenuators",
+        "rtpc",
     ] {
-        assert!(raw[field].is_array(), "{field} is missing: the SDK would crash on load");
+        assert!(
+            raw[field].is_array(),
+            "{field} is missing: the SDK would crash on load"
+        );
     }
     assert!(raw["name"].is_string() && raw["id"].as_u64().unwrap_or(0) != 0);
 }
@@ -142,38 +231,74 @@ async fn test_include_syntax_still_works_and_merges_with_flags() {
     let fx = fixture("sb_create_include");
     create_ok(
         &fx,
-        &["--include", "sound:boom", "--include", "switch_container:footsteps", "--sound", "step"],
+        &[
+            "--include",
+            "sound:boom",
+            "--include",
+            "switch_container:footsteps",
+            "--sound",
+            "step",
+        ],
     )
     .await;
-    assert_eq!(entries(&fx, "bank", "sounds"), ["fx/step.wav.amsound", "boom.amsound"]);
-    assert_eq!(entries(&fx, "bank", "switch_containers"), ["footsteps.amswitchcontainer"]);
+    assert_eq!(
+        entries(&fx, "bank", "sounds"),
+        ["fx/step.wav.amsound", "boom.amsound"]
+    );
+    assert_eq!(
+        entries(&fx, "bank", "switch_containers"),
+        ["footsteps.amswitchcontainer"]
+    );
 }
 
 #[tokio::test]
 async fn test_names_runtime_names_and_paths_are_equivalent() {
     let fx = fixture("sb_create_forms");
     create_ok(&fx, &["--sound", "boom,boom.amsound,fx/step.wav"]).await;
-    assert_eq!(entries(&fx, "bank", "sounds"), ["boom.amsound", "fx/step.wav.amsound"]);
+    assert_eq!(
+        entries(&fx, "bank", "sounds"),
+        ["boom.amsound", "fx/step.wav.amsound"]
+    );
 }
 
 #[tokio::test]
 async fn test_unknown_name_is_a_reference_error_listing_available_names() {
     let fx = fixture("sb_create_unknown");
-    let (result, _) =
-        run(&fx, &["create", "bank", "--sound", "boom,ghost"], &NonInteractiveInput).await;
+    let (result, _) = run(
+        &fx,
+        &["create", "bank", "--sound", "boom,ghost"],
+        &NonInteractiveInput,
+    )
+    .await;
     let err = result.unwrap_err();
     let text = format!("{err:#}");
-    assert_eq!(as_cli_error(&err).unwrap().code, codes::ERR_VALIDATION_REFERENCE);
-    assert!(text.contains("ghost") && text.contains("boom") && text.contains("step"), "{text}");
+    assert_eq!(
+        as_cli_error(&err).unwrap().code,
+        codes::ERR_VALIDATION_REFERENCE
+    );
+    assert!(
+        text.contains("ghost") && text.contains("boom") && text.contains("step"),
+        "{text}"
+    );
     assert!(!bank_path(&fx, "bank").exists());
 }
 
 #[tokio::test]
 async fn test_unknown_include_type_is_rejected() {
     let fx = fixture("sb_create_type");
-    let (result, _) = run(&fx, &["create", "bank", "--include", "bus:master"], &NonInteractiveInput).await;
+    let (result, _) = run(
+        &fx,
+        &["create", "bank", "--include", "bus:master"],
+        &NonInteractiveInput,
+    )
+    .await;
     assert!(format!("{:#}", result.unwrap_err()).contains("Invalid asset type"));
-    let (result, _) = run(&fx, &["create", "bank", "--include", "boom"], &NonInteractiveInput).await;
+    let (result, _) = run(
+        &fx,
+        &["create", "bank", "--include", "boom"],
+        &NonInteractiveInput,
+    )
+    .await;
     assert!(format!("{:#}", result.unwrap_err()).contains("Invalid include format"));
 }
 
@@ -183,8 +308,14 @@ async fn test_create_without_assets_writes_an_empty_bank() {
     create_ok(&fx, &[]).await;
     let raw = read_raw(&fx, "bank");
     for field in [
-        "sounds", "collections", "events", "switches", "switch_containers", "effects",
-        "attenuators", "rtpc",
+        "sounds",
+        "collections",
+        "events",
+        "switches",
+        "switch_containers",
+        "effects",
+        "attenuators",
+        "rtpc",
     ] {
         assert_eq!(raw[field], serde_json::json!([]), "{field}");
     }
@@ -200,8 +331,13 @@ async fn test_json_mode_never_prompts() {
     assert!(input.prompts.lock().unwrap().is_empty());
     assert!(bank_path(&fx, "empty").exists());
     // a failing run in JSON mode does not prompt either
-    let (result, _) =
-        run_with(&fx, &["create", "bad", "--sound", "ghost"], &input, CaptureOutput::json()).await;
+    let (result, _) = run_with(
+        &fx,
+        &["create", "bad", "--sound", "ghost"],
+        &input,
+        CaptureOutput::json(),
+    )
+    .await;
     assert!(result.is_err());
     assert!(input.prompts.lock().unwrap().is_empty());
     assert!(!bank_path(&fx, "bad").exists());
@@ -211,14 +347,22 @@ async fn test_json_mode_never_prompts() {
     let (result, _) = run_with(&fx, &["update", "bank"], &input, CaptureOutput::json()).await;
     result.unwrap();
     assert!(input.prompts.lock().unwrap().is_empty());
-    assert_eq!(std::fs::read_to_string(bank_path(&fx, "bank")).unwrap(), before);
+    assert_eq!(
+        std::fs::read_to_string(bank_path(&fx, "bank")).unwrap(),
+        before
+    );
 }
 
 #[tokio::test]
 async fn test_creating_an_existing_bank_fails() {
     let fx = fixture("sb_create_twice");
     create_ok(&fx, &["--sound", "boom"]).await;
-    let (result, _) = run(&fx, &["create", "bank", "--sound", "boom"], &NonInteractiveInput).await;
+    let (result, _) = run(
+        &fx,
+        &["create", "bank", "--sound", "boom"],
+        &NonInteractiveInput,
+    )
+    .await;
     assert_eq!(
         as_cli_error(&result.unwrap_err()).unwrap().code,
         codes::ERR_ASSET_ALREADY_EXISTS
@@ -256,7 +400,10 @@ async fn test_from_json_reads_lists_and_accepts_sdk_banks() {
     )
     .unwrap();
     create_ok(&fx, &["--from-json", file.to_str().unwrap()]).await;
-    assert_eq!(entries(&fx, "bank", "sounds"), ["boom.amsound", "fx/step.wav.amsound"]);
+    assert_eq!(
+        entries(&fx, "bank", "sounds"),
+        ["boom.amsound", "fx/step.wav.amsound"]
+    );
     assert_eq!(entries(&fx, "bank", "events"), ["hit.amevent"]);
     assert_ne!(read_raw(&fx, "bank")["id"], 5);
     assert_flatc(&fx, "bank");
@@ -293,7 +440,14 @@ async fn test_from_json_conflicts_with_the_flag_of_the_same_list() {
     std::fs::write(&file, r#"{"sounds": ["boom"]}"#).unwrap();
     let (result, _) = run(
         &fx,
-        &["create", "bank", "--sound", "step", "--from-json", file.to_str().unwrap()],
+        &[
+            "create",
+            "bank",
+            "--sound",
+            "step",
+            "--from-json",
+            file.to_str().unwrap(),
+        ],
         &NonInteractiveInput,
     )
     .await;
@@ -301,7 +455,14 @@ async fn test_from_json_conflicts_with_the_flag_of_the_same_list() {
     // different lists do not conflict
     let (result, _) = run(
         &fx,
-        &["create", "bank", "--event", "hit", "--from-json", file.to_str().unwrap()],
+        &[
+            "create",
+            "bank",
+            "--event",
+            "hit",
+            "--from-json",
+            file.to_str().unwrap(),
+        ],
         &NonInteractiveInput,
     )
     .await;

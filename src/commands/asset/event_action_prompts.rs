@@ -109,7 +109,10 @@ pub fn prompt_targets(
 }
 
 /// Asks the type and targets of a new action; `active` and `scope` keep their defaults.
-pub fn prompt_action(input: &dyn Input, validator: &ProjectValidator) -> Result<EventActionDefinition> {
+pub fn prompt_action(
+    input: &dyn Input,
+    validator: &ProjectValidator,
+) -> Result<EventActionDefinition> {
     let type_ = TYPES[select_index(input, "Action type", &to_labels(&TYPE_LABELS))?];
     let targets = prompt_targets(input, validator, type_, None)?;
     Ok(new_action(type_, targets))
@@ -153,7 +156,10 @@ pub fn describe_action(
 ) -> String {
     let targets = action.targets.as_deref().unwrap_or(&[]);
     let shown = if action.type_ == EventActionType::Wait {
-        targets.iter().map(|ms| format!("{ms} ms")).collect::<Vec<_>>()
+        targets
+            .iter()
+            .map(|ms| format!("{ms} ms"))
+            .collect::<Vec<_>>()
     } else {
         targets
             .iter()
@@ -182,10 +188,15 @@ pub fn edit_action(
 
     let wait = action.targets.as_deref().and_then(|t| t.first().copied());
     // Other kinds of target are invalid for another type, so a type change re-asks them.
-    let change_targets = new_type != action.type_
-        || input.confirm("Change the targets?", Some(false))?;
+    let change_targets =
+        new_type != action.type_ || input.confirm("Change the targets?", Some(false))?;
     let targets = if change_targets {
-        prompt_targets(input, validator, new_type, wait.filter(|_| action.type_ == EventActionType::Wait))?
+        prompt_targets(
+            input,
+            validator,
+            new_type,
+            wait.filter(|_| action.type_ == EventActionType::Wait),
+        )?
     } else {
         action.targets.clone().unwrap_or_default()
     };

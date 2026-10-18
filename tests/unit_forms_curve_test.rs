@@ -49,7 +49,12 @@ fn parse_curve_part_reads_five_fields() {
 
 #[test]
 fn parse_curve_part_rejects_malformed_input_naming_format() {
-    for bad in ["0,0,1", "a,0,1,1,linear", "0,0,1,1,wobble", "0,0,NaN,1,linear"] {
+    for bad in [
+        "0,0,1",
+        "a,0,1,1,linear",
+        "0,0,1,1,wobble",
+        "0,0,NaN,1,linear",
+    ] {
         let err = parse_curve_part(bad).unwrap_err().to_string();
         assert!(
             err.contains("start_x,start_y,end_x,end_y,fader") || err.contains("fader"),
@@ -59,7 +64,10 @@ fn parse_curve_part_rejects_malformed_input_naming_format() {
     let err = parse_curve_part("0,0,1").unwrap_err().to_string();
     assert!(err.contains("start_x,start_y,end_x,end_y,fader"), "{err}");
     let err = parse_curve_part("0,0,1,1,wobble").unwrap_err().to_string();
-    assert!(err.contains("wobble") && err.contains("SCurveSmooth"), "{err}");
+    assert!(
+        err.contains("wobble") && err.contains("SCurveSmooth"),
+        "{err}"
+    );
 }
 
 #[test]
@@ -71,7 +79,10 @@ fn parse_curve_part_rejects_non_increasing_x() {
 #[test]
 fn curve_from_flags_neither_is_none_and_both_is_error() {
     assert!(curve_from_flags(&[], None).unwrap().is_none());
-    let both = curve_from_flags(&["0,0,1,1,linear".to_string()], Some(&PathBuf::from("x.json")));
+    let both = curve_from_flags(
+        &["0,0,1,1,linear".to_string()],
+        Some(&PathBuf::from("x.json")),
+    );
     assert!(both.is_err());
 }
 
@@ -106,8 +117,7 @@ fn json_curve_error(body: &str) -> String {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("curve.json");
     fs::write(&path, body).unwrap();
-    let err = curve_from_flags(&[], Some(&path)).unwrap_err().to_string();
-    err
+    curve_from_flags(&[], Some(&path)).unwrap_err().to_string()
 }
 
 #[test]
@@ -115,12 +125,18 @@ fn json_curve_requires_a_valid_fader_on_every_part() {
     let missing = json_curve_error(
         r#"{"parts":[{"start":{"x":0.0,"y":0.0},"end":{"x":1.0,"y":1.0},"fader":"Linear"},{"start":{"x":1.0,"y":0.0},"end":{"x":2.0,"y":1.0}}]}"#,
     );
-    assert!(missing.contains("part 2") && missing.contains("fader"), "{missing}");
+    assert!(
+        missing.contains("part 2") && missing.contains("fader"),
+        "{missing}"
+    );
     assert!(missing.contains("SCurveSharp"), "{missing}");
     let unknown = json_curve_error(
         r#"{"parts":[{"start":{"x":0.0,"y":0.0},"end":{"x":1.0,"y":1.0},"fader":"Wobble"}]}"#,
     );
-    assert!(unknown.contains("part 1") && unknown.contains("Wobble"), "{unknown}");
+    assert!(
+        unknown.contains("part 1") && unknown.contains("Wobble"),
+        "{unknown}"
+    );
     assert!(unknown.contains("EaseInOut"), "{unknown}");
 }
 
@@ -215,7 +231,10 @@ fn zone_from_flags_requires_both_sides() {
         ..box_args()
     };
     let err = zone_from_flags(&only_inner).unwrap_err().to_string();
-    assert!(err.contains("--outer-half-width") && err.contains("--outer-half-depth"), "{err}");
+    assert!(
+        err.contains("--outer-half-width") && err.contains("--outer-half-depth"),
+        "{err}"
+    );
     let only_outer = ZoneArgs {
         inner_half_width: None,
         inner_half_height: None,
@@ -279,7 +298,10 @@ fn zone_from_flags_accepts_zero_except_cone_height() {
             ..cone.clone()
         };
         let err = zone_from_flags(&bad).unwrap_err().to_string();
-        assert!(err.contains(flag) && err.contains("greater than 0"), "{err}");
+        assert!(
+            err.contains(flag) && err.contains("greater than 0"),
+            "{err}"
+        );
     }
 }
 
@@ -315,13 +337,19 @@ fn zone_from_flags_requires_known_shape_and_some_dimensions() {
         ..ZoneArgs::default()
     };
     let err = zone_from_flags(&unknown).unwrap_err().to_string();
-    assert!(err.contains("torus") && err.contains("capsule") && err.contains("sphere"), "{err}");
+    assert!(
+        err.contains("torus") && err.contains("capsule") && err.contains("sphere"),
+        "{err}"
+    );
     let empty = ZoneArgs {
         shape: Some("sphere".to_string()),
         ..ZoneArgs::default()
     };
     let err = zone_from_flags(&empty).unwrap_err().to_string();
-    assert!(err.contains("--inner-radius") || err.contains("--outer-radius"), "{err}");
+    assert!(
+        err.contains("--inner-radius") || err.contains("--outer-radius"),
+        "{err}"
+    );
 }
 
 #[test]

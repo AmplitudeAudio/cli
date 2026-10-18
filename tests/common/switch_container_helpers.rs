@@ -14,11 +14,11 @@
 
 //! Shared helpers of the switch container command tests.
 
-#![allow(dead_code)]
-
 use am::app::{App, Commands};
 use am::assets::SwitchContainer;
-use am::commands::asset::{AssetCommands, SwitchContainerCommands, handle_switch_container_command};
+use am::commands::asset::{
+    AssetCommands, SwitchContainerCommands, handle_switch_container_command,
+};
 use am::input::{Input, NonInteractiveInput};
 use clap::Parser;
 use serde_json::{Value, json};
@@ -46,10 +46,18 @@ pub fn fixture(name: &str) -> AssetTestFixture {
     fx.create_test_sound("step1", 101).unwrap();
     fx.create_test_sound("step2", 102).unwrap();
     fx.create_test_sound("boom", 103).unwrap();
-    fx.write_asset_json("collections", "crowd", json!({"id": 201, "name": "crowd", "bus": 2}))
-        .unwrap();
-    fx.write_asset_json("collections", "boom", json!({"id": 203, "name": "boom", "bus": 2}))
-        .unwrap();
+    fx.write_asset_json(
+        "collections",
+        "crowd",
+        json!({"id": 201, "name": "crowd", "bus": 2}),
+    )
+    .unwrap();
+    fx.write_asset_json(
+        "collections",
+        "boom",
+        json!({"id": 203, "name": "boom", "bus": 2}),
+    )
+    .unwrap();
     fx.write_asset_json(
         "switches",
         "surface",

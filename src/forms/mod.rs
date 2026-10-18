@@ -13,6 +13,11 @@
 // limitations under the License.
 
 //! Schema-driven field model shared by prompts, flags and the TUI.
+//!
+//! Part of this model is consumed only by the library API and the tests so far;
+//! the binary target compiles these modules privately and does not use all of it.
+
+#![allow(dead_code)]
 
 pub mod coverage;
 pub mod curve;

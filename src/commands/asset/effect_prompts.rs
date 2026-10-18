@@ -61,7 +61,9 @@ fn non_empty(value: &str) -> Result<Validation, inquire::CustomUserError> {
 
 fn ask_plugin_name(input: &dyn Input, current: Option<&str>) -> Result<String> {
     let name = match current {
-        Some(current) => input.prompt_text_with_default(PLUGIN_NAME_PROMPT, current, Some(&non_empty))?,
+        Some(current) => {
+            input.prompt_text_with_default(PLUGIN_NAME_PROMPT, current, Some(&non_empty))?
+        }
         None => input.prompt_text(PLUGIN_NAME_PROMPT, Some("MyFilter"), None, Some(&non_empty))?,
     };
     Ok(name.trim().to_string())
@@ -90,7 +92,9 @@ fn ask_filter(input: &dyn Input, current: Option<&str>) -> Result<Option<String>
     // A plugin filter is shown by its own name.
     let options = filter_options();
     let prompt_label = match current {
-        Some(name) if current_index == Some(other_index()) => format!("{FILTER_PROMPT} (plugin: {name})"),
+        Some(name) if current_index == Some(other_index()) => {
+            format!("{FILTER_PROMPT} (plugin: {name})")
+        }
         _ => FILTER_PROMPT.to_string(),
     };
     match ask_choice_or_unset(input, &prompt_label, &options, current_index)? {
@@ -137,14 +141,15 @@ pub fn complete_create_patch(
         Some(effect) => effect,
         None => prompt_new_filter(input)?,
     };
-    let parameters = if !patch.parameters.is_empty() || input.confirm(ACCEPT_DEFAULTS_PROMPT, Some(false))? {
-        patch.parameters
-    } else {
-        ParamsPatch {
-            replace: Some(prompt_new_parameters(input, validator)?),
-            ..Default::default()
-        }
-    };
+    let parameters =
+        if !patch.parameters.is_empty() || input.confirm(ACCEPT_DEFAULTS_PROMPT, Some(false))? {
+            patch.parameters
+        } else {
+            ParamsPatch {
+                replace: Some(prompt_new_parameters(input, validator)?),
+                ..Default::default()
+            }
+        };
     Ok(EffectPatch {
         effect: Some(effect),
         parameters,
@@ -208,8 +213,11 @@ pub fn prompt_update_patch(
     effect: &Effect,
 ) -> Result<EffectPatch> {
     let filter = ask_filter(input, effect.effect.as_deref())?;
-    let replace =
-        prompt_parameter_edits(input, validator, effect.parameters.as_deref().unwrap_or(&[]))?;
+    let replace = prompt_parameter_edits(
+        input,
+        validator,
+        effect.parameters.as_deref().unwrap_or(&[]),
+    )?;
     Ok(EffectPatch {
         effect: filter,
         parameters: ParamsPatch {

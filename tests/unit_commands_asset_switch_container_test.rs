@@ -38,14 +38,55 @@ fn code_of(err: &anyhow::Error) -> i32 {
 #[test]
 fn test_create_parses_every_flag() {
     let cmd = parse(&[
-        "create", "steps", "--bus", "sfx", "--switch-group", "surface", "--gain", "0.5",
-        "--priority", "9", "--spatialization", "hrtf", "--effect", "echo", "--attenuation",
-        "short", "--scope", "entity", "--fader", "EaseIn", "--pitch", "1.2", "--gain-rtpc", "g",
-        "--pitch-rtpc", "p", "--priority-rtpc", "pr", "--update-behavior", "UpdateOnChange",
-        "--default-switch-state", "stone", "--entry", "step1,states=wood", "--entry",
-        "crowd,states=stone", "--entries-from-json", "e.json", "--map", "wood=step1",
+        "create",
+        "steps",
+        "--bus",
+        "sfx",
+        "--switch-group",
+        "surface",
+        "--gain",
+        "0.5",
+        "--priority",
+        "9",
+        "--spatialization",
+        "hrtf",
+        "--effect",
+        "echo",
+        "--attenuation",
+        "short",
+        "--scope",
+        "entity",
+        "--fader",
+        "EaseIn",
+        "--pitch",
+        "1.2",
+        "--gain-rtpc",
+        "g",
+        "--pitch-rtpc",
+        "p",
+        "--priority-rtpc",
+        "pr",
+        "--update-behavior",
+        "UpdateOnChange",
+        "--default-switch-state",
+        "stone",
+        "--entry",
+        "step1,states=wood",
+        "--entry",
+        "crowd,states=stone",
+        "--entries-from-json",
+        "e.json",
+        "--map",
+        "wood=step1",
     ]);
-    let SwitchContainerCommands::Create { bus, switch_group, extra, priority, .. } = cmd else {
+    let SwitchContainerCommands::Create {
+        bus,
+        switch_group,
+        extra,
+        priority,
+        ..
+    } = cmd
+    else {
         panic!("expected create");
     };
     assert_eq!(bus.as_deref(), Some("sfx"));
@@ -72,8 +113,15 @@ fn test_legacy_switch_flag_is_an_alias() {
 #[test]
 fn test_update_parses_entry_editing_flags() {
     let SwitchContainerCommands::Update { edit, extra, .. } = parse(&[
-        "update", "steps", "--add-entry", "step1,states=wood", "--remove-entry", "crowd",
-        "--clear-entries", "--entry", "step2,states=stone",
+        "update",
+        "steps",
+        "--add-entry",
+        "step1,states=wood",
+        "--remove-entry",
+        "crowd",
+        "--clear-entries",
+        "--entry",
+        "step2,states=stone",
     ]) else {
         panic!("expected update");
     };
@@ -104,7 +152,10 @@ async fn test_create_with_entries_and_fades_is_accepted_by_flatc() {
     let fade_in = entries[0].fade_in.clone().unwrap();
     assert!((fade_in.duration - 0.2).abs() < 1e-6);
     assert_eq!(fade_in.fader.as_deref(), Some("EaseIn"));
-    assert_eq!(entries[0].fade_out.clone().unwrap().fader.as_deref(), Some("Linear"));
+    assert_eq!(
+        entries[0].fade_out.clone().unwrap().fader.as_deref(),
+        Some("Linear")
+    );
     assert_eq!(entries[1].object, 201);
     assert_eq!(entries[1].gain.clone().unwrap().kind, ValueKind::RTPC);
     assert_flatc(&fx, "steps");
@@ -116,10 +167,28 @@ async fn test_create_sets_every_container_field() {
     create_ok(
         &fx,
         &[
-            "--bus", "sfx", "--switch-group", "surface", "--effect", "echo", "--attenuation",
-            "short", "--scope", "entity", "--fader", "EaseIn", "--pitch", "1.5", "--priority-rtpc",
-            "speed", "--spatialization", "position", "--update-behavior", "UpdateOnChange",
-            "--default-switch-state", "gravel",
+            "--bus",
+            "sfx",
+            "--switch-group",
+            "surface",
+            "--effect",
+            "echo",
+            "--attenuation",
+            "short",
+            "--scope",
+            "entity",
+            "--fader",
+            "EaseIn",
+            "--pitch",
+            "1.5",
+            "--priority-rtpc",
+            "speed",
+            "--spatialization",
+            "position",
+            "--update-behavior",
+            "UpdateOnChange",
+            "--default-switch-state",
+            "gravel",
         ],
     )
     .await;
@@ -130,7 +199,10 @@ async fn test_create_sets_every_container_field() {
     assert_eq!(c.pitch.unwrap().as_static(), Some(1.5));
     assert_eq!(c.priority.unwrap().kind, ValueKind::RTPC);
     assert_eq!(c.spatialization, Spatialization::Position);
-    assert_eq!(c.update_behavior, SwitchContainerUpdateBehavior::UpdateOnChange);
+    assert_eq!(
+        c.update_behavior,
+        SwitchContainerUpdateBehavior::UpdateOnChange
+    );
     assert_eq!(c.default_switch_state, 13);
     assert_flatc(&fx, "steps");
 }
@@ -140,7 +212,18 @@ async fn test_legacy_map_flag_builds_entries() {
     let fx = fixture("sc_create_map");
     create_ok(
         &fx,
-        &["--bus", "sfx", "--switch", "surface", "--map", "wood=step1", "--map", "stone=step1", "--map", "gravel=crowd"],
+        &[
+            "--bus",
+            "sfx",
+            "--switch",
+            "surface",
+            "--map",
+            "wood=step1",
+            "--map",
+            "stone=step1",
+            "--map",
+            "gravel=crowd",
+        ],
     )
     .await;
     let entries = read_container(&fx, "steps").entries.unwrap();
@@ -166,12 +249,22 @@ async fn test_entries_from_json_resolves_names_and_fades() {
     .unwrap();
     create_ok(
         &fx,
-        &["--bus", "sfx", "--switch-group", "surface", "--entries-from-json", file.to_str().unwrap()],
+        &[
+            "--bus",
+            "sfx",
+            "--switch-group",
+            "surface",
+            "--entries-from-json",
+            file.to_str().unwrap(),
+        ],
     )
     .await;
     let entries = read_container(&fx, "steps").entries.unwrap();
     assert_eq!(entries[0].switch_states, vec![11, 12]);
-    assert_eq!(entries[0].fade_out.clone().unwrap().fader.as_deref(), Some("EaseOut"));
+    assert_eq!(
+        entries[0].fade_out.clone().unwrap().fader.as_deref(),
+        Some("EaseOut")
+    );
     assert_eq!(entries[1].object, 203);
     assert_flatc(&fx, "steps");
 }
@@ -179,7 +272,12 @@ async fn test_entries_from_json_resolves_names_and_fades() {
 #[tokio::test]
 async fn test_missing_bus_names_the_flag_and_writes_nothing() {
     let fx = fixture("sc_no_bus");
-    let (result, _) = run(&fx, &["create", "steps", "--switch-group", "surface"], &NonInteractiveInput).await;
+    let (result, _) = run(
+        &fx,
+        &["create", "steps", "--switch-group", "surface"],
+        &NonInteractiveInput,
+    )
+    .await;
     let err = result.unwrap_err();
     assert_eq!(code_of(&err), codes::ERR_VALIDATION_EMPTY_REFERENCE);
     assert!(format!("{err:#}").contains("--bus"), "{err:#}");
@@ -189,7 +287,12 @@ async fn test_missing_bus_names_the_flag_and_writes_nothing() {
 #[tokio::test]
 async fn test_missing_switch_group_names_the_flag_and_writes_nothing() {
     let fx = fixture("sc_no_group");
-    let (result, _) = run(&fx, &["create", "steps", "--bus", "sfx"], &NonInteractiveInput).await;
+    let (result, _) = run(
+        &fx,
+        &["create", "steps", "--bus", "sfx"],
+        &NonInteractiveInput,
+    )
+    .await;
     let err = result.unwrap_err();
     assert_eq!(code_of(&err), codes::ERR_VALIDATION_EMPTY_REFERENCE);
     assert!(format!("{err:#}").contains("--switch-group"), "{err:#}");
@@ -201,14 +304,26 @@ async fn test_unknown_state_name_lists_the_states_of_the_group() {
     let fx = fixture("sc_bad_state");
     let (result, _) = run(
         &fx,
-        &["create", "steps", "--bus", "sfx", "--switch-group", "surface", "--entry", "step1,states=snow"],
+        &[
+            "create",
+            "steps",
+            "--bus",
+            "sfx",
+            "--switch-group",
+            "surface",
+            "--entry",
+            "step1,states=snow",
+        ],
         &NonInteractiveInput,
     )
     .await;
     let err = result.unwrap_err();
     assert_eq!(code_of(&err), codes::ERR_VALIDATION_REFERENCE);
     let text = format!("{err:#} {}", as_cli_error(&err).unwrap().suggestion);
-    assert!(text.contains("wood") && text.contains("stone") && text.contains("gravel"), "{text}");
+    assert!(
+        text.contains("wood") && text.contains("stone") && text.contains("gravel"),
+        "{text}"
+    );
     assert!(!text.contains("rain"));
     assert!(!container_path(&fx, "steps").exists());
 }
@@ -223,13 +338,25 @@ async fn test_dangling_ids_are_reference_errors() {
     ] {
         let (result, _) = run(
             &fx,
-            &["create", "steps", "--bus", "sfx", "--switch-group", "surface", "--entry", entry],
+            &[
+                "create",
+                "steps",
+                "--bus",
+                "sfx",
+                "--switch-group",
+                "surface",
+                "--entry",
+                entry,
+            ],
             &NonInteractiveInput,
         )
         .await;
         let err = result.unwrap_err();
         assert_eq!(code_of(&err), codes::ERR_VALIDATION_REFERENCE, "{entry}");
-        assert!(format!("{err:#}").contains(field) || format!("{err:?}").contains(field), "{entry}: {err:?}");
+        assert!(
+            format!("{err:#}").contains(field) || format!("{err:?}").contains(field),
+            "{entry}: {err:?}"
+        );
         assert!(!container_path(&fx, "steps").exists());
     }
 }
@@ -239,12 +366,35 @@ async fn test_ambiguous_object_name_must_be_qualified() {
     let fx = fixture("sc_ambiguous");
     let (result, _) = run(
         &fx,
-        &["create", "steps", "--bus", "sfx", "--switch-group", "surface", "--entry", "boom,states=wood"],
+        &[
+            "create",
+            "steps",
+            "--bus",
+            "sfx",
+            "--switch-group",
+            "surface",
+            "--entry",
+            "boom,states=wood",
+        ],
         &NonInteractiveInput,
     )
     .await;
-    assert_eq!(code_of(&result.unwrap_err()), codes::ERR_VALIDATION_REFERENCE);
-    create_ok(&fx, &["--bus", "sfx", "--switch-group", "surface", "--entry", "sound:boom,states=wood"]).await;
+    assert_eq!(
+        code_of(&result.unwrap_err()),
+        codes::ERR_VALIDATION_REFERENCE
+    );
+    create_ok(
+        &fx,
+        &[
+            "--bus",
+            "sfx",
+            "--switch-group",
+            "surface",
+            "--entry",
+            "sound:boom,states=wood",
+        ],
+    )
+    .await;
     assert_eq!(read_container(&fx, "steps").entries.unwrap()[0].object, 103);
 }
 
@@ -263,11 +413,24 @@ async fn test_entry_syntax_errors_are_field_errors() {
     ] {
         let (result, _) = run(
             &fx,
-            &["create", "steps", "--bus", "sfx", "--switch-group", "surface", "--entry", bad],
+            &[
+                "create",
+                "steps",
+                "--bus",
+                "sfx",
+                "--switch-group",
+                "surface",
+                "--entry",
+                bad,
+            ],
             &NonInteractiveInput,
         )
         .await;
-        assert_eq!(code_of(&result.unwrap_err()), codes::ERR_VALIDATION_FIELD, "{bad}");
+        assert_eq!(
+            code_of(&result.unwrap_err()),
+            codes::ERR_VALIDATION_FIELD,
+            "{bad}"
+        );
         assert!(!container_path(&fx, "steps").exists(), "{bad}");
     }
 }
@@ -283,7 +446,14 @@ async fn test_update_changes_only_the_given_fields() {
     let before = read_container(&fx, "steps");
     let (result, out) = run_with(
         &fx,
-        &["update", "steps", "--update-behavior", "UpdateOnChange", "--effect", "echo"],
+        &[
+            "update",
+            "steps",
+            "--update-behavior",
+            "UpdateOnChange",
+            "--effect",
+            "echo",
+        ],
         &NonInteractiveInput,
         CaptureOutput::json(),
     )
@@ -307,13 +477,25 @@ async fn test_update_keeps_unknown_keys_after_the_modelled_ones_and_untouched_en
     let mut raw = read_raw(&fx, "steps");
     raw["_a"] = json!("hand written");
     raw["entries"][0]["x_note"] = json!("keep me");
-    std::fs::write(container_path(&fx, "steps"), serde_json::to_string_pretty(&raw).unwrap()).unwrap();
+    std::fs::write(
+        container_path(&fx, "steps"),
+        serde_json::to_string_pretty(&raw).unwrap(),
+    )
+    .unwrap();
     let entries_before = raw["entries"].clone();
 
-    let (result, _) = run(&fx, &["update", "steps", "--gain", "0.9"], &NonInteractiveInput).await;
+    let (result, _) = run(
+        &fx,
+        &["update", "steps", "--gain", "0.9"],
+        &NonInteractiveInput,
+    )
+    .await;
     result.unwrap();
     let after = read_raw(&fx, "steps");
-    assert_eq!(after["entries"], entries_before, "entries are written back verbatim");
+    assert_eq!(
+        after["entries"], entries_before,
+        "entries are written back verbatim"
+    );
     assert_eq!(after["_a"], "hand written");
     let keys: Vec<&String> = after.as_object().unwrap().keys().collect();
     let position = |k: &str| keys.iter().position(|x| x.as_str() == k).unwrap();
@@ -329,8 +511,14 @@ async fn test_update_add_remove_and_map_entries() {
     let (result, _) = run(
         &fx,
         &[
-            "update", "steps", "--add-entry", "step2,states=stone,fade-out=0.3", "--remove-entry",
-            "crowd", "--map", "gravel=step1",
+            "update",
+            "steps",
+            "--add-entry",
+            "step2,states=stone,fade-out=0.3",
+            "--remove-entry",
+            "crowd",
+            "--map",
+            "gravel=step1",
         ],
         &NonInteractiveInput,
     )
@@ -343,7 +531,12 @@ async fn test_update_add_remove_and_map_entries() {
     assert_eq!(entries[1].object, 102);
     assert_flatc(&fx, "steps");
 
-    let (result, _) = run(&fx, &["update", "steps", "--remove-entry", "crowd"], &NonInteractiveInput).await;
+    let (result, _) = run(
+        &fx,
+        &["update", "steps", "--remove-entry", "crowd"],
+        &NonInteractiveInput,
+    )
+    .await;
     assert_eq!(code_of(&result.unwrap_err()), codes::ERR_VALIDATION_FIELD);
 }
 
@@ -352,11 +545,30 @@ async fn test_update_to_a_state_of_another_switch_is_rejected_and_writes_nothing
     let fx = fixture("sc_up_bad_state");
     rich_container(&fx).await;
     let before = std::fs::read_to_string(container_path(&fx, "steps")).unwrap();
-    let (result, _) = run(&fx, &["update", "steps", "--default-switch-state", "rain"], &NonInteractiveInput).await;
-    assert_eq!(code_of(&result.unwrap_err()), codes::ERR_VALIDATION_REFERENCE);
-    let (result, _) = run(&fx, &["update", "steps", "--switch-group", "weather"], &NonInteractiveInput).await;
-    assert_eq!(code_of(&result.unwrap_err()), codes::ERR_VALIDATION_REFERENCE);
-    assert_eq!(std::fs::read_to_string(container_path(&fx, "steps")).unwrap(), before);
+    let (result, _) = run(
+        &fx,
+        &["update", "steps", "--default-switch-state", "rain"],
+        &NonInteractiveInput,
+    )
+    .await;
+    assert_eq!(
+        code_of(&result.unwrap_err()),
+        codes::ERR_VALIDATION_REFERENCE
+    );
+    let (result, _) = run(
+        &fx,
+        &["update", "steps", "--switch-group", "weather"],
+        &NonInteractiveInput,
+    )
+    .await;
+    assert_eq!(
+        code_of(&result.unwrap_err()),
+        codes::ERR_VALIDATION_REFERENCE
+    );
+    assert_eq!(
+        std::fs::read_to_string(container_path(&fx, "steps")).unwrap(),
+        before
+    );
 }
 
 #[tokio::test]
@@ -370,11 +582,21 @@ async fn test_update_of_a_legacy_container_without_bus_points_at_the_flag() {
                "scope": "World", "spatialization": "None", "update_behavior": "UpdateOnPlay"}),
     )
     .unwrap();
-    let (result, _) = run(&fx, &["update", "old", "--gain", "0.5"], &NonInteractiveInput).await;
+    let (result, _) = run(
+        &fx,
+        &["update", "old", "--gain", "0.5"],
+        &NonInteractiveInput,
+    )
+    .await;
     let err = result.unwrap_err();
     assert_eq!(code_of(&err), codes::ERR_VALIDATION_EMPTY_REFERENCE);
     assert!(as_cli_error(&err).unwrap().suggestion.contains("--bus"));
-    let (result, _) = run(&fx, &["update", "old", "--bus", "sfx", "--fader", "Linear"], &NonInteractiveInput).await;
+    let (result, _) = run(
+        &fx,
+        &["update", "old", "--bus", "sfx", "--fader", "Linear"],
+        &NonInteractiveInput,
+    )
+    .await;
     result.unwrap();
 }
 
@@ -393,7 +615,10 @@ async fn test_json_mode_never_prompts() {
         CaptureOutput::json(),
     )
     .await;
-    assert_eq!(code_of(&result.unwrap_err()), codes::ERR_VALIDATION_EMPTY_REFERENCE);
+    assert_eq!(
+        code_of(&result.unwrap_err()),
+        codes::ERR_VALIDATION_EMPTY_REFERENCE
+    );
     assert!(input.prompts.lock().unwrap().is_empty());
 }
 
@@ -402,21 +627,21 @@ async fn test_interactive_create_walks_every_field_with_states_from_the_group() 
     let fx = fixture("sc_walk");
     let input = ScriptedInput::new(
         &[
-            "sfx",           // bus
-            "surface",       // switch group
-            "echo",          // effect
-            "short",         // attenuation
-            "Entity",        // scope
-            "EaseIn",        // fader
+            "sfx",            // bus
+            "surface",        // switch group
+            "echo",           // effect
+            "short",          // attenuation
+            "Entity",         // scope
+            "EaseIn",         // fader
             "UpdateOnChange", // update behavior
-            "static",        // gain type
-            "static",        // priority type
-            "Position",      // spatialization
-            "stone",         // default state
-            "step1 (sound)", // entry object
-            "wood",          // entry state
-            "gravel",        // second state
-            "Linear",        // fade-in fader
+            "static",         // gain type
+            "static",         // priority type
+            "Position",       // spatialization
+            "stone",          // default state
+            "step1 (sound)",  // entry object
+            "wood",           // entry state
+            "gravel",         // second state
+            "Linear",         // fade-in fader
         ],
         &["0.8", "10", "0.25"],
     )
@@ -437,12 +662,19 @@ async fn test_interactive_create_walks_every_field_with_states_from_the_group() 
     let (result, _) = run(&fx, &["create", "steps"], &input).await;
     result.unwrap();
     input.assert_all_consumed();
-    for label in ["remaining optional fields", "Default switch state", "Switch state of this entry"] {
+    for label in [
+        "remaining optional fields",
+        "Default switch state",
+        "Switch state of this entry",
+    ] {
         assert!(input.saw_prompt(label), "no prompt mentioned '{label}'");
     }
     let c = read_container(&fx, "steps");
     assert_eq!((c.bus, c.switch_group, c.default_switch_state), (2, 10, 12));
-    assert_eq!(c.update_behavior, SwitchContainerUpdateBehavior::UpdateOnChange);
+    assert_eq!(
+        c.update_behavior,
+        SwitchContainerUpdateBehavior::UpdateOnChange
+    );
     let entry = &c.entries.unwrap()[0];
     assert_eq!(entry.switch_states, vec![11, 13]);
     assert!(entry.continue_between_states);

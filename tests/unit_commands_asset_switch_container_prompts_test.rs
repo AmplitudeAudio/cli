@@ -56,8 +56,15 @@ async fn test_interactive_update_repairs_a_legacy_container() {
     // picking them must still count as a change.
     let input = ScriptedInput::new(
         &[
-            "sfx", "(keep current)", "(keep current)", "(keep current)", "World", "Constant",
-            "UpdateOnPlay", "None", "wood",
+            "sfx",
+            "(keep current)",
+            "(keep current)",
+            "(keep current)",
+            "World",
+            "Constant",
+            "UpdateOnPlay",
+            "None",
+            "wood",
         ],
         &[],
     )
@@ -78,8 +85,17 @@ async fn test_interactive_update_changing_the_group_reasks_state_and_entries() {
     rich_container(&fx).await;
     let input = ScriptedInput::new(
         &[
-            "(keep current)", "weather", "(keep current)", "(keep current)", "World", "Linear",
-            "UpdateOnPlay", "None", "rain", "step2 (sound)", "rain",
+            "(keep current)",
+            "weather",
+            "(keep current)",
+            "(keep current)",
+            "World",
+            "Linear",
+            "UpdateOnPlay",
+            "None",
+            "rain",
+            "step2 (sound)",
+            "rain",
         ],
         &[],
     )
@@ -96,7 +112,10 @@ async fn test_interactive_update_changing_the_group_reasks_state_and_entries() {
     assert_eq!((c.switch_group, c.default_switch_state), (20, 21));
     let entries = c.entries.unwrap();
     assert_eq!(entries.len(), 1);
-    assert_eq!((entries[0].object, entries[0].switch_states.clone()), (102, vec![21]));
+    assert_eq!(
+        (entries[0].object, entries[0].switch_states.clone()),
+        (102, vec![21])
+    );
     assert_flatc(&fx, "steps");
 }
 
@@ -107,7 +126,14 @@ async fn test_interactive_update_removing_one_entry_keeps_the_others() {
     let before = read_container(&fx, "steps").entries.unwrap();
     let mut selects = KEEP_FOUR.to_vec();
     selects.extend([
-        "World", "Linear", "UpdateOnPlay", "None", "wood", "Remove an entry", "crowd", "Done",
+        "World",
+        "Linear",
+        "UpdateOnPlay",
+        "None",
+        "wood",
+        "Remove an entry",
+        "crowd",
+        "Done",
     ]);
     let input = ScriptedInput::new(&selects, &[]).with_confirms(&[false, false, false, true]);
     let (result, _) = run(&fx, &["update", "steps"], &input).await;
@@ -130,15 +156,31 @@ async fn test_bus_outside_the_active_bus_file_warns_on_create_and_update() {
 
     let (result, out) = run_with(
         &fx,
-        &["create", "steps", "--bus", "ambient", "--switch-group", "surface"],
+        &[
+            "create",
+            "steps",
+            "--bus",
+            "ambient",
+            "--switch-group",
+            "surface",
+        ],
         &NonInteractiveInput,
         CaptureOutput::json(),
     )
     .await;
     result.unwrap();
     assert_eq!(read_container(&fx, "steps").bus, 3);
-    assert!(out.all_warnings().iter().any(|w| w.contains("main.buses.json")));
-    assert!(out.last_success().unwrap()["warnings"][0].as_str().unwrap().contains("ambient"));
+    assert!(
+        out.all_warnings()
+            .iter()
+            .any(|w| w.contains("main.buses.json"))
+    );
+    assert!(
+        out.last_success().unwrap()["warnings"][0]
+            .as_str()
+            .unwrap()
+            .contains("ambient")
+    );
 
     let (result, out) = run_with(
         &fx,
@@ -173,11 +215,32 @@ async fn test_update_errors_for_missing_fader_and_fades_name_the_fix() {
                "spatialization": "None", "update_behavior": "UpdateOnPlay"}),
     )
     .unwrap();
-    let (result, _) = run(&fx, &["update", "old", "--gain", "0.5"], &NonInteractiveInput).await;
+    let (result, _) = run(
+        &fx,
+        &["update", "old", "--gain", "0.5"],
+        &NonInteractiveInput,
+    )
+    .await;
     let err = result.unwrap_err();
-    assert!(am::common::errors::as_cli_error(&err).unwrap().suggestion.contains("--fader"));
-    let (result, _) = run(&fx, &["update", "old", "--fader", "Linear"], &NonInteractiveInput).await;
+    assert!(
+        am::common::errors::as_cli_error(&err)
+            .unwrap()
+            .suggestion
+            .contains("--fader")
+    );
+    let (result, _) = run(
+        &fx,
+        &["update", "old", "--fader", "Linear"],
+        &NonInteractiveInput,
+    )
+    .await;
     let err = result.unwrap_err();
-    let suggestion = am::common::errors::as_cli_error(&err).unwrap().suggestion.clone();
-    assert!(suggestion.contains("--entries-from-json") && suggestion.contains("--remove-entry"), "{suggestion}");
+    let suggestion = am::common::errors::as_cli_error(&err)
+        .unwrap()
+        .suggestion
+        .clone();
+    assert!(
+        suggestion.contains("--entries-from-json") && suggestion.contains("--remove-entry"),
+        "{suggestion}"
+    );
 }

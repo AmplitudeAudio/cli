@@ -366,7 +366,16 @@ async fn test_interactive_update_repairs_a_collection_without_fader_and_bus() {
     .unwrap();
     // "Constant" is the first fader option: picking it must count as a change.
     let input = ScriptedInput::new(
-        &["sfx", "(keep current)", "(keep current)", "World", "Constant", "PlayOne", "Random", "None"],
+        &[
+            "sfx",
+            "(keep current)",
+            "(keep current)",
+            "World",
+            "Constant",
+            "PlayOne",
+            "Random",
+            "None",
+        ],
         &[],
     )
     .with_confirms(&[false, false, false, false, false]);

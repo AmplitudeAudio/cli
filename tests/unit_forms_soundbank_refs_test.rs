@@ -41,7 +41,12 @@ fn names(fx: &AssetTestFixture, asset_type: AssetType, name: &str) -> Vec<String
 fn test_lists_every_bank_that_includes_the_asset() {
     let fx = fixture("sbref_basic");
     write_bank(&fx, "a", 1, json!({"sounds": ["boom.amsound"]}));
-    write_bank(&fx, "b", 2, json!({"sounds": ["boom.amsound", "fx/step.wav.amsound"]}));
+    write_bank(
+        &fx,
+        "b",
+        2,
+        json!({"sounds": ["boom.amsound", "fx/step.wav.amsound"]}),
+    );
     write_bank(&fx, "c", 3, json!({"sounds": ["fx/step.wav.amsound"]}));
     assert_eq!(names(&fx, AssetType::Sound, "boom"), ["a", "b"]);
     assert_eq!(names(&fx, AssetType::Sound, "step"), ["b", "c"]);
@@ -71,7 +76,11 @@ fn test_every_asset_type_a_bank_can_hold_is_found() {
         (AssetType::Attenuation, "room"),
         (AssetType::Rtpc, "wind"),
     ] {
-        assert_eq!(names(&fx, asset_type, name), ["all"], "{asset_type:?} {name}");
+        assert_eq!(
+            names(&fx, asset_type, name),
+            ["all"],
+            "{asset_type:?} {name}"
+        );
     }
 }
 
@@ -112,6 +121,10 @@ fn test_banks_in_subdirectories_and_without_lists_are_handled() {
     .unwrap();
     write_bank(&fx, "bare", 5, json!({}));
     std::fs::write(fx.sources_dir().join("soundbanks/broken.json"), "{").unwrap();
-    std::fs::write(fx.sources_dir().join("soundbanks/not_utf8.json"), [0xff, 0xfe, 0x00]).unwrap();
+    std::fs::write(
+        fx.sources_dir().join("soundbanks/not_utf8.json"),
+        [0xff, 0xfe, 0x00],
+    )
+    .unwrap();
     assert_eq!(names(&fx, AssetType::Sound, "boom"), ["deep"]);
 }

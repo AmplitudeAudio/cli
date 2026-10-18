@@ -16,6 +16,10 @@
 //!
 //! This module exposes public APIs for testing and external use.
 
+// `ValidationError` carries its explanation, suggestion and field inline (136 bytes) and is
+// returned from every rule; boxing it everywhere would only trade clarity for a size heuristic.
+#![allow(clippy::result_large_err)]
+
 pub mod app;
 pub mod assets;
 pub mod common;

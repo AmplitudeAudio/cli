@@ -125,9 +125,19 @@ async fn test_attenuation_rtpc_and_pipeline_rules_are_checked() {
     let report = report(&output);
     assert_eq!(report["valid"], false);
     let files = error_files(&report);
-    assert!(files.iter().any(|f| f.ends_with("rtpc/wind.json")), "{files:?}");
-    for dir in ["rtpc/wind.json", "attenuators/room.json", "pipelines/bad.json"] {
-        assert!(files.iter().any(|f| f.ends_with(dir)), "{dir} missing: {report}");
+    assert!(
+        files.iter().any(|f| f.ends_with("rtpc/wind.json")),
+        "{files:?}"
+    );
+    for dir in [
+        "rtpc/wind.json",
+        "attenuators/room.json",
+        "pipelines/bad.json",
+    ] {
+        assert!(
+            files.iter().any(|f| f.ends_with(dir)),
+            "{dir} missing: {report}"
+        );
     }
     assert_eq!(report["summary"]["rtpc"], 1);
     assert_eq!(report["summary"]["attenuators"], 1);

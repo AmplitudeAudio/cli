@@ -145,7 +145,12 @@ const SWITCH_CONTAINER_RULES: &[RefRule] = &[
         false,
     ),
     // `SwitchContainer.cpp` rejects an entry whose object is 0 or neither a sound nor a collection.
-    rule(AssetType::SwitchContainer, "entries.object", ENTRY_OBJECTS, true),
+    rule(
+        AssetType::SwitchContainer,
+        "entries.object",
+        ENTRY_OBJECTS,
+        true,
+    ),
     // `GetSoundObjects` looks the default state up with `.at()` when the switch has no
     // current state, so a 0 or foreign default state throws at play time.
     rule(

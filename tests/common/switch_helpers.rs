@@ -14,8 +14,6 @@
 
 //! Shared helpers of the switch command tests.
 
-#![allow(dead_code)]
-
 use am::app::{App, Commands};
 use am::assets::Switch;
 use am::commands::asset::{AssetCommands, SwitchCommands, handle_switch_command};

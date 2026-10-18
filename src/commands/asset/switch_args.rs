@@ -27,7 +27,8 @@ use crate::services::switch::{StateSpec, StatesPatch, SwitchPatch};
 /// Keys a state object of `--states-from-json` accepts.
 const JSON_KEYS: &[&str] = &["name", "id"];
 
-const SYNTAX: &str = "State syntax: NAME[,id=N] (N is a non-zero whole number, unique in the switch)";
+const SYNTAX: &str =
+    "State syntax: NAME[,id=N] (N is a non-zero whole number, unique in the switch)";
 
 /// State flags shared by `create` and `update` beyond the original `--states`.
 #[derive(Args, Debug, Default, Clone)]
@@ -165,7 +166,10 @@ fn json_state(path: &Path, item: &Value) -> Result<StateSpec> {
             if let Some(unknown) = map.keys().find(|k| !JSON_KEYS.contains(&k.as_str())) {
                 return Err(json_error(
                     path,
-                    format!("unknown state key '{unknown}' (valid: {})", JSON_KEYS.join(", ")),
+                    format!(
+                        "unknown state key '{unknown}' (valid: {})",
+                        JSON_KEYS.join(", ")
+                    ),
                 )
                 .into());
             }
@@ -189,7 +193,11 @@ fn json_state(path: &Path, item: &Value) -> Result<StateSpec> {
                 id,
             })
         }
-        other => Err(json_error(path, format!("invalid state {other}: use a name or an object")).into()),
+        other => Err(json_error(
+            path,
+            format!("invalid state {other}: use a name or an object"),
+        )
+        .into()),
     }
 }
 
@@ -204,7 +212,9 @@ pub fn states_from_json(path: &Path) -> Result<Vec<StateSpec>> {
         Value::Array(items) => items,
         Value::Object(map) => match map.get("states") {
             Some(Value::Array(items)) => items,
-            _ => return Err(json_error(path, "expected a list, or an object with 'states'").into()),
+            _ => {
+                return Err(json_error(path, "expected a list, or an object with 'states'").into());
+            }
         },
         _ => return Err(json_error(path, "expected a list of states").into()),
     };
@@ -231,7 +241,13 @@ fn replace_list(flags: &SwitchFlags) -> Result<Option<Vec<StateSpec>>> {
         return states_from_json(path).map(Some);
     }
     if !flags.extra.state.is_empty() {
-        return flags.extra.state.iter().map(|raw| parse_state(raw)).collect::<Result<Vec<_>>>().map(Some);
+        return flags
+            .extra
+            .state
+            .iter()
+            .map(|raw| parse_state(raw))
+            .collect::<Result<Vec<_>>>()
+            .map(Some);
     }
     if let Some(names) = &flags.states {
         return Ok(Some(

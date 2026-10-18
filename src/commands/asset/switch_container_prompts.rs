@@ -25,18 +25,16 @@ use crate::assets::{AssetType, ProjectValidator, SwitchContainer};
 use crate::forms::pick::pick_reference;
 use crate::forms::references::rule_for;
 use crate::input::{Input, select_index};
-use crate::services::switch_container::SwitchContainerPatch;
 use crate::services::sound::{DEFAULT_GAIN, DEFAULT_PRIORITY};
+use crate::services::switch_container::SwitchContainerPatch;
 
 use super::sound_prompts::{
     ACCEPT_DEFAULTS_PROMPT, DEFAULT_FADER, DEFAULT_PITCH, SCOPE_LABELS, SCOPES,
-    SPATIALIZATION_LABELS, SPATIALIZATIONS, ask_choice, ask_choice_or_unset, ask_reference, ask_rtpc, pick_optional,
-    prompt_checked_rtpc, prompt_optional_rtpc, to_labels,
+    SPATIALIZATION_LABELS, SPATIALIZATIONS, ask_choice, ask_choice_or_unset, ask_reference,
+    ask_rtpc, pick_optional, prompt_checked_rtpc, prompt_optional_rtpc, to_labels,
 };
 use super::switch_container_args::UPDATE_BEHAVIOR_NAMES;
-use super::switch_container_entry_prompts::{
-    pick_state, prompt_entry_edits, prompt_new_entries,
-};
+use super::switch_container_entry_prompts::{pick_state, prompt_entry_edits, prompt_new_entries};
 
 const UPDATE_BEHAVIORS: [SwitchContainerUpdateBehavior; 2] = [
     SwitchContainerUpdateBehavior::UpdateOnPlay,
@@ -115,11 +113,8 @@ pub fn complete_create_patch(
     let update_behavior = match patch.update_behavior {
         Some(behavior) => behavior,
         None => {
-            UPDATE_BEHAVIORS[select_index(
-                input,
-                "Update behavior",
-                &to_labels(UPDATE_BEHAVIOR_NAMES),
-            )?]
+            UPDATE_BEHAVIORS
+                [select_index(input, "Update behavior", &to_labels(UPDATE_BEHAVIOR_NAMES))?]
         }
     };
     let gain = match &patch.gain {
@@ -194,7 +189,10 @@ fn ask_default_state(
     }
     let labels: Vec<String> = states.iter().map(|s| s.name.clone()).collect();
     let position = states.iter().position(|s| s.id == current);
-    Ok(ask_choice_or_unset(input, "Default switch state", &labels, position)?.map(|i| states[i].id))
+    Ok(
+        ask_choice_or_unset(input, "Default switch state", &labels, position)?
+            .map(|i| states[i].id),
+    )
 }
 
 /// Offers every container field with the current value; unchanged fields stay out of the patch.
@@ -211,7 +209,10 @@ pub fn prompt_update_patch(
         ..Default::default()
     };
 
-    let current_scope = SCOPES.iter().position(|s| *s == container.scope).unwrap_or(0);
+    let current_scope = SCOPES
+        .iter()
+        .position(|s| *s == container.scope)
+        .unwrap_or(0);
     patch.scope =
         ask_choice(input, "Scope", &to_labels(&SCOPE_LABELS), current_scope)?.map(|i| SCOPES[i]);
 
@@ -219,7 +220,8 @@ pub fn prompt_update_patch(
     let current_fader = faders
         .iter()
         .position(|f| Some(f.as_str()) == container.fader.as_deref());
-    patch.fader = ask_choice_or_unset(input, "Fader", &faders, current_fader)?.map(|i| faders[i].clone());
+    patch.fader =
+        ask_choice_or_unset(input, "Fader", &faders, current_fader)?.map(|i| faders[i].clone());
 
     let current_behavior = UPDATE_BEHAVIORS
         .iter()
@@ -233,8 +235,22 @@ pub fn prompt_update_patch(
     )?
     .map(|i| UPDATE_BEHAVIORS[i]);
 
-    patch.gain = ask_rtpc(input, validator, "Gain", &container.gain, DEFAULT_GAIN, Some((0.0, 1.0)))?;
-    patch.pitch = ask_rtpc(input, validator, "Pitch", &container.pitch, DEFAULT_PITCH, None)?;
+    patch.gain = ask_rtpc(
+        input,
+        validator,
+        "Gain",
+        &container.gain,
+        DEFAULT_GAIN,
+        Some((0.0, 1.0)),
+    )?;
+    patch.pitch = ask_rtpc(
+        input,
+        validator,
+        "Pitch",
+        &container.pitch,
+        DEFAULT_PITCH,
+        None,
+    )?;
     patch.priority = ask_rtpc(
         input,
         validator,
@@ -259,7 +275,13 @@ pub fn prompt_update_patch(
     let group = patch.switch_group.unwrap_or(container.switch_group);
     if patch.switch_group.is_some() {
         // The old states and entries mean nothing in another switch: ask them again.
-        patch.default_switch_state = Some(pick_state(input, validator, group, "Default switch state", &[])?);
+        patch.default_switch_state = Some(pick_state(
+            input,
+            validator,
+            group,
+            "Default switch state",
+            &[],
+        )?);
         patch.entries.replace = Some(prompt_new_entries(input, validator, group)?);
     } else {
         patch.default_switch_state =

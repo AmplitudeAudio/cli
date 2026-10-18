@@ -187,7 +187,7 @@ impl EngineConfigArgs {
     }
 
     /// Reads the `--from-json` document, which must be a JSON object.
-    pub fn from_json_document(&self) -> Result<Option<Value>> {
+    pub fn json_document(&self) -> Result<Option<Value>> {
         let Some(path) = &self.from_json else {
             return Ok(None);
         };

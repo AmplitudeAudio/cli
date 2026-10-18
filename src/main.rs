@@ -12,6 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// `ValidationError` carries its explanation, suggestion and field inline (136 bytes) and is
+// returned from every rule; boxing it everywhere would only trade clarity for a size heuristic.
+#![allow(clippy::result_large_err)]
+
 mod app;
 mod assets;
 mod commands;

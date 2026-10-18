@@ -91,13 +91,18 @@ fn check_fade(
             field.clone(),
             format!("Entry {index} has no {key}"),
             "The SDK reads the fade settings of every entry without checking that they exist",
-            format!("Give the entry a '{key}' with a duration and a fader (0 and Linear mean no fade)"),
+            format!(
+                "Give the entry a '{key}' with a duration and a fader (0 and Linear mean no fade)"
+            ),
         ));
     };
     if !fade.duration.is_finite() {
         return Err(field_error(
             format!("{field}.duration"),
-            format!("Entry {index} has an invalid {key} duration: {}", fade.duration),
+            format!(
+                "Entry {index} has an invalid {key} duration: {}",
+                fade.duration
+            ),
             "A fade duration must be a finite number of seconds",
             "Use a number such as 0.5".to_string(),
         ));
@@ -105,7 +110,12 @@ fn check_fade(
     check_fader_name(format!("{field}.fader"), fade.fader.as_deref())
 }
 
-fn state_error(validator: &ProjectValidator, group: u64, field: String, id: u64) -> ValidationError {
+fn state_error(
+    validator: &ProjectValidator,
+    group: u64,
+    field: String,
+    id: u64,
+) -> ValidationError {
     ValidationError::new(
         ValidationLayer::TypeRules,
         ERR_VALIDATION_REFERENCE,

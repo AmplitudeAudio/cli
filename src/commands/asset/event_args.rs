@@ -20,9 +20,9 @@ use std::path::{Path, PathBuf};
 use anyhow::Result;
 use serde_json::Value;
 
+use crate::assets::ProjectValidator;
 use crate::assets::event_actions::{new_action, validate_action_shape, validate_action_targets};
 use crate::assets::generated::{EventActionDefinition, EventActionRunningMode, EventActionType};
-use crate::assets::ProjectValidator;
 use crate::common::errors::{CliError, codes};
 use crate::forms::validate_refs::inactive_bus_warning;
 use crate::presentation::Output;
@@ -108,7 +108,10 @@ fn json_action(
     if let Some(unknown) = object.keys().find(|k| !JSON_KEYS.contains(&k.as_str())) {
         return Err(json_error(
             path,
-            format!("unknown action key '{unknown}' (valid: {})", JSON_KEYS.join(", ")),
+            format!(
+                "unknown action key '{unknown}' (valid: {})",
+                JSON_KEYS.join(", ")
+            ),
         )
         .into());
     }
@@ -149,7 +152,9 @@ pub fn actions_from_json(
         Value::Array(items) => items,
         Value::Object(map) => match map.get("actions") {
             Some(Value::Array(items)) => items,
-            _ => return Err(json_error(path, "expected a list, or an object with 'actions'").into()),
+            _ => {
+                return Err(json_error(path, "expected a list, or an object with 'actions'").into());
+            }
         },
         _ => return Err(json_error(path, "expected a list of actions").into()),
     };
@@ -211,7 +216,12 @@ pub fn resolve_patch(flags: &EventFlags, validator: &ProjectValidator) -> Result
 
 /// The actions a patch brings in (replacements first), to check before anything is asked.
 fn incoming_actions(patch: &EventPatch) -> impl Iterator<Item = &EventActionDefinition> {
-    patch.actions.replace.iter().flatten().chain(&patch.actions.add)
+    patch
+        .actions
+        .replace
+        .iter()
+        .flatten()
+        .chain(&patch.actions.add)
 }
 
 /// Checks the shape and targets of the actions a patch sets against the project,
@@ -233,7 +243,12 @@ pub fn bus_warnings(
 ) -> Vec<String> {
     let mut ids: Vec<u64> = actions
         .iter()
-        .filter(|a| matches!(a.type_, EventActionType::MuteBus | EventActionType::UnmuteBus))
+        .filter(|a| {
+            matches!(
+                a.type_,
+                EventActionType::MuteBus | EventActionType::UnmuteBus
+            )
+        })
         .flat_map(|a| a.targets.iter().flatten().copied())
         .collect();
     ids.sort_unstable();

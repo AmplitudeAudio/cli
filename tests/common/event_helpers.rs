@@ -14,8 +14,6 @@
 
 //! Shared helpers of the event command tests.
 
-#![allow(dead_code)]
-
 use am::app::{App, Commands};
 use am::assets::Event;
 use am::commands::asset::{AssetCommands, EventCommands, handle_event_command};
@@ -45,10 +43,18 @@ pub fn fixture(name: &str) -> AssetTestFixture {
     fx.create_test_sound("step1", 101).unwrap();
     fx.create_test_sound("step2", 102).unwrap();
     fx.create_test_sound("boom", 103).unwrap();
-    fx.write_asset_json("collections", "crowd", json!({"id": 201, "name": "crowd", "bus": 2}))
-        .unwrap();
-    fx.write_asset_json("collections", "boom", json!({"id": 203, "name": "boom", "bus": 2}))
-        .unwrap();
+    fx.write_asset_json(
+        "collections",
+        "crowd",
+        json!({"id": 201, "name": "crowd", "bus": 2}),
+    )
+    .unwrap();
+    fx.write_asset_json(
+        "collections",
+        "boom",
+        json!({"id": 203, "name": "boom", "bus": 2}),
+    )
+    .unwrap();
     fx.write_asset_json(
         "switch_containers",
         "music",

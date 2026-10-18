@@ -66,6 +66,7 @@ impl PipelineBuilder {
     }
 
     /// Appends a single node.
+    #[allow(dead_code)]
     pub fn add_node(mut self, node: PipelineNodeDefinition) -> Self {
         self.pipeline.nodes.get_or_insert_with(Vec::new).push(node);
         self

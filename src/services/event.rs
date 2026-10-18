@@ -129,10 +129,7 @@ pub fn apply_actions(
     existing: &[EventActionDefinition],
     patch: &ActionsPatch,
 ) -> Result<Vec<EventActionDefinition>, ValidationError> {
-    let mut actions = patch
-        .replace
-        .clone()
-        .unwrap_or_else(|| existing.to_vec());
+    let mut actions = patch.replace.clone().unwrap_or_else(|| existing.to_vec());
     if let Some(&bad) = patch.remove.iter().find(|&&i| i >= actions.len()) {
         return Err(remove_out_of_range(bad, actions.len()));
     }

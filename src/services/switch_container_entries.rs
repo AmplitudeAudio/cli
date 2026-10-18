@@ -89,7 +89,10 @@ pub struct EntriesPatch {
 impl EntriesPatch {
     /// Whether the patch leaves the list alone.
     pub fn is_empty(&self) -> bool {
-        self.replace.is_none() && self.remove.is_empty() && self.add.is_empty() && self.map.is_empty()
+        self.replace.is_none()
+            && self.remove.is_empty()
+            && self.add.is_empty()
+            && self.map.is_empty()
     }
 
     /// The entries the patch brings in (replacements, additions, then mappings), as

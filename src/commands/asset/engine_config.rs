@@ -227,7 +227,7 @@ fn create_config(
     }
     output.progress(&format!("Creating engine config '{name}'..."));
 
-    let base = args.from_json_document()?;
+    let base = args.json_document()?;
     let mut set: Vec<Override> = args.overrides()?;
     let existing = Existing::load(&root, output)?;
     if can_prompt(input, output) {
@@ -331,7 +331,7 @@ fn update_config(
     let file = find_config(&scan, &name)?;
     output.progress(&format!("Updating engine config '{name}'..."));
 
-    let sections = args.from_json_document()?;
+    let sections = args.json_document()?;
     let mut set = args.overrides()?;
     let existing = Existing::load(&root, output)?;
     if set.is_empty() && sections.is_none() {

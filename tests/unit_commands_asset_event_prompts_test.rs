@@ -28,13 +28,13 @@ async fn test_interactive_create_walks_actions_and_every_optional_field() {
     let fx = fixture("ev_walk");
     let input = ScriptedInput::new(
         &[
-            "Play",                // action 1 type
-            "step1 (sound)",       // action 1 target
-            "Wait",                // action 2 type
-            "Mute bus",            // action 3 type
-            "sfx",                 // action 3 target (a bus: no kind suffix)
-            "Sequential",          // run mode
-            "World",               // action 1 scope
+            "Play",          // action 1 type
+            "step1 (sound)", // action 1 target
+            "Wait",          // action 2 type
+            "Mute bus",      // action 3 type
+            "sfx",           // action 3 target (a bus: no kind suffix)
+            "Sequential",    // run mode
+            "World",         // action 1 scope
         ],
         &["300"],
     )
@@ -71,11 +71,20 @@ async fn test_interactive_create_walks_actions_and_every_optional_field() {
     let actions = event.actions.unwrap();
     assert_eq!(actions.len(), 3);
     assert_eq!(
-        (actions[0].type_, actions[0].targets.clone(), actions[0].scope, actions[0].active),
+        (
+            actions[0].type_,
+            actions[0].targets.clone(),
+            actions[0].scope,
+            actions[0].active
+        ),
         (EventActionType::Play, Some(vec![101]), Scope::World, true)
     );
     assert_eq!(
-        (actions[1].type_, actions[1].targets.clone(), actions[1].active),
+        (
+            actions[1].type_,
+            actions[1].targets.clone(),
+            actions[1].active
+        ),
         (EventActionType::Wait, Some(vec![300]), false)
     );
     assert_eq!(actions[2].targets, Some(vec![2]));
@@ -97,15 +106,17 @@ async fn test_interactive_create_accepting_defaults_asks_nothing_more() {
     let event = read_event(&fx, "ev");
     assert_eq!(event.run_mode, EventActionRunningMode::Parallel);
     let action = &event.actions.unwrap()[0];
-    assert_eq!((action.targets.clone(), action.active), (Some(vec![201]), true));
+    assert_eq!(
+        (action.targets.clone(), action.active),
+        (Some(vec![201]), true)
+    );
 }
 
 #[tokio::test]
 async fn test_interactive_create_offers_only_the_kinds_the_action_can_target() {
     let fx = fixture("ev_walk_kinds");
-    let input = ScriptedInput::new(&["Mute bus", "music_bus"], &[]).with_confirms(&[
-        false, false, true,
-    ]);
+    let input =
+        ScriptedInput::new(&["Mute bus", "music_bus"], &[]).with_confirms(&[false, false, true]);
     let (result, _) = run(&fx, &["create", "ev"], &input).await;
     result.unwrap();
     let options = input.options_seen.lock().unwrap();
@@ -118,9 +129,8 @@ async fn test_interactive_create_offers_only_the_kinds_the_action_can_target() {
 #[tokio::test]
 async fn test_interactive_create_lists_every_playback_kind_with_its_label() {
     let fx = fixture("ev_walk_labels");
-    let input = ScriptedInput::new(&["Play", "music (switch container)"], &[]).with_confirms(&[
-        false, false, true,
-    ]);
+    let input = ScriptedInput::new(&["Play", "music (switch container)"], &[])
+        .with_confirms(&[false, false, true]);
     let (result, _) = run(&fx, &["create", "ev"], &input).await;
     result.unwrap();
     let options = input.options_seen.lock().unwrap();
@@ -130,7 +140,11 @@ async fn test_interactive_create_lists_every_playback_kind_with_its_label() {
         "crowd (collection)",
         "music (switch container)",
     ] {
-        assert!(options[1].contains(&expected.to_string()), "{:?}", options[1]);
+        assert!(
+            options[1].contains(&expected.to_string()),
+            "{:?}",
+            options[1]
+        );
     }
     assert!(!options[1].iter().any(|o| o.starts_with("sfx")));
 }
@@ -152,7 +166,8 @@ async fn test_interactive_create_keeps_flag_actions_and_asks_only_the_run_mode()
 #[tokio::test]
 async fn test_interactive_create_with_no_buses_available_fails_with_a_suggestion() {
     let fx = fixture("ev_walk_no_bus");
-    fx.write_buses_file("main.buses.json", serde_json::json!([])).unwrap();
+    fx.write_buses_file("main.buses.json", serde_json::json!([]))
+        .unwrap();
     let input = ScriptedInput::new(&["Mute bus"], &[]);
     let (result, _) = run(&fx, &["create", "ev"], &input).await;
     let err = result.unwrap_err();
@@ -170,11 +185,11 @@ async fn test_interactive_update_changes_run_mode_and_adds_an_action() {
     let before = read_event(&fx, "ev");
     let input = ScriptedInput::new(
         &[
-            "Sequential",     // run mode
-            "Add an action",  // menu
-            "Unmute bus",     // type
-            "music_bus",      // target
-            "Done",           // menu
+            "Sequential",    // run mode
+            "Add an action", // menu
+            "Unmute bus",    // type
+            "music_bus",     // target
+            "Done",          // menu
         ],
         &[],
     )
@@ -192,7 +207,11 @@ async fn test_interactive_update_changes_run_mode_and_adds_an_action() {
     assert_eq!(actions.len(), 2);
     assert_eq!(actions[0], before.actions.unwrap()[0]);
     assert_eq!(
-        (actions[1].type_, actions[1].targets.clone(), actions[1].active),
+        (
+            actions[1].type_,
+            actions[1].targets.clone(),
+            actions[1].active
+        ),
         (EventActionType::UnmuteBus, Some(vec![3]), false)
     );
 }
@@ -202,7 +221,14 @@ async fn test_interactive_update_edits_and_removes_actions() {
     let fx = fixture("ev_up_walk_edit");
     create_ok(
         &fx,
-        &["--action", "play:step1", "--action", "stop:step2", "--action", "wait:5"],
+        &[
+            "--action",
+            "play:step1",
+            "--action",
+            "stop:step2",
+            "--action",
+            "wait:5",
+        ],
     )
     .await;
     let input = ScriptedInput::new(

@@ -44,7 +44,11 @@ fn choices(catalog: &Catalog, list: SoundbankList, taken: &[String]) -> Vec<(Str
     catalog
         .sources(list)
         .iter()
-        .filter(|s| !Catalog::runtime_names(list, s).iter().any(|r| taken.contains(r)))
+        .filter(|s| {
+            !Catalog::runtime_names(list, s)
+                .iter()
+                .any(|r| taken.contains(r))
+        })
         .map(|s| {
             let token = s.relative.trim_end_matches(".json").to_string();
             let label = if token == s.name {
