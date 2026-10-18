@@ -23,6 +23,7 @@ use std::path::PathBuf;
 use super::generated::{
     RtpcCompatibleValue, Scope, SoundDefinition, SoundLoopConfig, Spatialization,
 };
+use super::rtpc_binding::check_rtpc_binding;
 use super::{Asset, AssetType, FaderAlgorithm, ProjectContext, Schema, ValidationError};
 use crate::forms::references::rules_for;
 use crate::forms::validate_refs::validate_reference;
@@ -289,6 +290,16 @@ impl Asset for Sound {
                     _ => continue,
                 };
                 validate_reference(&rule, id, validator)?;
+            }
+            let bound = [
+                ("gain", self.gain.as_ref()),
+                ("near_field_gain", self.near_field_gain.as_ref()),
+                ("pitch", self.pitch.as_ref()),
+                ("priority", self.priority.as_ref()),
+                ("spread", self.spread.as_ref()),
+            ];
+            for (field, value) in bound {
+                check_rtpc_binding(AssetType::Sound, field, field, value, validator)?;
             }
         }
 

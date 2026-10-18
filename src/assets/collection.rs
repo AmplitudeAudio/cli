@@ -23,6 +23,7 @@ use super::generated::{
     CollectionDefinition, CollectionEntry, CollectionPlayMode, RtpcCompatibleValue, Scope,
     SoundSchedulerMode, SoundSchedulerSettings, Spatialization,
 };
+use super::rtpc_binding::check_rtpc_binding;
 use super::{Asset, AssetType, FaderAlgorithm, ProjectContext, Schema, ValidationError};
 use crate::forms::references::rules_for;
 use crate::forms::validate_refs::validate_reference;
@@ -352,6 +353,30 @@ impl Asset for Collection {
                     }
                     _ => {}
                 }
+            }
+            let own = [
+                ("gain", self.gain.as_ref()),
+                ("pitch", self.pitch.as_ref()),
+                ("priority", self.priority.as_ref()),
+            ];
+            for (field, value) in own {
+                check_rtpc_binding(AssetType::Collection, field, field, value, validator)?;
+            }
+            for (index, entry) in self.sounds.iter().flatten().enumerate() {
+                check_rtpc_binding(
+                    AssetType::Collection,
+                    "sounds.gain",
+                    &format!("sounds[{index}].gain"),
+                    entry.gain(),
+                    validator,
+                )?;
+                check_rtpc_binding(
+                    AssetType::Collection,
+                    "sounds.pitch",
+                    &format!("sounds[{index}].pitch"),
+                    entry.pitch(),
+                    validator,
+                )?;
             }
         }
 

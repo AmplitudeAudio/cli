@@ -75,6 +75,7 @@ pub mod extensions;
 mod pipeline;
 mod pipeline_graph;
 mod rtpc;
+mod rtpc_binding;
 mod sound;
 mod soundbank;
 mod soundbank_lists;

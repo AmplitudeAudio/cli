@@ -27,6 +27,7 @@
 //!   can never be played, which is why they are rejected too.
 
 use super::generated::{FadeTransitionSettings, SwitchContainerEntry};
+use super::rtpc_binding::check_rtpc_binding;
 use super::{
     FaderAlgorithm, ProjectValidator, RtpcCompatibleValue, SwitchContainer, ValidationError,
     ValidationLayer,
@@ -166,7 +167,21 @@ fn check_entry(
     check_fade(index, "fade_in", entry.fade_in.as_ref())?;
     check_fade(index, "fade_out", entry.fade_out.as_ref())?;
     check_value(format!("entries[{index}].gain"), entry.gain.as_ref())?;
-    check_value(format!("entries[{index}].pitch"), entry.pitch.as_ref())
+    check_value(format!("entries[{index}].pitch"), entry.pitch.as_ref())?;
+    check_rtpc_binding(
+        TYPE,
+        "entries.gain",
+        &format!("entries[{index}].gain"),
+        entry.gain.as_ref(),
+        validator,
+    )?;
+    check_rtpc_binding(
+        TYPE,
+        "entries.pitch",
+        &format!("entries[{index}].pitch"),
+        entry.pitch.as_ref(),
+        validator,
+    )
 }
 
 /// Runs the cross-asset and SDK-load checks of `container` against the project.
@@ -191,6 +206,14 @@ pub(super) fn check_container(
     }
     check_value("pitch".to_string(), container.pitch.as_ref())?;
     check_value("priority".to_string(), container.priority.as_ref())?;
+    let own = [
+        ("gain", container.gain.as_ref()),
+        ("pitch", container.pitch.as_ref()),
+        ("priority", container.priority.as_ref()),
+    ];
+    for (field, value) in own {
+        check_rtpc_binding(TYPE, field, field, value, validator)?;
+    }
     check_fader_name("fader".to_string(), container.fader.as_deref())?;
 
     let group = container.switch_group;
