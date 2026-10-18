@@ -31,6 +31,9 @@ fn box_args() -> ZoneArgs {
         inner_half_width: Some(1.0),
         inner_half_height: Some(2.0),
         inner_half_depth: Some(3.0),
+        outer_half_width: Some(2.0),
+        outer_half_height: Some(4.0),
+        outer_half_depth: Some(6.0),
         ..ZoneArgs::default()
     }
 }
@@ -55,6 +58,8 @@ fn parse_curve_part_rejects_malformed_input_naming_format() {
     }
     let err = parse_curve_part("0,0,1").unwrap_err().to_string();
     assert!(err.contains("start_x,start_y,end_x,end_y,fader"), "{err}");
+    let err = parse_curve_part("0,0,1,1,wobble").unwrap_err().to_string();
+    assert!(err.contains("wobble") && err.contains("SCurveSmooth"), "{err}");
 }
 
 #[test]
@@ -84,12 +89,58 @@ fn curve_from_flags_collects_parts_in_order() {
 }
 
 #[test]
-fn curve_from_flags_rejects_gap_between_parts() {
-    let r = curve_from_flags(
+fn curve_from_flags_accepts_gaps_and_out_of_order_parts() {
+    let gap = curve_from_flags(
         &["0,0,1,1,linear".to_string(), "2,1,3,0,linear".to_string()],
         None,
     );
-    assert!(r.is_err());
+    assert!(gap.unwrap().is_some());
+    let unordered = curve_from_flags(
+        &["2,1,3,0,linear".to_string(), "0,0,1,1,linear".to_string()],
+        None,
+    );
+    assert!(unordered.unwrap().is_some());
+}
+
+fn json_curve_error(body: &str) -> String {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("curve.json");
+    fs::write(&path, body).unwrap();
+    let err = curve_from_flags(&[], Some(&path)).unwrap_err().to_string();
+    err
+}
+
+#[test]
+fn json_curve_requires_a_valid_fader_on_every_part() {
+    let missing = json_curve_error(
+        r#"{"parts":[{"start":{"x":0.0,"y":0.0},"end":{"x":1.0,"y":1.0},"fader":"Linear"},{"start":{"x":1.0,"y":0.0},"end":{"x":2.0,"y":1.0}}]}"#,
+    );
+    assert!(missing.contains("part 2") && missing.contains("fader"), "{missing}");
+    assert!(missing.contains("SCurveSharp"), "{missing}");
+    let unknown = json_curve_error(
+        r#"{"parts":[{"start":{"x":0.0,"y":0.0},"end":{"x":1.0,"y":1.0},"fader":"Wobble"}]}"#,
+    );
+    assert!(unknown.contains("part 1") && unknown.contains("Wobble"), "{unknown}");
+    assert!(unknown.contains("EaseInOut"), "{unknown}");
+}
+
+#[test]
+fn json_curve_errors_include_the_path() {
+    let dir = tempfile::tempdir().unwrap();
+    let missing = dir.path().join("nope.json");
+    let err = format!("{:?}", curve_from_flags(&[], Some(&missing)).unwrap_err());
+    assert!(err.contains("nope.json"), "{err}");
+    let bad = dir.path().join("bad.json");
+    fs::write(&bad, "{not json").unwrap();
+    let err = format!("{:?}", curve_from_flags(&[], Some(&bad)).unwrap_err());
+    assert!(err.contains("bad.json"), "{err}");
+}
+
+#[test]
+fn prompt_curve_rejects_a_bad_part_immediately() {
+    // start_x 2, end_x 1: fails before any confirm is asked.
+    let input = ScriptedInput::new(&["Linear"], &["2", "0", "1", "1"]);
+    assert!(prompt_curve(&input).is_err());
 }
 
 #[test]
@@ -139,7 +190,7 @@ fn zone_from_flags_builds_box_zone() {
                 (inner.half_width, inner.half_height, inner.half_depth),
                 (1.0, 2.0, 3.0)
             );
-            assert!(settings.outer.is_none());
+            assert!(settings.outer.is_some());
         }
         other => panic!("expected box, got {other:?}"),
     }
@@ -153,6 +204,44 @@ fn zone_from_flags_rejects_flags_for_another_shape() {
     };
     let err = zone_from_flags(&args).unwrap_err().to_string();
     assert!(err.contains("sphere") && err.contains("box"), "{err}");
+}
+
+#[test]
+fn zone_from_flags_requires_both_sides() {
+    let only_inner = ZoneArgs {
+        outer_half_width: None,
+        outer_half_height: None,
+        outer_half_depth: None,
+        ..box_args()
+    };
+    let err = zone_from_flags(&only_inner).unwrap_err().to_string();
+    assert!(err.contains("--outer-half-width") && err.contains("--outer-half-depth"), "{err}");
+    let only_outer = ZoneArgs {
+        inner_half_width: None,
+        inner_half_height: None,
+        inner_half_depth: None,
+        ..box_args()
+    };
+    let err = zone_from_flags(&only_outer).unwrap_err().to_string();
+    assert!(err.contains("--inner-half-height"), "{err}");
+}
+
+#[test]
+fn zone_from_flags_rejects_non_positive_dimensions() {
+    for bad in [-1.0_f32, 0.0] {
+        let args = ZoneArgs {
+            inner_half_width: Some(bad),
+            ..box_args()
+        };
+        let err = zone_from_flags(&args).unwrap_err().to_string();
+        assert!(err.contains("--inner-half-width") && err.contains("greater than 0"), "{err}");
+    }
+}
+
+#[test]
+fn prompt_zone_rejects_non_positive_dimensions() {
+    let input = ScriptedInput::new(&["sphere"], &["-2", "3"]);
+    assert!(prompt_zone(&input).is_err());
 }
 
 #[test]
@@ -176,7 +265,8 @@ fn zone_from_flags_requires_known_shape_and_some_dimensions() {
         shape: Some("torus".to_string()),
         ..ZoneArgs::default()
     };
-    assert!(zone_from_flags(&unknown).is_err());
+    let err = zone_from_flags(&unknown).unwrap_err().to_string();
+    assert!(err.contains("torus") && err.contains("capsule") && err.contains("sphere"), "{err}");
     let empty = ZoneArgs {
         shape: Some("sphere".to_string()),
         ..ZoneArgs::default()
@@ -230,6 +320,7 @@ fn zone_serializes_with_flatc_union_tag_and_is_accepted_by_flatc() {
 
     // Validate with flatc when both flatc and the SDK schemas are available.
     let Ok(sdk) = std::env::var("AM_SDK_PATH") else {
+        eprintln!("skipped flatc check: AM_SDK_PATH is not set");
         return;
     };
     let sdk = PathBuf::from(sdk);
@@ -238,9 +329,11 @@ fn zone_serializes_with_flatc_union_tag_and_is_accepted_by_flatc() {
         .map(|d| d.join("attenuation_definition.fbs"))
         .find(|p| p.exists());
     let Some(schema) = schema else {
+        eprintln!("skipped flatc check: attenuation_definition.fbs not found under AM_SDK_PATH");
         return;
     };
     if Command::new("flatc").arg("--version").output().is_err() {
+        eprintln!("skipped flatc check: flatc is not installed");
         return;
     }
     let doc = serde_json::json!({

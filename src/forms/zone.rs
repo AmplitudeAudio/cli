@@ -149,10 +149,10 @@ fn value_of(values: &Values, field: &str) -> f32 {
     values.iter().find(|(f, _)| *f == field).map_or(0.0, |(_, v)| *v)
 }
 
-fn build_zone(shape: &str, inner: Option<Values>, outer: Option<Values>) -> ZoneDefinition {
+fn build_zone(shape: &str, inner: Values, outer: Values) -> ZoneDefinition {
     macro_rules! side {
         ($side:expr, $ty:ident { $($field:ident),+ }) => {
-            $side.map(|v| $ty { $($field: value_of(&v, stringify!($field))),+ })
+            Some($ty { $($field: value_of(&$side, stringify!($field))),+ })
         };
     }
     match shape {
@@ -175,17 +175,24 @@ fn build_zone(shape: &str, inner: Option<Values>, outer: Option<Values>) -> Zone
     }
 }
 
-fn check_finite(args: &ZoneArgs) -> Result<()> {
+/// Dimensions must be finite and greater than 0: the SDK divides by cone
+/// height and capsule axis length, and a zero or negative extent is meaningless.
+fn check_dimension(name: &str, value: f32) -> Result<()> {
+    if value.is_finite() && value > 0.0 {
+        return Ok(());
+    }
+    Err(error(
+        format!("Invalid value for {name}"),
+        format!("zone dimensions must be finite numbers greater than 0 (got {value})"),
+    )
+    .into())
+}
+
+fn check_dimensions(args: &ZoneArgs) -> Result<()> {
     for side in Side::BOTH {
         for field in ALL_FIELDS {
-            if let Some(v) = args.get(side, field)
-                && !v.is_finite()
-            {
-                return Err(error(
-                    format!("Invalid value for {}", flag(side, field)),
-                    "zone dimensions must be finite numbers",
-                )
-                .into());
+            if let Some(v) = args.get(side, field) {
+                check_dimension(&flag(side, field), v)?;
             }
         }
     }
@@ -194,8 +201,8 @@ fn check_finite(args: &ZoneArgs) -> Result<()> {
 
 /// Builds a zone from `--shape` and the shape-specific flags.
 ///
-/// A side (inner or outer) is included when any of its flags is given; it then
-/// needs every field of the chosen shape. At least one side is required.
+/// Both the inner and the outer shape are required (the SDK dereferences both),
+/// each with every field of the chosen shape.
 pub fn zone_from_flags(args: &ZoneArgs) -> Result<ZoneDefinition> {
     let shape_name = args.shape.as_deref().ok_or_else(|| {
         error(
@@ -205,7 +212,7 @@ pub fn zone_from_flags(args: &ZoneArgs) -> Result<ZoneDefinition> {
         .with_suggestion("Pass --shape box|capsule|cone|sphere")
     })?;
     let (shape, fields) = find_shape(shape_name)?;
-    check_finite(args)?;
+    check_dimensions(args)?;
 
     let mut stray = Vec::new();
     let mut owners: Vec<&str> = Vec::new();
@@ -241,53 +248,41 @@ pub fn zone_from_flags(args: &ZoneArgs) -> Result<ZoneDefinition> {
     }
 
     let mut missing = Vec::new();
-    let mut sides: Vec<Option<Values>> = Vec::new();
+    let mut sides: Vec<Values> = Vec::new();
     for side in Side::BOTH {
         let given: Values = fields
             .iter()
             .filter_map(|f| args.get(side, f).map(|v| (*f, v)))
             .collect();
-        if given.is_empty() {
-            sides.push(None);
-            continue;
-        }
         missing.extend(
             fields
                 .iter()
                 .filter(|f| args.get(side, f).is_none())
                 .map(|f| flag(side, f)),
         );
-        sides.push(Some(given));
-    }
-
-    if sides.iter().all(Option::is_none) {
-        let wanted: Vec<String> = fields.iter().map(|f| flag(Side::Inner, f)).collect();
-        return Err(error(
-            format!("No dimensions for the {shape} zone"),
-            format!(
-                "give the inner and/or outer dimensions, e.g. {} (and the matching --outer-* flags)",
-                wanted.join(" <n> ")
-            ),
-        )
-        .into());
+        sides.push(given);
     }
     if !missing.is_empty() {
         return Err(error(
             format!("Incomplete {shape} zone"),
-            format!("missing required flags: {}", missing.join(", ")),
+            format!(
+                "the SDK needs both an inner and an outer shape; missing required flags: {}",
+                missing.join(", ")
+            ),
         )
         .into());
     }
 
-    let outer = sides.pop().flatten();
-    let inner = sides.pop().flatten();
+    let mut sides = sides.into_iter();
+    let inner = sides.next().unwrap_or_default();
+    let outer = sides.next().unwrap_or_default();
     Ok(build_zone(shape, inner, outer))
 }
 
 fn validate_number(text: &str) -> Result<Validation, inquire::CustomUserError> {
     Ok(match text.trim().parse::<f32>() {
-        Ok(v) if v.is_finite() => Validation::Valid,
-        _ => Validation::Invalid("Enter a valid number".into()),
+        Ok(v) if v.is_finite() && v > 0.0 => Validation::Valid,
+        _ => Validation::Invalid("Enter a number greater than 0".into()),
     })
 }
 
@@ -301,12 +296,8 @@ fn prompt_side(input: &dyn Input, side: Side, fields: &[&'static str]) -> Result
         .map(|field| {
             let label = format!("{label_prefix} {}", field.replace('_', " "));
             let text = input.prompt_text(&label, None, None, Some(&validate_number))?;
-            let value = text
-                .trim()
-                .parse::<f32>()
-                .ok()
-                .filter(|v| v.is_finite())
-                .ok_or_else(|| error(format!("Invalid {label}"), "enter a finite number"))?;
+            let value = text.trim().parse::<f32>().unwrap_or(f32::NAN);
+            check_dimension(&label, value)?;
             Ok((*field, value))
         })
         .collect()
@@ -318,5 +309,5 @@ pub fn prompt_zone(input: &dyn Input) -> Result<ZoneDefinition> {
     let (shape, fields) = find_shape(&chosen)?;
     let inner = prompt_side(input, Side::Inner, fields)?;
     let outer = prompt_side(input, Side::Outer, fields)?;
-    Ok(build_zone(shape, Some(inner), Some(outer)))
+    Ok(build_zone(shape, inner, outer))
 }

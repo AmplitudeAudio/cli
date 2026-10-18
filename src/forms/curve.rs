@@ -103,34 +103,40 @@ fn finite_point(p: &Option<CurvePointDefinition>, what: &str) -> Result<CurvePoi
     }
 }
 
-/// Checks a whole curve: at least one part, finite points, `start_x < end_x`
-/// per part, and parts contiguous in x (each starts where the previous ended).
+/// Checks a whole curve: at least one part, finite points, a known fader on
+/// every part, and `start_x < end_x` per part. Order and gaps are valid (the
+/// SDK scans the parts linearly; a gap evaluates to 0).
 pub fn validate_curve(curve: &CurveDefinition) -> Result<()> {
     let parts = curve.parts.as_deref().unwrap_or(&[]);
     if parts.is_empty() {
         return Err(invalid("Empty curve", "a curve needs at least one part").into());
     }
-    let mut previous_end: Option<f64> = None;
-    for part in parts {
+    for (index, part) in parts.iter().enumerate() {
+        let number = index + 1;
         let start = finite_point(&part.start, "start")?;
         let end = finite_point(&part.end, "end")?;
         if start.x >= end.x {
             return Err(invalid(
-                "Invalid curve part",
+                format!("Invalid curve part {number}"),
                 format!("start_x ({}) must be less than end_x ({})", start.x, end.x),
             )
             .into());
         }
-        if let Some(prev) = previous_end
-            && prev != start.x
-        {
+        let valid = part
+            .fader
+            .as_deref()
+            .is_some_and(|f| FADER_ALGORITHM_NAMES.contains(&f));
+        if !valid {
+            let found = part.fader.as_deref().map_or("missing".to_string(), |f| format!("'{f}'"));
             return Err(invalid(
-                "Curve parts are not contiguous",
-                format!("a part starts at x={} but the previous one ended at x={prev}", start.x),
+                format!("Invalid fader on curve part {number}"),
+                format!(
+                    "part {number} has a {found} fader; it must be one of: {}",
+                    FADER_ALGORITHM_NAMES.join(", ")
+                ),
             )
             .into());
         }
-        previous_end = Some(end.x);
     }
     Ok(())
 }
