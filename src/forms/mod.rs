@@ -19,6 +19,7 @@ pub mod curve;
 pub mod describe;
 pub mod field;
 pub mod field_docs;
+pub mod in_use;
 pub mod pick;
 pub mod references;
 pub mod rtpc_value;

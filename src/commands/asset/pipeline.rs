@@ -41,7 +41,7 @@ use crate::{
     },
     database::Database,
     forms::coverage::known_field_names,
-    forms::references::{AssetRef, RefTarget, referrers_with_type},
+    forms::in_use::assert_not_in_use,
     input::Input,
     presentation::{Output, OutputMode},
     services::pipeline::{PipelineValues, apply_patch, build_pipeline},
@@ -432,20 +432,6 @@ fn update_pipeline(
     Ok(())
 }
 
-fn in_use_error(name: &str, users: &[(AssetType, AssetRef)]) -> CliError {
-    let names = users
-        .iter()
-        .map(|(kind, asset)| format!("{kind} '{}'", asset.name))
-        .collect::<Vec<_>>()
-        .join(", ");
-    CliError::new(
-        codes::ERR_ASSET_IN_USE,
-        format!("Pipeline '{name}' is still referenced"),
-        format!("It is used by: {names}"),
-    )
-    .with_suggestion("Point those assets at another pipeline first, then delete this one")
-}
-
 /// Delete a pipeline asset.
 fn delete_pipeline(name: &str, force: bool, input: &dyn Input, output: &dyn Output) -> Result<()> {
     let (current_dir, dir, _) = pipelines_dir()?;
@@ -470,14 +456,7 @@ fn delete_pipeline(name: &str, force: bool, input: &dyn Input, output: &dyn Outp
     // Assets that reference the pipeline by id would be left dangling, so --force does
     // not override this. No asset type references pipelines by id today, so this finds nothing.
     let validator = ProjectValidator::new(current_dir, output)?;
-    let users = referrers_with_type(
-        &validator,
-        RefTarget::Asset(AssetType::Pipeline),
-        pipeline.id,
-    );
-    if !users.is_empty() {
-        return Err(in_use_error(name, &users).into());
-    }
+    assert_not_in_use(&validator, AssetType::Pipeline, pipeline.id, name)?;
 
     let confirmed = force
         || input

@@ -27,6 +27,7 @@ use crate::{
         errors::{CliError, asset_not_found, codes},
         utils::read_amproject_file,
     },
+    forms::in_use::assert_not_in_use,
     forms::references::RefTarget,
     input::Input,
     presentation::{Output, OutputMode},
@@ -232,7 +233,6 @@ pub(super) async fn list_switch_containers(output: &dyn Output) -> Result<()> {
     Ok(())
 }
 
-
 /// Get switch name by ID for display purposes.
 fn get_switch_name(context: &ProjectContext, switch_id: u64) -> String {
     if switch_id == NO_REFERENCE {
@@ -285,17 +285,16 @@ pub(super) async fn delete_switch_container(
         container_file_path.display()
     ))?;
 
-    // Step 4: Check for references (events and soundbanks - placeholder for now)
-    let has_references = check_container_references(&container);
+    // Step 4: Refuse while events or soundbanks still reference the container
+    // (--force does not override)
+    let validator = ProjectValidator::new(current_dir.clone(), output)?;
+    assert_not_in_use(&validator, AssetType::SwitchContainer, container.id, name)?;
 
     // Step 5: Confirm deletion
     let confirmed = if force {
         true
     } else {
-        let mut prompt = format!("Delete switch container '{}'? This cannot be undone.", name);
-        if has_references {
-            prompt.push_str("\n⚠️  Warning: This container is referenced by events or soundbanks.");
-        }
+        let prompt = format!("Delete switch container '{}'? This cannot be undone.", name);
 
         match input.confirm(&prompt, Some(false)) {
             Ok(value) => value,
@@ -348,11 +347,3 @@ pub(super) async fn delete_switch_container(
 
     Ok(())
 }
-
-/// Check if a switch container is referenced by events or soundbanks.
-fn check_container_references(_container: &SwitchContainer) -> bool {
-    // Placeholder - will be implemented when events and soundbanks are available
-    // For now, return false to not block deletion
-    false
-}
-

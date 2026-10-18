@@ -59,7 +59,8 @@ const ACTION_HELP: &str = "TYPE:TARGET[,TARGET...][,active=BOOL][,scope=world|en
 #[derive(Subcommand, Debug)]
 pub enum EventCommands {
     /// Create a new event asset
-    #[command(after_help = "Action syntax: TYPE:TARGET[,TARGET...][,active=BOOL][,scope=world|entity]
+    #[command(
+        after_help = "Action syntax: TYPE:TARGET[,TARGET...][,active=BOOL][,scope=world|entity]
   TYPE     none, play, pause, resume, stop, seek, mute-bus, unmute-bus, wait
   TARGET   a name or ID. Play/pause/resume/stop/seek act on sounds, collections or switch
            containers; mute-bus/unmute-bus on buses. Write kind:name (sound:hit,
@@ -75,7 +76,8 @@ Examples:
       --action unmute-bus:sfx
   am asset event create stop_all --action stop:sound:hit,collection:hit
   am asset event create from_file --actions-from-json actions.json
-")]
+"
+    )]
     Create {
         /// Name of the event asset
         name: String,
@@ -136,9 +138,7 @@ Examples:
     },
 
     /// Delete an event asset
-    #[command(
-        after_help = "Examples:\n  am asset event delete play_music --yes\n  am asset event delete play_music --yes --force\n"
-    )]
+    #[command(after_help = "Examples:\n  am asset event delete play_music --yes\n")]
     Delete {
         /// Name of the event asset to delete
         name: String,
@@ -147,7 +147,7 @@ Examples:
         #[arg(short, long)]
         yes: bool,
 
-        /// Force deletion even if referenced by soundbanks
+        /// Accepted for compatibility; it no longer overrides the in-use check
         #[arg(short, long)]
         force: bool,
     },

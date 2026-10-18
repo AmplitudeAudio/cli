@@ -38,7 +38,7 @@ use crate::{
     },
     database::Database,
     forms::coverage::known_field_names,
-    forms::references::{AssetRef, RefTarget, referrers_with_type},
+    forms::in_use::assert_not_in_use,
     input::Input,
     presentation::{Output, OutputMode},
     services::rtpc::{
@@ -414,22 +414,6 @@ fn update_rtpc(name: &str, args: &RtpcArgs, input: &dyn Input, output: &dyn Outp
     Ok(())
 }
 
-fn in_use_error(name: &str, users: &[(AssetType, AssetRef)]) -> CliError {
-    let names = users
-        .iter()
-        .map(|(kind, asset)| format!("{kind} '{}'", asset.name))
-        .collect::<Vec<_>>()
-        .join(", ");
-    CliError::new(
-        codes::ERR_ASSET_IN_USE,
-        format!("RTPC '{name}' is still referenced"),
-        format!("It is bound by: {names}"),
-    )
-    .with_suggestion(
-        "Replace the RTPC binding with a static value on those assets first (e.g. --gain 1), then delete the RTPC",
-    )
-}
-
 /// Delete an RTPC asset.
 fn delete_rtpc(name: &str, force: bool, input: &dyn Input, output: &dyn Output) -> Result<()> {
     let (current_dir, dir, _) = rtpcs_dir()?;
@@ -437,10 +421,7 @@ fn delete_rtpc(name: &str, force: bool, input: &dyn Input, output: &dyn Output) 
 
     // Bound assets would be left with a dangling id, so --force does not override this.
     let validator = ProjectValidator::new(current_dir, output)?;
-    let users = referrers_with_type(&validator, RefTarget::Asset(AssetType::Rtpc), rtpc.id);
-    if !users.is_empty() {
-        return Err(in_use_error(name, &users).into());
-    }
+    assert_not_in_use(&validator, AssetType::Rtpc, rtpc.id, name)?;
 
     let confirmed = force
         || input

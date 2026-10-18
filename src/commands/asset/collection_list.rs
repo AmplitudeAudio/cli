@@ -22,11 +22,12 @@ use colored::Colorize;
 use serde_json::json;
 
 use crate::{
-    assets::{Asset, Collection, RtpcCompatibleValue, Spatialization},
+    assets::{Asset, AssetType, Collection, ProjectValidator, RtpcCompatibleValue, Spatialization},
     common::{
         errors::{CliError, asset_not_found, codes},
         utils::read_amproject_file,
     },
+    forms::in_use::assert_not_in_use,
     input::Input,
     presentation::{Output, OutputMode},
 };
@@ -278,7 +279,11 @@ pub(super) async fn delete_collection(
         collection_file_path.display()
     ))?;
 
-    // Step 4: Confirm deletion
+    // Step 4: Refuse while anything still references the collection (--force does not override)
+    let validator = ProjectValidator::new(current_dir.clone(), output)?;
+    assert_not_in_use(&validator, AssetType::Collection, collection.id, name)?;
+
+    // Step 5: Confirm deletion
     let confirmed = if force {
         true
     } else {

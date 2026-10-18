@@ -27,6 +27,7 @@ use crate::{
         errors::{CliError, asset_not_found, codes},
         utils::{read_amproject_file, truncate_string},
     },
+    forms::in_use::assert_not_in_use,
     input::Input,
     presentation::{Output, OutputMode},
 };
@@ -37,7 +38,9 @@ use super::find_json_files_recursive;
 const ASSET_NAME: &str = "Event";
 
 /// Format run mode for display.
-pub(super) fn format_run_mode(mode: &crate::assets::generated::EventActionRunningMode) -> &'static str {
+pub(super) fn format_run_mode(
+    mode: &crate::assets::generated::EventActionRunningMode,
+) -> &'static str {
     match mode {
         crate::assets::generated::EventActionRunningMode::Parallel => "Parallel",
         crate::assets::generated::EventActionRunningMode::Sequential => "Sequential",
@@ -259,7 +262,7 @@ pub(super) async fn list_events(output: &dyn Output) -> Result<()> {
 pub(super) async fn delete_event(
     name: &str,
     yes: bool,
-    force: bool,
+    _force: bool,
     input: &dyn Input,
     output: &dyn Output,
 ) -> Result<()> {
@@ -286,13 +289,9 @@ pub(super) async fn delete_event(
     let content = fs::read_to_string(&event_file_path)?;
     let event: Event = serde_json::from_str(&content)?;
 
-    // Step 4: Check for dependencies (soundbanks that include this event)
+    // Step 4: Refuse while soundbanks still include the event (--force does not override)
     let validator = ProjectValidator::new(current_dir.clone(), output)?;
-    let dependent_soundbanks: Vec<String> = validator
-        .asset_ids
-        .get(&AssetType::Soundbank)
-        .map(|ids| ids.iter().map(|id| id.to_string()).collect())
-        .unwrap_or_default();
+    assert_not_in_use(&validator, AssetType::Event, event.id, name)?;
 
     // Step 5: Confirmation prompt
     if !yes {
@@ -307,15 +306,6 @@ pub(super) async fn delete_event(
             event.actions.as_ref().map(|a| a.len()).unwrap_or(0)
         ));
         output.print(&format!("  File: {}\n", event_file_path.display()));
-
-        if !dependent_soundbanks.is_empty() && !force {
-            output.print(&format!(
-                "{} This event is included in {} soundbank(s).",
-                "⚠".yellow(),
-                dependent_soundbanks.len()
-            ));
-            output.print("  Use --force to delete anyway.\n");
-        }
 
         let confirmed =
             match input.confirm("Are you sure you want to delete this event?", Some(false)) {

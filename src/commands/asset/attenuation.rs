@@ -38,7 +38,7 @@ use crate::{
     },
     database::Database,
     forms::coverage::known_field_names,
-    forms::references::{RefTarget, referrers_with_type},
+    forms::in_use::assert_not_in_use,
     forms::zone::zone_shape_name,
     input::Input,
     presentation::{Output, OutputMode},
@@ -455,27 +455,6 @@ fn update_attenuation(
     Ok(())
 }
 
-fn in_use_error(name: &str, users: &[(AssetType, crate::forms::references::AssetRef)]) -> CliError {
-    let names = users
-        .iter()
-        .map(|(kind, asset)| format!("{kind} '{}'", asset.name))
-        .collect::<Vec<_>>()
-        .join(", ");
-    let fixes = users
-        .iter()
-        .map(|(kind, asset)| format!("am asset {kind} update {} --attenuation none", asset.name))
-        .collect::<Vec<_>>()
-        .join("; ");
-    CliError::new(
-        codes::ERR_ASSET_IN_USE,
-        format!("Attenuation '{name}' is still referenced"),
-        format!("It is used by: {names}"),
-    )
-    .with_suggestion(format!(
-        "Update or remove the reference first (e.g. {fixes}), then delete the attenuation"
-    ))
-}
-
 /// Delete an attenuation asset.
 fn delete_attenuation(
     name: &str,
@@ -488,14 +467,7 @@ fn delete_attenuation(
 
     // Referenced assets would be left with a dangling id, so --force does not override this.
     let validator = ProjectValidator::new(current_dir, output)?;
-    let users = referrers_with_type(
-        &validator,
-        RefTarget::Asset(AssetType::Attenuation),
-        attenuation.id,
-    );
-    if !users.is_empty() {
-        return Err(in_use_error(name, &users).into());
-    }
+    assert_not_in_use(&validator, AssetType::Attenuation, attenuation.id, name)?;
 
     let confirmed = force
         || input

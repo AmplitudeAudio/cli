@@ -27,6 +27,7 @@ use crate::{
         errors::{CliError, asset_not_found, codes},
         utils::read_amproject_file,
     },
+    forms::in_use::assert_not_in_use,
     input::Input,
     presentation::{Output, OutputMode},
 };
@@ -265,18 +266,16 @@ pub(super) async fn delete_switch(
         switch_file_path.display()
     ))?;
 
-    // Step 4: Check for switch container references
+    // Step 4: Refuse while switch containers or soundbanks still reference the switch
+    // (--force does not override)
     let validator = ProjectValidator::new(current_dir.clone(), output)?;
-    let has_references = check_switch_references(&validator, switch.id);
+    assert_not_in_use(&validator, AssetType::Switch, switch.id, name)?;
 
     // Step 5: Confirm deletion
     let confirmed = if force {
         true
     } else {
-        let mut prompt = format!("Delete switch '{}'? This cannot be undone.", name);
-        if has_references {
-            prompt.push_str("\n⚠️  Warning: This switch is referenced by switch containers.");
-        }
+        let prompt = format!("Delete switch '{}'? This cannot be undone.", name);
 
         match input.confirm(&prompt, Some(false)) {
             Ok(value) => value,
@@ -328,11 +327,4 @@ pub(super) async fn delete_switch(
     }
 
     Ok(())
-}
-
-/// Check if a switch is referenced by any switch containers.
-fn check_switch_references(_validator: &ProjectValidator, _switch_id: u64) -> bool {
-    // For now, return false as switch container implementation is in Story 4.3
-    // This will be enhanced when switch containers are implemented
-    false
 }
