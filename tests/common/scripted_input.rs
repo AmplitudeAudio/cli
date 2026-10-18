@@ -28,6 +28,7 @@ pub struct ScriptedInput {
     selects: Mutex<Vec<String>>,
     texts: Mutex<Vec<String>>,
     confirms: Mutex<Vec<bool>>,
+    multi_selects: Mutex<Vec<Vec<String>>>,
     /// Every prompt label shown, in order, across all prompt kinds.
     pub prompts: Mutex<Vec<String>>,
     /// The option list of every `select`, in order.
@@ -41,6 +42,7 @@ impl ScriptedInput {
             selects: Mutex::new(rev(selects)),
             texts: Mutex::new(rev(texts)),
             confirms: Mutex::new(Vec::new()),
+            multi_selects: Mutex::new(Vec::new()),
             prompts: Mutex::new(Vec::new()),
             options_seen: Mutex::new(Vec::new()),
         }
@@ -49,6 +51,16 @@ impl ScriptedInput {
     /// Queues explicit answers for `confirm` prompts.
     pub fn with_confirms(self, confirms: &[bool]) -> Self {
         *self.confirms.lock().unwrap() = confirms.iter().rev().copied().collect();
+        self
+    }
+
+    /// Queues the answers (labels to pick) of consecutive `multi_select` prompts.
+    pub fn with_multi_selects(self, answers: &[&[&str]]) -> Self {
+        *self.multi_selects.lock().unwrap() = answers
+            .iter()
+            .rev()
+            .map(|a| a.iter().map(|s| s.to_string()).collect())
+            .collect();
         self
     }
 
@@ -78,6 +90,11 @@ impl ScriptedInput {
             self.confirms.lock().unwrap().is_empty(),
             "unused scripted confirms: {:?}",
             self.confirms.lock().unwrap()
+        );
+        assert!(
+            self.multi_selects.lock().unwrap().is_empty(),
+            "unused scripted multi-selects: {:?}",
+            self.multi_selects.lock().unwrap()
         );
     }
 
@@ -143,7 +160,9 @@ impl Input for ScriptedInput {
         Ok(answer)
     }
 
-    fn multi_select(&self, _prompt: &str, _options: &[String]) -> Result<Vec<String>> {
-        Ok(Vec::new())
+    fn multi_select(&self, prompt: &str, options: &[String]) -> Result<Vec<String>> {
+        self.record(prompt);
+        self.options_seen.lock().unwrap().push(options.to_vec());
+        Ok(self.multi_selects.lock().unwrap().pop().unwrap_or_default())
     }
 }

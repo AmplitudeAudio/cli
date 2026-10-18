@@ -19,7 +19,9 @@
 //! switch containers, effects, attenuators, and RTPCs that should be loaded together.
 
 use super::generated::SoundBankDefinition;
-use super::{Asset, AssetType, ProjectContext, Schema, ValidationError};
+use super::soundbank_lists::SoundbankList;
+use super::{Asset, AssetType, ProjectContext, Schema, ValidationError, ValidationLayer};
+use crate::common::errors::codes;
 
 // =============================================================================
 // Soundbank Type Alias
@@ -93,14 +95,16 @@ impl SoundbankBuilder {
             soundbank: Soundbank {
                 id,
                 name: Some(name.into()),
-                sounds: None,
-                collections: None,
-                events: None,
-                switches: None,
-                switch_containers: None,
-                effects: None,
-                attenuators: None,
-                rtpc: None,
+                // The SDK dereferences every list without a null check, so a bank
+                // always carries all eight, empty or not.
+                sounds: Some(Vec::new()),
+                collections: Some(Vec::new()),
+                events: Some(Vec::new()),
+                switches: Some(Vec::new()),
+                switch_containers: Some(Vec::new()),
+                effects: Some(Vec::new()),
+                attenuators: Some(Vec::new()),
+                rtpc: Some(Vec::new()),
             },
         }
     }
@@ -328,6 +332,22 @@ impl Asset for Soundbank {
             .with_field("name"));
         }
 
+        // `SoundBank::InitializeInternal` calls `->size()` on each of the eight lists
+        // without a null check, so an absent list crashes the engine on load.
+        for list in SoundbankList::ALL {
+            if self.list_option(list).is_none() {
+                return Err(ValidationError::type_rule_violation(
+                    format!("Soundbank has no '{}' list", list.field()),
+                    "The SDK reads every list of a soundbank without checking for a missing one, so an absent list crashes the engine when the bank loads",
+                )
+                .with_suggestion(format!(
+                    "Add \"{}\": [] to the soundbank, or run 'am asset soundbank update <name>' to repair it",
+                    list.field()
+                ))
+                .with_field(list.field()));
+            }
+        }
+
         // Validate at least one asset is included
         let asset_count = self.asset_count();
         if asset_count == 0 {
@@ -341,44 +361,51 @@ impl Asset for Soundbank {
             .with_field("assets"));
         }
 
-        // Check for circular dependency (soundbank containing itself)
-        // Since soundbanks reference assets by path strings, we need to check
-        // if this soundbank's ID appears as a reference in an unusual way.
-        // This is a safety check - normally the soundbank wouldn't reference itself.
-        // Note: The SDK uses path strings for references, so we can't directly
-        // check for ID matches. This check would need path-to-ID resolution.
-
-        // Validate all referenced assets exist (if validator is available).
-        // Soundbank references use runtime binary names (e.g., "throw.amsound")
-        // without a type directory prefix. We prepend the type directory so the
-        // validator can locate the source file on disk.
+        // Entries are runtime file names (`explosion.amsound`, `fx/boom.amsound`): the
+        // SDK loads `<type dir>/<entry>` from the build, and the validator maps them back
+        // to the source `.json` files.
         if let Some(ref validator) = context.validator {
+            for list in SoundbankList::ALL {
+                let wrong: Vec<&String> = self
+                    .list(list)
+                    .iter()
+                    .filter(|entry| list.source_relative(entry).is_none())
+                    .collect();
+                if !wrong.is_empty() {
+                    return Err(ValidationError::new(
+                        ValidationLayer::TypeRules,
+                        codes::ERR_VALIDATION_FIELD,
+                        format!(
+                            "Soundbank '{}' entries need the {} extension: {}",
+                            list.field(),
+                            list.extension(),
+                            wrong.iter().map(|e| e.as_str()).collect::<Vec<_>>().join(", ")
+                        ),
+                        "The SDK loads each entry as a compiled file of that name, so a source '.json' name or the extension of another asset type cannot be loaded",
+                    )
+                    .with_suggestion(format!(
+                        "Name assets in the bank with 'am asset soundbank update <name> --add-{} <asset>', which writes the runtime name",
+                        list.type_key().replace('_', "-")
+                    ))
+                    .with_field(list.field()));
+                }
+            }
+
             let mut missing_assets: Vec<String> = Vec::new();
-
-            let checks: &[(&str, &Option<Vec<String>>)] = &[
-                ("sounds", &self.sounds),
-                ("collections", &self.collections),
-                ("events", &self.events),
-                ("switches", &self.switches),
-                ("switch_containers", &self.switch_containers),
-                ("effects", &self.effects),
-                ("attenuators", &self.attenuators),
-                ("rtpc", &self.rtpc),
-            ];
-
-            for &(type_dir, ref field) in checks {
-                if let Some(paths) = field {
-                    for asset_path in paths {
-                        let full_path = format!("{}/{}", type_dir, asset_path);
-                        if !validator.asset_exists_by_path(&full_path) {
-                            missing_assets.push(format!("{}: {}", type_dir, asset_path));
-                        }
+            for list in SoundbankList::ALL {
+                for entry in self.list(list) {
+                    let source = list.source_relative(entry).unwrap_or_default();
+                    let full_path = format!("{}/{}", list.asset_type().directory_name(), source);
+                    if !validator.asset_exists_by_path(&full_path) {
+                        missing_assets.push(format!("{}: {}", list.field(), entry));
                     }
                 }
             }
 
             if !missing_assets.is_empty() {
-                return Err(ValidationError::type_rule_violation(
+                return Err(ValidationError::new(
+                    ValidationLayer::TypeRules,
+                    codes::ERR_VALIDATION_REFERENCE,
                     format!(
                         "Soundbank references {} non-existent assets",
                         missing_assets.len()

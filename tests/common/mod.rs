@@ -27,6 +27,8 @@ pub mod flatc;
 #[allow(dead_code)]
 pub mod scripted_input;
 #[allow(dead_code)]
+pub mod soundbank_helpers;
+#[allow(dead_code)]
 pub mod switch_container_helpers;
 #[allow(dead_code)]
 pub mod switch_helpers;

@@ -77,6 +77,7 @@ mod pipeline_graph;
 mod rtpc;
 mod sound;
 mod soundbank;
+mod soundbank_lists;
 mod switch;
 mod switch_container;
 mod switch_container_checks;
@@ -112,6 +113,7 @@ pub use pipeline_graph::{BUILTIN_NODES, InputArity, builtin_node};
 pub use rtpc::{Rtpc, RtpcBuilder};
 pub use sound::{Sound, SoundBuilder};
 pub use soundbank::{Soundbank, SoundbankBuilder};
+pub use soundbank_lists::SoundbankList;
 #[allow(unused_imports)]
 pub use switch::{Switch, SwitchBuilder};
 #[allow(unused_imports)]

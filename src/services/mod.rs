@@ -24,6 +24,7 @@ pub mod event;
 pub mod pipeline;
 pub mod rtpc;
 pub mod sound;
+pub mod soundbank;
 pub mod switch;
 pub mod switch_container;
 pub mod switch_container_entries;

@@ -83,6 +83,14 @@ pub struct AssetRef {
     pub name: String,
 }
 
+/// A source asset file: its `name` and its path below the type directory
+/// (`fx/boom.json` for `sources/sounds/fx/boom.json`), with `/` separators.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SourceAsset {
+    pub name: String,
+    pub relative: String,
+}
+
 fn normalize_asset_path(path: &str) -> String {
     path.replace('\\', "/")
 }
@@ -113,6 +121,9 @@ pub struct ProjectValidator {
     /// All known asset file paths relative to the project sources directory.
     /// Used for path-based reference validation (e.g., soundbank asset references).
     asset_paths: HashSet<String>,
+    /// Name and file of every source asset per type, for the name-based references of
+    /// soundbanks.
+    asset_sources: HashMap<AssetType, Vec<SourceAsset>>,
     /// (id, name) pairs per asset type, for pick-lists and reference resolution.
     asset_refs: HashMap<AssetType, Vec<AssetRef>>,
     /// The states of each switch asset, by switch id, in file order.
@@ -166,6 +177,7 @@ impl ProjectValidator {
             asset_names: HashMap::new(),
             asset_locations: HashMap::new(),
             asset_paths: HashSet::new(),
+            asset_sources: HashMap::new(),
             asset_refs: HashMap::new(),
             switch_states: HashMap::new(),
             buses: Vec::new(),
@@ -207,6 +219,7 @@ impl ProjectValidator {
             asset_names: HashMap::new(),
             asset_locations: HashMap::new(),
             asset_paths: HashSet::new(),
+            asset_sources: HashMap::new(),
             asset_refs: HashMap::new(),
             switch_states: HashMap::new(),
             buses: Vec::new(),
@@ -424,6 +437,13 @@ impl ProjectValidator {
         }
 
         false
+    }
+
+    /// The source files of `asset_type`, sorted by file path.
+    pub fn source_assets(&self, asset_type: AssetType) -> Vec<SourceAsset> {
+        let mut sources = self.asset_sources.get(&asset_type).cloned().unwrap_or_default();
+        sources.sort_by(|a, b| a.relative.cmp(&b.relative));
+        sources
     }
 
     /// Lists every object a reference to `target` can point at, sorted by name.
@@ -671,6 +691,19 @@ impl ProjectValidator {
                     .entry(asset_type)
                     .or_default()
                     .insert(name.to_string());
+            }
+
+            if let (Some(name), Ok(relative)) = (
+                value.get("name").and_then(|v| v.as_str()),
+                path.strip_prefix(&dir),
+            ) {
+                self.asset_sources
+                    .entry(asset_type)
+                    .or_default()
+                    .push(SourceAsset {
+                        name: name.to_string(),
+                        relative: normalize_asset_path(&relative.to_string_lossy()),
+                    });
             }
 
             // Track the relative path from sources dir for path-based lookups
