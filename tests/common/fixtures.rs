@@ -246,6 +246,17 @@ impl AssetTestFixture {
             serde_json::to_string_pretty(&amproject)?,
         )?;
 
+        // SDK projects always have a bus hierarchy; the master bus id is 1.
+        std::fs::write(
+            project_root.join("main.buses.json"),
+            serde_json::to_string_pretty(&serde_json::json!({
+                "buses": [
+                    { "id": 1, "name": "master", "child_buses": [2] },
+                    { "id": 2, "name": "sfx" }
+                ]
+            }))?,
+        )?;
+
         Ok(Self {
             _temp_dir: temp_dir,
             project_root,
@@ -272,7 +283,7 @@ impl AssetTestFixture {
             "id": id,
             "name": name,
             "path": format!("data/{}.wav", name),
-            "bus": 0,
+            "bus": 1,
             "gain": { "kind": "Static", "value": 1.0 },
             "priority": { "kind": "Static", "value": 128.0 },
             "stream": false,

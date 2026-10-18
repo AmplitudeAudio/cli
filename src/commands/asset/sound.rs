@@ -29,8 +29,8 @@ use serde_json::json;
 use crate::common::utils::generate_unique_id;
 use crate::{
     assets::{
-        Asset, ProjectContext, ProjectValidator, RtpcCompatibleValue, Sound, SoundLoopConfig,
-        Spatialization,
+        Asset, AssetType, ProjectContext, ProjectValidator, RtpcCompatibleValue, Sound,
+        SoundLoopConfig, Spatialization,
     },
     common::{
         errors::{CliError, asset_already_exists, asset_not_found, codes},
@@ -38,6 +38,7 @@ use crate::{
         utils::{read_amproject_file, truncate_string},
     },
     database::Database,
+    forms::{pick::pick_reference, references::rule_for},
     input::{Input, select_index},
     presentation::{Output, OutputMode},
 };
@@ -70,7 +71,7 @@ pub enum SoundCommands {
         #[arg(short, long)]
         gain: Option<f32>,
 
-        /// Bus ID for audio routing (omit for default: 0 = master)
+        /// Bus ID for audio routing (required; see 'am asset bus list')
         #[arg(short, long)]
         bus: Option<u64>,
 
@@ -305,6 +306,9 @@ async fn create_sound(
         .into());
     }
 
+    // Step 4b: Resolve the bus before anything else is prompted or written
+    let bus_id = resolve_bus(bus, input, output, &context)?;
+
     // Step 5: Get gain value (prompt if not provided)
     let gain_value = if let Some(g) = gain {
         validate_gain(g)?;
@@ -341,9 +345,6 @@ async fn create_sound(
     } else {
         prompt_spatialization(input)?
     };
-
-    // Step 10: Get bus ID (use default or provided)
-    let bus_id = bus.unwrap_or(0);
 
     // Step 11: Generate unique ID and check for collisions against all project assets
     let mut id = generate_unique_id(name);
@@ -412,6 +413,37 @@ async fn create_sound(
     }
 
     Ok(())
+}
+
+/// Resolves the bus a new sound is routed to.
+///
+/// Uses the `--bus` value when given. Otherwise an interactive session picks one
+/// from the project's buses; non-interactive and JSON runs fail naming `--bus`
+/// instead of prompting.
+fn resolve_bus(
+    bus: Option<u64>,
+    input: &dyn Input,
+    output: &dyn Output,
+    context: &ProjectContext,
+) -> Result<u64> {
+    if let Some(id) = bus {
+        return Ok(id);
+    }
+
+    let rule = rule_for(AssetType::Sound, "bus").context("Sound has no bus reference rule")?;
+    let interactive = input.is_interactive() && output.mode() != OutputMode::Json;
+    if interactive && let Some(validator) = &context.validator {
+        return pick_reference(input, validator, &rule)?
+            .context("A required reference cannot be left unset");
+    }
+
+    Err(CliError::new(
+        codes::ERR_VALIDATION_EMPTY_REFERENCE,
+        "Missing required --bus",
+        "Sounds must be routed to a bus and cannot prompt in non-interactive or JSON mode",
+    )
+    .with_suggestion("Pass --bus <id> (see 'am asset bus list')")
+    .into())
 }
 
 /// Maximum character length for paths before truncation in table display.
@@ -900,7 +932,16 @@ async fn update_sound(
     // Step 6: Validate the updated sound with populated context
     let validator = ProjectValidator::new(current_dir.clone(), output)?;
     let context = ProjectContext::new(current_dir.clone()).with_validator(validator);
-    sound.validate_rules(&context)?;
+    sound.validate_rules(&context).map_err(|e| {
+        if e.field.as_deref() == Some("bus") {
+            let suggestion = format!(
+                "Run 'am asset sound update {name} --bus <id>' with an existing bus (see 'am asset bus list')"
+            );
+            e.with_suggestion(suggestion)
+        } else {
+            e
+        }
+    })?;
 
     // Step 7: Serialize and write atomically
     let json_content =

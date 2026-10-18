@@ -168,6 +168,12 @@ fn test_p0_sound_validate_rules_checks_effect_reference_when_validator_present()
     // Create an audio file and an effect
     fs::write(data_dir.join("beep.wav"), b"fake audio").unwrap();
     write_minimal_asset_json(&effects_dir, "reverb.json", 10, "reverb");
+    // Sounds must be routed to an existing bus (master bus id is 1).
+    fs::write(
+        dir.path().join("main.buses.json"),
+        r#"{ "buses": [ { "id": 1, "name": "master" } ] }"#,
+    )
+    .unwrap();
 
     let validator = ProjectValidator::new(
         dir.path().to_path_buf(),
@@ -179,6 +185,7 @@ fn test_p0_sound_validate_rules_checks_effect_reference_when_validator_present()
     // Sound referencing a valid effect -> Ok
     let sound_valid = Sound::builder(1, "beep")
         .path("sfx/beep.wav")
+        .bus(1)
         .effect(10)
         .build();
     assert!(sound_valid.validate_rules(&context).is_ok());
@@ -186,6 +193,7 @@ fn test_p0_sound_validate_rules_checks_effect_reference_when_validator_present()
     // Sound referencing a non-existent effect -> Err
     let sound_invalid = Sound::builder(2, "beep2")
         .path("sfx/beep.wav")
+        .bus(1)
         .effect(999)
         .build();
     let result = sound_invalid.validate_rules(&context);
@@ -197,6 +205,7 @@ fn test_p0_sound_validate_rules_checks_effect_reference_when_validator_present()
     // Sound with effect = 0 (no reference) -> Ok
     let sound_no_effect = Sound::builder(3, "beep3")
         .path("sfx/beep.wav")
+        .bus(1)
         .effect(0)
         .build();
     assert!(sound_no_effect.validate_rules(&context).is_ok());

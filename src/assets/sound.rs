@@ -24,6 +24,8 @@ use super::generated::{
     RtpcCompatibleValue, Scope, SoundDefinition, SoundLoopConfig, Spatialization,
 };
 use super::{Asset, AssetType, FaderAlgorithm, ProjectContext, Schema, ValidationError};
+use crate::forms::references::rules_for;
+use crate::forms::validate_refs::validate_reference;
 
 // =============================================================================
 // Sound Type Alias
@@ -275,13 +277,19 @@ impl Asset for Sound {
             }
         }
 
-        // Cross-asset reference checks (only if validator is available)
-        // Bus and attenuation validation deferred to Epic 6.
+        // Cross-asset reference checks (only if validator is available).
+        // Required references must be non-zero and every non-zero reference
+        // must resolve to an existing object.
         if let Some(validator) = &context.validator {
-            // Validate effect reference (zero IDs handled internally as no-op)
-            validator
-                .validate_effect_exists(self.effect)
-                .map_err(|e| e.with_field("effect"))?;
+            for rule in rules_for(AssetType::Sound) {
+                let id = match rule.field {
+                    "bus" => self.bus,
+                    "attenuation" => self.attenuation,
+                    "effect" => self.effect,
+                    _ => continue,
+                };
+                validate_reference(&rule, id, validator)?;
+            }
         }
 
         Ok(())

@@ -45,6 +45,10 @@ impl NonInteractiveInput {
 }
 
 impl Input for NonInteractiveInput {
+    fn is_interactive(&self) -> bool {
+        false
+    }
+
     fn prompt_text(
         &self,
         prompt: &str,

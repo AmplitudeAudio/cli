@@ -52,6 +52,14 @@ pub enum InputMode {
 /// - JSON mode can imply non-interactive input
 /// - tests can supply a mock input provider if needed later
 pub trait Input: Send + Sync {
+    /// Whether this input can actually prompt the user.
+    ///
+    /// Commands use this to decide between prompting for a missing value and
+    /// failing with an error that names the flag to pass.
+    fn is_interactive(&self) -> bool {
+        true
+    }
+
     /// Prompt the user for text input.
     ///
     /// This should support the core `inquire::Text` capabilities:

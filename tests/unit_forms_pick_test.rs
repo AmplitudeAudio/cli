@@ -16,6 +16,7 @@
 
 mod common;
 
+use std::fs;
 use std::sync::Mutex;
 
 use am::assets::generated::ValueKind;
@@ -138,6 +139,8 @@ fn test_required_picker_returns_chosen_id() {
 #[test]
 fn test_required_picker_empty_errors_with_create_hint() {
     let fx = AssetTestFixture::new("pick_empty").unwrap();
+    // The fixture ships a bus file; this test needs a project with no buses.
+    fs::remove_file(fx.project_root().join("main.buses.json")).unwrap();
     let v = fx.create_project_validator().unwrap();
     let input = ScriptedInput::new(&[], &[]);
     let err = pick_reference(&input, &v, &bus_rule(true)).unwrap_err();
@@ -161,6 +164,8 @@ fn test_optional_picker_none_entry() {
 #[test]
 fn test_optional_picker_empty_offers_only_none() {
     let fx = AssetTestFixture::new("pick_opt_empty").unwrap();
+    // The fixture ships a bus file; this test needs a project with no buses.
+    fs::remove_file(fx.project_root().join("main.buses.json")).unwrap();
     let v = fx.create_project_validator().unwrap();
     let input = ScriptedInput::new(&["(none)"], &[]);
     assert_eq!(pick_reference(&input, &v, &bus_rule(false)).unwrap(), None);

@@ -594,6 +594,16 @@ fn create_amproject(path: &std::path::Path, name: &str) -> anyhow::Result<()> {
         path.join(".amproject"),
         serde_json::to_string_pretty(&config)?,
     )?;
+    // Sounds must reference an existing bus; the SDK's master bus id is 1.
+    std::fs::write(
+        path.join("main.buses.json"),
+        serde_json::to_string_pretty(&serde_json::json!({
+            "buses": [
+                { "id": 1, "name": "master", "child_buses": [2] },
+                { "id": 2, "name": "sfx" }
+            ]
+        }))?,
+    )?;
     Ok(())
 }
 
@@ -608,7 +618,7 @@ fn create_sound_file(
         "id": id,
         "name": name,
         "path": format!("sfx/{}.wav", name),
-        "bus": 0,
+        "bus": 1,
         "gain": { "kind": "Static", "value": gain },
         "priority": { "kind": "Static", "value": 128.0 },
         "stream": false,
@@ -1545,7 +1555,7 @@ async fn test_p1_sound_update_only_updates_specified_flags() {
         "id": 99999,
         "name": "explosion",
         "path": "sfx/explosion.wav",
-        "bus": 5,
+        "bus": 2,
         "gain": { "kind": "Static", "value": 0.8 },
         "priority": { "kind": "Static", "value": 200.0 },
         "stream": true,
@@ -1616,7 +1626,7 @@ async fn test_p1_sound_update_only_updates_specified_flags() {
 
     // Preserved fields
     assert_eq!(updated.id, 99999, "ID should be preserved");
-    assert_eq!(updated.bus, 5, "Bus should be preserved");
+    assert_eq!(updated.bus, 2, "Bus should be preserved");
     assert!(updated.stream, "Stream should be preserved as true");
     assert!(
         updated.loop_.as_ref().unwrap().enabled,
@@ -1658,7 +1668,7 @@ async fn test_p1_sound_update_preserves_sound_id() {
         "id": specific_id,
         "name": "explosion",
         "path": "sfx/explosion.wav",
-        "bus": 0,
+        "bus": 1,
         "gain": { "kind": "Static", "value": 1.0 },
         "priority": { "kind": "Static", "value": 128.0 },
         "stream": false,
@@ -1689,7 +1699,7 @@ async fn test_p1_sound_update_preserves_sound_id() {
             name: "explosion".to_string(),
             file: None,
             gain: Some(0.5),
-            bus: Some(10),
+            bus: Some(2),
             priority: Some(200),
             stream: Some(true),
             loop_enabled: None,
@@ -1820,7 +1830,7 @@ async fn test_p1_sound_update_bus_field_updates_correctly() {
             name: "explosion".to_string(),
             file: None,
             gain: None,
-            bus: Some(42), // Update bus to 42
+            bus: Some(2), // Update bus to sfx (2)
             priority: None,
             stream: None,
             loop_enabled: None,
@@ -1846,7 +1856,7 @@ async fn test_p1_sound_update_bus_field_updates_correctly() {
     let updated_content = std::fs::read_to_string(sounds_dir.join("explosion.json")).unwrap();
     let updated: Sound = serde_json::from_str(&updated_content).unwrap();
 
-    assert_eq!(updated.bus, 42, "Bus should be updated to 42");
+    assert_eq!(updated.bus, 2, "Bus should be updated to 2");
     // Verify other fields preserved
     assert_eq!(
         updated.gain.as_ref().and_then(|g| g.as_static()),
@@ -1958,7 +1968,7 @@ async fn test_p1_sound_list_table_truncates_long_paths() {
         "id": 12345,
         "name": "long_path_sound",
         "path": long_path,
-        "bus": 0,
+        "bus": 1,
         "gain": { "kind": "Static", "value": 0.8 },
         "priority": { "kind": "Static", "value": 128.0 },
         "stream": false,
@@ -2101,4 +2111,210 @@ async fn test_p0_sound_update_sets_spread_and_rejects_out_of_range() {
         updated.spread.as_ref().and_then(|s| s.as_static()),
         Some(90.0)
     );
+}
+
+// =============================================================================
+// Strict reference validation (bus is required, 0 is invalid)
+// =============================================================================
+
+use am::common::errors::{CliError, codes};
+use common::fixtures::AssetTestFixture;
+
+fn create_cmd(bus: Option<u64>) -> SoundCommands {
+    SoundCommands::Create {
+        name: "boom".to_string(),
+        file: Some("a.wav".to_string()),
+        gain: Some(1.0),
+        bus,
+        priority: Some(128),
+        stream: false,
+        loop_enabled: false,
+        loop_count: None,
+        spatialization: Some("none".to_string()),
+        spread: None,
+    }
+}
+
+fn update_bus_cmd(name: &str, bus: Option<u64>) -> SoundCommands {
+    SoundCommands::Update {
+        name: name.to_string(),
+        file: None,
+        gain: None,
+        bus,
+        priority: None,
+        stream: None,
+        loop_enabled: None,
+        loop_count: None,
+        spatialization: None,
+        spread: None,
+    }
+}
+
+/// Runs `command` with the working directory set to the fixture root.
+async fn run_in(
+    fixture: &AssetTestFixture,
+    command: &SoundCommands,
+    output: &CaptureOutput,
+) -> anyhow::Result<()> {
+    let original_dir = std::env::current_dir().ok();
+    std::env::set_current_dir(fixture.project_root()).unwrap();
+    let result = handle_sound_command(command, None, &NonInteractiveInput, output).await;
+    if let Some(dir) = original_dir {
+        let _ = std::env::set_current_dir(dir);
+    }
+    result
+}
+
+fn cli_code(err: &anyhow::Error) -> Option<i32> {
+    err.downcast_ref::<CliError>().map(|e| e.code)
+}
+
+#[tokio::test]
+async fn test_p0_sound_create_without_bus_non_interactive_fails_naming_flag() {
+    let fixture = AssetTestFixture::new("strict").unwrap();
+    fixture.create_data_file("a.wav").unwrap();
+    let output = CaptureOutput::interactive();
+
+    let err = run_in(&fixture, &create_cmd(None), &output)
+        .await
+        .expect_err("missing bus must fail");
+
+    assert!(format!("{err:#}").contains("--bus"), "got: {err:#}");
+    assert_eq!(cli_code(&err), Some(codes::ERR_VALIDATION_EMPTY_REFERENCE));
+    assert!(!fixture.sources_dir().join("sounds/boom.json").exists());
+}
+
+#[tokio::test]
+async fn test_p0_sound_create_without_bus_json_mode_fails_without_prompting() {
+    let fixture = AssetTestFixture::new("strict").unwrap();
+    fixture.create_data_file("a.wav").unwrap();
+    let output = CaptureOutput::json();
+
+    let err = run_in(&fixture, &create_cmd(None), &output)
+        .await
+        .expect_err("missing bus must fail in JSON mode");
+
+    assert!(format!("{err:#}").contains("--bus"), "got: {err:#}");
+    assert_eq!(cli_code(&err), Some(codes::ERR_VALIDATION_EMPTY_REFERENCE));
+    assert!(output.last_success().is_none());
+    assert!(!fixture.sources_dir().join("sounds/boom.json").exists());
+}
+
+#[tokio::test]
+async fn test_p0_sound_create_with_master_bus_succeeds() {
+    let fixture = AssetTestFixture::new("strict").unwrap();
+    fixture.create_data_file("a.wav").unwrap();
+    let output = CaptureOutput::json();
+
+    run_in(&fixture, &create_cmd(Some(1)), &output)
+        .await
+        .expect("bus 1 (master) exists in the fixture");
+
+    let content = fs::read_to_string(fixture.sources_dir().join("sounds/boom.json")).unwrap();
+    let sound: Sound = serde_json::from_str(&content).unwrap();
+    assert_eq!(sound.bus, 1);
+}
+
+#[tokio::test]
+async fn test_p0_sound_create_with_bus_zero_is_rejected() {
+    let fixture = AssetTestFixture::new("strict").unwrap();
+    fixture.create_data_file("a.wav").unwrap();
+    let output = CaptureOutput::json();
+
+    let err = run_in(&fixture, &create_cmd(Some(0)), &output)
+        .await
+        .expect_err("bus 0 is invalid");
+
+    assert!(
+        err.downcast_ref::<am::assets::ValidationError>()
+            .is_some_and(|e| e.code() == codes::ERR_VALIDATION_EMPTY_REFERENCE),
+        "got: {err:#}"
+    );
+    assert!(!fixture.sources_dir().join("sounds/boom.json").exists());
+}
+
+#[tokio::test]
+async fn test_p0_sound_create_with_unknown_bus_is_rejected() {
+    let fixture = AssetTestFixture::new("strict").unwrap();
+    fixture.create_data_file("a.wav").unwrap();
+    let output = CaptureOutput::json();
+
+    let err = run_in(&fixture, &create_cmd(Some(999)), &output)
+        .await
+        .expect_err("bus 999 does not exist");
+
+    let validation = err
+        .downcast_ref::<am::assets::ValidationError>()
+        .expect("a ValidationError");
+    assert_eq!(validation.code(), codes::ERR_VALIDATION_REFERENCE);
+    assert_eq!(validation.field.as_deref(), Some("bus"));
+    assert!(!fixture.sources_dir().join("sounds/boom.json").exists());
+}
+
+#[tokio::test]
+async fn test_p0_sound_update_fixes_legacy_bus_zero_file() {
+    let fixture = AssetTestFixture::new("strict").unwrap();
+    fixture.create_data_file("data/legacy.wav").unwrap();
+    let path = fixture.create_test_sound("legacy", 777).unwrap();
+    // Simulate a file written before bus validation: bus 0.
+    let mut json: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
+    json["bus"] = serde_json::json!(0);
+    fs::write(&path, serde_json::to_string_pretty(&json).unwrap()).unwrap();
+    let output = CaptureOutput::json();
+
+    // An unrelated update must now fail and point at the fix.
+    let gain_only = SoundCommands::Update {
+        name: "legacy".to_string(),
+        file: None,
+        gain: Some(0.5),
+        bus: None,
+        priority: None,
+        stream: None,
+        loop_enabled: None,
+        loop_count: None,
+        spatialization: None,
+        spread: None,
+    };
+    let err = run_in(&fixture, &gain_only, &output)
+        .await
+        .expect_err("legacy bus 0 must fail validation");
+    let validation = err
+        .downcast_ref::<am::assets::ValidationError>()
+        .expect("a ValidationError");
+    assert_eq!(validation.code(), codes::ERR_VALIDATION_EMPTY_REFERENCE);
+    assert_eq!(validation.field.as_deref(), Some("bus"));
+    assert!(
+        validation
+            .suggestion()
+            .contains("am asset sound update legacy --bus"),
+        "suggestion: {}",
+        validation.suggestion()
+    );
+
+    // Updating the bus validates the new state and repairs the file.
+    run_in(&fixture, &update_bus_cmd("legacy", Some(2)), &output)
+        .await
+        .expect("update --bus fixes the file");
+    let fixed: Sound = serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
+    assert_eq!(fixed.bus, 2);
+}
+
+#[tokio::test]
+async fn test_p0_sound_update_with_unknown_bus_is_rejected_and_file_untouched() {
+    let fixture = AssetTestFixture::new("strict").unwrap();
+    fixture.create_data_file("data/keep.wav").unwrap();
+    let path = fixture.create_test_sound("keep", 778).unwrap();
+    let before = fs::read_to_string(&path).unwrap();
+    let output = CaptureOutput::json();
+
+    let err = run_in(&fixture, &update_bus_cmd("keep", Some(999)), &output)
+        .await
+        .expect_err("dangling bus");
+
+    let validation = err
+        .downcast_ref::<am::assets::ValidationError>()
+        .expect("a ValidationError");
+    assert_eq!(validation.code(), codes::ERR_VALIDATION_REFERENCE);
+    assert_eq!(fs::read_to_string(&path).unwrap(), before);
 }
