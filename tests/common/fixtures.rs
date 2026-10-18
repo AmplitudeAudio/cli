@@ -345,6 +345,20 @@ impl AssetTestFixture {
         Ok(path)
     }
 
+    /// Write `<file_name>` (e.g. `main.buses.json`) in the project root with the given buses.
+    pub fn write_buses_file(
+        &self,
+        file_name: &str,
+        buses: serde_json::Value,
+    ) -> anyhow::Result<PathBuf> {
+        let path = self.project_root.join(file_name);
+        std::fs::write(
+            &path,
+            serde_json::to_string_pretty(&serde_json::json!({ "buses": buses }))?,
+        )?;
+        Ok(path)
+    }
+
     /// Create a `ProjectValidator` that scans this fixture's project directory.
     pub fn create_project_validator(&self) -> anyhow::Result<ProjectValidator> {
         ProjectValidator::new(

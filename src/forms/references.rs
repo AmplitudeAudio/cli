@@ -25,6 +25,8 @@
 
 use crate::assets::AssetType;
 
+pub use crate::assets::validator::AssetRef;
+
 /// What a reference field points at.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RefTarget {

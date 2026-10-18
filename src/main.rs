@@ -19,6 +19,7 @@ mod common;
 mod compiler;
 mod config;
 mod database;
+mod forms;
 mod input;
 mod presentation;
 mod schema;

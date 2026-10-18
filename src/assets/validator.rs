@@ -38,6 +38,7 @@
 
 use super::{AssetType, ValidationError, ValidationLayer};
 use crate::common::errors::codes;
+use crate::forms::references::RefTarget;
 use crate::presentation::Output;
 use log::{debug, info};
 use std::collections::{HashMap, HashSet};
@@ -75,6 +76,13 @@ fn runtime_path_to_source(path: &str) -> String {
     path.to_string()
 }
 
+/// An (id, name) pair identifying a referenceable object (asset or bus).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AssetRef {
+    pub id: u64,
+    pub name: String,
+}
+
 fn normalize_asset_path(path: &str) -> String {
     path.replace('\\', "/")
 }
@@ -105,6 +113,10 @@ pub struct ProjectValidator {
     /// All known asset file paths relative to the project sources directory.
     /// Used for path-based reference validation (e.g., soundbank asset references).
     asset_paths: HashSet<String>,
+    /// (id, name) pairs per asset type, for pick-lists and reference resolution.
+    asset_refs: HashMap<AssetType, Vec<AssetRef>>,
+    /// Buses defined in the `*.buses.json` files of the project root.
+    buses: Vec<AssetRef>,
 }
 
 // ValidationError is the project-wide error type for all validation methods.
@@ -148,6 +160,8 @@ impl ProjectValidator {
             asset_names: HashMap::new(),
             asset_locations: HashMap::new(),
             asset_paths: HashSet::new(),
+            asset_refs: HashMap::new(),
+            buses: Vec::new(),
         };
 
         // Scan all asset types
@@ -168,6 +182,8 @@ impl ProjectValidator {
             validator.scan_assets_of_type(*asset_type, output)?;
         }
 
+        validator.scan_buses(output);
+
         Ok(validator)
     }
 
@@ -182,6 +198,8 @@ impl ProjectValidator {
             asset_names: HashMap::new(),
             asset_locations: HashMap::new(),
             asset_paths: HashSet::new(),
+            asset_refs: HashMap::new(),
+            buses: Vec::new(),
         }
     }
 
@@ -360,6 +378,29 @@ impl ProjectValidator {
         false
     }
 
+    /// Lists every object a reference to `target` can point at, sorted by name.
+    pub fn list(&self, target: RefTarget) -> Vec<AssetRef> {
+        let source = match target {
+            RefTarget::Asset(asset_type) => self.asset_refs.get(&asset_type),
+            RefTarget::Bus => Some(&self.buses),
+        };
+        let mut refs = source.cloned().unwrap_or_default();
+        refs.sort_by(|a, b| a.name.cmp(&b.name).then(a.id.cmp(&b.id)));
+        refs
+    }
+
+    /// Finds the object `id` refers to. `id == 0` ("no reference") is never resolved.
+    pub fn resolve(&self, target: RefTarget, id: u64) -> Option<AssetRef> {
+        if id == 0 {
+            return None;
+        }
+        let source = match target {
+            RefTarget::Asset(asset_type) => self.asset_refs.get(&asset_type)?,
+            RefTarget::Bus => &self.buses,
+        };
+        source.iter().find(|r| r.id == id).cloned()
+    }
+
     /// Returns the project root path.
     pub fn project_root(&self) -> &Path {
         &self.project_root
@@ -368,6 +409,63 @@ impl ProjectValidator {
     /// Returns the resolved sources directory path.
     pub fn sources_dir(&self) -> &Path {
         &self.sources_dir
+    }
+
+    /// Indexes the buses of every `*.buses.json` file in the project root
+    /// (non-recursive). Unreadable or malformed files are skipped with a warning.
+    fn scan_buses(&mut self, output: &dyn Output) {
+        let Ok(entries) = fs::read_dir(&self.project_root) else {
+            return;
+        };
+
+        let mut files: Vec<PathBuf> = entries
+            .flatten()
+            .map(|e| e.path())
+            .filter(|p| {
+                p.is_file()
+                    && p.file_name()
+                        .and_then(|n| n.to_str())
+                        .is_some_and(|n| n.ends_with(".buses.json"))
+            })
+            .collect();
+        files.sort();
+
+        for path in files {
+            let value = match fs::read_to_string(&path) {
+                Ok(content) => match serde_json::from_str::<serde_json::Value>(&content) {
+                    Ok(v) => v,
+                    Err(err) => {
+                        output.warning(&format!(
+                            "Malformed JSON in buses file {}: {}",
+                            path.display(),
+                            err
+                        ));
+                        continue;
+                    }
+                },
+                Err(err) => {
+                    output.warning(&format!(
+                        "Failed to read buses file {}: {}",
+                        path.display(),
+                        err
+                    ));
+                    continue;
+                }
+            };
+
+            let buses = value.get("buses").and_then(|b| b.as_array());
+            for bus in buses.into_iter().flatten() {
+                if let (Some(id), Some(name)) = (
+                    bus.get("id").and_then(|v| v.as_u64()),
+                    bus.get("name").and_then(|v| v.as_str()),
+                ) {
+                    self.buses.push(AssetRef {
+                        id,
+                        name: name.to_string(),
+                    });
+                }
+            }
+        }
     }
 
     /// Scans a single asset type directory and populates the registries.
@@ -427,6 +525,16 @@ impl ProjectValidator {
             if let Some(id) = value.get("id").and_then(|v| v.as_u64()) {
                 self.asset_ids.entry(asset_type).or_default().insert(id);
                 self.asset_locations.insert(id, asset_type);
+            }
+
+            if let (Some(id), Some(name)) = (
+                value.get("id").and_then(|v| v.as_u64()),
+                value.get("name").and_then(|v| v.as_str()),
+            ) {
+                self.asset_refs.entry(asset_type).or_default().push(AssetRef {
+                    id,
+                    name: name.to_string(),
+                });
             }
 
             if let Some(name) = value.get("name").and_then(|v| v.as_str()) {

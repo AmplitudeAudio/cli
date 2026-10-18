@@ -383,3 +383,94 @@ fn test_validator_indexes_new_asset_type_directories() {
             .is_err()
     );
 }
+
+// =============================================================================
+// Reference pick-list index (list / resolve)
+// =============================================================================
+
+mod pick_lists {
+    use super::common::fixtures::AssetTestFixture;
+    use am::assets::AssetType;
+    use am::assets::ProjectValidator;
+    use am::assets::validator::AssetRef;
+    use am::forms::references::RefTarget;
+    use serde_json::json;
+
+    fn fixture_with_sounds_and_buses() -> AssetTestFixture {
+        let fx = AssetTestFixture::new("pick_lists").unwrap();
+        fx.create_test_sound("zebra", 20).unwrap();
+        fx.create_test_sound("alpha", 10).unwrap();
+        fx.write_buses_file(
+            "main.buses.json",
+            json!([{"id": 1, "name": "master"}, {"id": 2, "name": "sfx"}]),
+        )
+        .unwrap();
+        fx
+    }
+
+    fn r(id: u64, name: &str) -> AssetRef {
+        AssetRef {
+            id,
+            name: name.to_string(),
+        }
+    }
+
+    #[test]
+    fn test_list_sounds_sorted_by_name() {
+        let fx = fixture_with_sounds_and_buses();
+        let v = fx.create_project_validator().unwrap();
+        assert_eq!(
+            v.list(RefTarget::Asset(AssetType::Sound)),
+            vec![r(10, "alpha"), r(20, "zebra")]
+        );
+    }
+
+    #[test]
+    fn test_list_buses_from_buses_file() {
+        let fx = fixture_with_sounds_and_buses();
+        let v = fx.create_project_validator().unwrap();
+        assert_eq!(v.list(RefTarget::Bus), vec![r(1, "master"), r(2, "sfx")]);
+    }
+
+    #[test]
+    fn test_list_buses_merges_multiple_files_and_skips_malformed() {
+        let fx = fixture_with_sounds_and_buses();
+        fx.write_buses_file("extra.buses.json", json!([{"id": 3, "name": "ambient"}]))
+            .unwrap();
+        std::fs::write(fx.project_root().join("broken.buses.json"), "{ nope").unwrap();
+        let v = fx.create_project_validator().unwrap();
+        assert_eq!(
+            v.list(RefTarget::Bus),
+            vec![r(3, "ambient"), r(1, "master"), r(2, "sfx")]
+        );
+    }
+
+    #[test]
+    fn test_resolve_bus_and_zero() {
+        let fx = fixture_with_sounds_and_buses();
+        let v = fx.create_project_validator().unwrap();
+        assert_eq!(v.resolve(RefTarget::Bus, 2), Some(r(2, "sfx")));
+        assert_eq!(v.resolve(RefTarget::Bus, 0), None);
+        assert_eq!(v.resolve(RefTarget::Bus, 99), None);
+    }
+
+    #[test]
+    fn test_resolve_asset_checks_type() {
+        let fx = fixture_with_sounds_and_buses();
+        let v = fx.create_project_validator().unwrap();
+        assert_eq!(
+            v.resolve(RefTarget::Asset(AssetType::Sound), 10),
+            Some(r(10, "alpha"))
+        );
+        assert_eq!(v.resolve(RefTarget::Asset(AssetType::Effect), 10), None);
+        assert_eq!(v.resolve(RefTarget::Asset(AssetType::Sound), 0), None);
+    }
+
+    #[test]
+    fn test_empty_validator_lists_nothing() {
+        let v = ProjectValidator::empty();
+        assert!(v.list(RefTarget::Bus).is_empty());
+        assert!(v.list(RefTarget::Asset(AssetType::Sound)).is_empty());
+        assert_eq!(v.resolve(RefTarget::Bus, 1), None);
+    }
+}
