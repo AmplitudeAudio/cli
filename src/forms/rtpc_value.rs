@@ -103,6 +103,13 @@ pub fn rtpc_value_from_flags(
 ) -> Result<Option<RtpcCompatibleValue>> {
     match (value, rtpc_name) {
         (None, None) => Ok(None),
+        (Some(v), None) if !v.is_finite() => Err(CliError::new(
+            ERR_VALIDATION_FIELD,
+            format!("Invalid value: {v}"),
+            "values must be finite numbers; NaN and infinity are not allowed",
+        )
+        .with_suggestion("Pass an ordinary number such as 0.8")
+        .into()),
         (Some(v), None) => Ok(Some(RtpcCompatibleValue::static_value(v))),
         (Some(_), Some(_)) => Err(CliError::new(
             ERR_VALIDATION_FIELD,

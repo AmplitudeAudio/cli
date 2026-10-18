@@ -26,6 +26,7 @@ pub mod forms;
 pub mod input;
 pub mod presentation;
 pub mod schema;
+pub mod services;
 
 // Re-export commands for testing
 pub mod commands {

@@ -23,6 +23,7 @@ mod forms;
 mod input;
 mod presentation;
 mod schema;
+mod services;
 
 use crate::{
     app::{App, Commands},

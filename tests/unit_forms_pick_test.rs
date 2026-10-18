@@ -17,94 +17,15 @@
 mod common;
 
 use std::fs;
-use std::sync::Mutex;
 
 use am::assets::generated::ValueKind;
 use am::assets::{AssetType, ProjectValidator};
 use am::forms::pick::pick_reference;
 use am::forms::references::{RefRule, rule_for};
 use am::forms::rtpc_value::{prompt_rtpc_value, rtpc_value_from_flags};
-use am::input::Input;
-use anyhow::Result;
 use common::fixtures::AssetTestFixture;
-use inquire::validator::Validation;
+use common::scripted_input::ScriptedInput;
 use serde_json::json;
-
-/// Scripted `Input`: pops queued answers and records every prompt.
-struct ScriptedInput {
-    selects: Mutex<Vec<String>>,
-    texts: Mutex<Vec<String>>,
-    prompts: Mutex<Vec<String>>,
-    options_seen: Mutex<Vec<Vec<String>>>,
-}
-
-impl ScriptedInput {
-    fn new(selects: &[&str], texts: &[&str]) -> Self {
-        let rev = |v: &[&str]| v.iter().rev().map(|s| s.to_string()).collect::<Vec<_>>();
-        Self {
-            selects: Mutex::new(rev(selects)),
-            texts: Mutex::new(rev(texts)),
-            prompts: Mutex::new(Vec::new()),
-            options_seen: Mutex::new(Vec::new()),
-        }
-    }
-}
-
-impl Input for ScriptedInput {
-    fn prompt_text(
-        &self,
-        prompt: &str,
-        _placeholder: Option<&str>,
-        _formatter: Option<&dyn Fn(&str) -> String>,
-        _validator: Option<&dyn Fn(&str) -> Result<Validation, inquire::CustomUserError>>,
-    ) -> Result<String> {
-        self.prompts.lock().unwrap().push(prompt.to_string());
-        self.texts
-            .lock()
-            .unwrap()
-            .pop()
-            .ok_or_else(|| anyhow::anyhow!("no scripted text"))
-    }
-
-    fn select(&self, prompt: &str, options: &[String]) -> Result<String> {
-        self.prompts.lock().unwrap().push(prompt.to_string());
-        self.options_seen.lock().unwrap().push(options.to_vec());
-        self.selects
-            .lock()
-            .unwrap()
-            .pop()
-            .ok_or_else(|| anyhow::anyhow!("no scripted select"))
-    }
-
-    fn confirm(&self, _prompt: &str, default: Option<bool>) -> Result<bool> {
-        Ok(default.unwrap_or(false))
-    }
-
-    fn prompt_text_with_default(
-        &self,
-        prompt: &str,
-        _default: &str,
-        validator: Option<&dyn Fn(&str) -> Result<Validation, inquire::CustomUserError>>,
-    ) -> Result<String> {
-        self.prompts.lock().unwrap().push(prompt.to_string());
-        let answer = self
-            .texts
-            .lock()
-            .unwrap()
-            .pop()
-            .ok_or_else(|| anyhow::anyhow!("no scripted text"))?;
-        if let Some(v) = validator
-            && let Ok(Validation::Invalid(msg)) = v(&answer)
-        {
-            anyhow::bail!("invalid: {:?}", msg);
-        }
-        Ok(answer)
-    }
-
-    fn multi_select(&self, _prompt: &str, _options: &[String]) -> Result<Vec<String>> {
-        Ok(Vec::new())
-    }
-}
 
 fn bus_rule(required: bool) -> RefRule {
     RefRule {
@@ -266,4 +187,14 @@ fn test_prompt_bind_without_rtpc_assets_errors() {
     let input = ScriptedInput::new(&["bind to RTPC"], &[]);
     let err = prompt_rtpc_value(&input, &v, "Gain", 1.0).unwrap_err();
     assert!(format!("{err:#}").contains("create"));
+}
+
+#[test]
+fn test_flags_reject_non_finite_values() {
+    let (_fx, v) = fixture();
+    for bad in [f32::NAN, f32::INFINITY, f32::NEG_INFINITY] {
+        let err = rtpc_value_from_flags(Some(bad), None, &v).unwrap_err();
+        let cli = am::common::errors::as_cli_error(&err).expect("structured error");
+        assert_eq!(cli.code, am::common::errors::codes::ERR_VALIDATION_FIELD);
+    }
 }
