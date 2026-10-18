@@ -85,6 +85,7 @@ impl SoundBuilder {
                 effect: 0,
                 near_field_gain: None,
                 pitch: None,
+                spread: None,
             },
         }
     }
@@ -141,6 +142,12 @@ impl SoundBuilder {
     /// Sets the spatialization mode.
     pub fn spatialization(mut self, mode: Spatialization) -> Self {
         self.sound.spatialization = mode;
+        self
+    }
+
+    /// Sets the spread (image width in degrees, 0-360) as a static value.
+    pub fn spread(mut self, degrees: f32) -> Self {
+        self.sound.spread = Some(RtpcCompatibleValue::static_value(degrees));
         self
     }
 
@@ -239,6 +246,18 @@ impl Asset for Sound {
             )
             .with_suggestion("Set gain to a value between 0.0 (silent) and 1.0 (full volume)")
             .with_field("gain"));
+        }
+
+        // Check spread range (if static value)
+        if let Some(spread_value) = self.spread.as_ref().and_then(|s| s.as_static())
+            && (!spread_value.is_finite() || !(0.0..=360.0).contains(&spread_value))
+        {
+            return Err(ValidationError::type_rule_violation(
+                format!("Invalid spread value: {}", spread_value),
+                "Spread must be between 0 and 360 degrees",
+            )
+            .with_suggestion("Set spread to a width in degrees, or 0 to collapse channels to the sound's direction")
+            .with_field("spread"));
         }
 
         // Validate fader algorithm is a known value

@@ -3,7 +3,8 @@
   "output": {
     "frequency": 48000,
     "buffer_size": 4096,
-    "format": "Float32"
+    "format": "Float32",
+    "channels": "Stereo"
   },
   "mixer": {
     "panning_mode": "Stereo",
@@ -14,6 +15,7 @@
   "game": {
     "listener_fetch_mode": "Default",
     "track_environments": true,
+    "track_rooms": false,
     "listeners": 100,
     "entities": 4096,
     "environments": 512,

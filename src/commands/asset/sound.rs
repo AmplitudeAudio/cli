@@ -93,6 +93,10 @@ pub enum SoundCommands {
         /// Spatialization mode: none, position, position_orientation, hrtf (default: none)
         #[arg(short, long)]
         spatialization: Option<String>,
+
+        /// Stereo/multichannel image width in degrees (0-360); 0 collapses channels to the sound's direction
+        #[arg(long)]
+        spread: Option<f32>,
     },
 
     /// List all sound assets in the project
@@ -142,6 +146,10 @@ pub enum SoundCommands {
         /// Spatialization mode: none, position, position_orientation, hrtf
         #[arg(short, long)]
         spatialization: Option<String>,
+
+        /// Stereo/multichannel image width in degrees (0-360); 0 collapses channels to the sound's direction
+        #[arg(long)]
+        spread: Option<f32>,
     },
 }
 
@@ -163,6 +171,7 @@ pub async fn handler(
             loop_enabled,
             loop_count,
             spatialization,
+            spread,
         } => {
             create_sound(
                 name,
@@ -174,6 +183,7 @@ pub async fn handler(
                 *loop_enabled,
                 *loop_count,
                 spatialization.clone(),
+                *spread,
                 input,
                 output,
             )
@@ -190,6 +200,7 @@ pub async fn handler(
             loop_enabled,
             loop_count,
             spatialization,
+            spread,
         } => {
             update_sound(
                 name,
@@ -201,6 +212,7 @@ pub async fn handler(
                 *loop_enabled,
                 *loop_count,
                 spatialization.clone(),
+                *spread,
                 input,
                 output,
             )
@@ -221,6 +233,7 @@ async fn create_sound(
     loop_enabled: bool,
     loop_count: Option<u32>,
     spatialization: Option<String>,
+    spread: Option<f32>,
     input: &dyn Input,
     output: &dyn Output,
 ) -> Result<()> {
@@ -350,15 +363,18 @@ async fn create_sound(
     }
 
     // Step 12: Build the Sound asset
-    let sound = Sound::builder(id, name)
+    let mut builder = Sound::builder(id, name)
         .path(&audio_file)
         .bus(bus_id)
         .gain(gain_value)
         .priority(priority_value)
         .stream(stream_value)
         .loop_config(loop_config)
-        .spatialization(spatialization_mode)
-        .build();
+        .spatialization(spatialization_mode);
+    if let Some(width) = spread {
+        builder = builder.spread(width);
+    }
+    let sound = builder.build();
 
     // Step 13: Validate the sound (type rules) with populated context (built in step 2)
     sound.validate_rules(&context)?;
@@ -596,7 +612,8 @@ async fn list_sounds(output: &dyn Output) -> Result<()> {
                         "path": s.path.as_deref().unwrap_or(""),
                         "gain": gain_to_json(&s.gain),
                         "loop_enabled": s.loop_.as_ref().map(|l| l.enabled).unwrap_or(false),
-                        "spatialization": spatialization_to_string(&s.spatialization)
+                        "spatialization": spatialization_to_string(&s.spatialization),
+                        "spread": gain_to_json(&s.spread)
                     })
                 })
                 .collect();
@@ -808,6 +825,7 @@ async fn update_sound(
     loop_enabled: Option<bool>,
     loop_count: Option<u32>,
     spatialization: Option<String>,
+    spread: Option<f32>,
     input: &dyn Input,
     output: &dyn Output,
 ) -> Result<()> {
@@ -856,7 +874,8 @@ async fn update_sound(
         || stream.is_some()
         || loop_enabled.is_some()
         || loop_count.is_some()
-        || spatialization.is_some();
+        || spatialization.is_some()
+        || spread.is_some();
 
     // Step 5: Apply updates based on mode, tracking which fields changed
     let updated_fields: Vec<String> = if has_any_flag {
@@ -871,6 +890,7 @@ async fn update_sound(
             loop_enabled,
             loop_count,
             spatialization,
+            spread,
         )?
     } else {
         // Interactive mode: prompt for each field with current values as defaults
@@ -928,6 +948,7 @@ fn apply_flag_updates(
     loop_enabled: Option<bool>,
     loop_count: Option<u32>,
     spatialization: Option<String>,
+    spread: Option<f32>,
 ) -> Result<Vec<String>> {
     let mut updated_fields = Vec::new();
 
@@ -976,6 +997,11 @@ fn apply_flag_updates(
     if let Some(s) = spatialization {
         sound.spatialization = parse_spatialization(&s)?;
         updated_fields.push("spatialization".to_string());
+    }
+
+    if let Some(w) = spread {
+        sound.spread = Some(RtpcCompatibleValue::static_value(w));
+        updated_fields.push("spread".to_string());
     }
 
     Ok(updated_fields)

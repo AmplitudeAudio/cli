@@ -67,6 +67,10 @@ mod test_support {
             // Intentionally no-op: JSON mode is quiet except for the final result envelope.
         }
 
+        fn print(&self, _message: &str) {}
+
+        fn warning(&self, _message: &str) {}
+
         fn table(&self, _title: Option<&str>, _data: serde_json::Value) {
             // Intentionally no-op for test implementation
         }

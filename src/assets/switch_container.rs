@@ -37,6 +37,7 @@ use super::{Asset, AssetType, ProjectContext, Schema, ValidationError};
 ///
 /// ```
 /// use am::assets::SwitchContainer;
+/// use am::assets::generated::SwitchContainerEntry;
 ///
 /// let container = SwitchContainer::builder(12345, "footstep_surface")
 ///     .switch_group(100)

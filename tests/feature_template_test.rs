@@ -103,6 +103,10 @@ impl Output for CaptureOutput {
         self.progress_calls.borrow_mut().push(message.to_string());
     }
 
+    fn print(&self, _message: &str) {}
+
+    fn warning(&self, _message: &str) {}
+
     fn table(&self, title: Option<&str>, data: Value) {
         self.table_calls
             .borrow_mut()

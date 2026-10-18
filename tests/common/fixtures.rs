@@ -347,7 +347,10 @@ impl AssetTestFixture {
 
     /// Create a `ProjectValidator` that scans this fixture's project directory.
     pub fn create_project_validator(&self) -> anyhow::Result<ProjectValidator> {
-        ProjectValidator::new(self.project_root.clone())
+        ProjectValidator::new(
+            self.project_root.clone(),
+            &CaptureOutput::new(OutputMode::Interactive),
+        )
     }
 
     /// Create an empty file in the `data/` directory.
@@ -461,6 +464,10 @@ impl Output for CaptureOutput {
             .unwrap()
             .push(message.to_string());
     }
+
+    fn print(&self, _message: &str) {}
+
+    fn warning(&self, _message: &str) {}
 
     fn table(&self, title: Option<&str>, data: serde_json::Value) {
         self.tables

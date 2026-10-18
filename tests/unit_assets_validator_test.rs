@@ -92,7 +92,11 @@ fn test_p0_validator_scans_multiple_asset_types() {
     write_minimal_asset_json(&switches_dir, "surface.json", 30, "surface");
     write_minimal_asset_json(&events_dir, "play_music.json", 40, "play_music");
 
-    let validator = ProjectValidator::new(dir.path().to_path_buf()).unwrap();
+    let validator = ProjectValidator::new(
+        dir.path().to_path_buf(),
+        &am::presentation::InteractiveOutput,
+    )
+    .unwrap();
 
     // Sounds
     assert!(validator.validate_sound_exists(1).is_ok());
@@ -138,7 +142,11 @@ fn test_p0_validator_integrated_with_project_context() {
     write_sound_json(&sounds_dir, "beep.json", 1, "beep");
     write_minimal_asset_json(&effects_dir, "reverb.json", 10, "reverb");
 
-    let validator = ProjectValidator::new(dir.path().to_path_buf()).unwrap();
+    let validator = ProjectValidator::new(
+        dir.path().to_path_buf(),
+        &am::presentation::InteractiveOutput,
+    )
+    .unwrap();
     let context = ProjectContext::new(dir.path().to_path_buf()).with_validator(validator);
 
     // Verify context has validator
@@ -161,7 +169,11 @@ fn test_p0_sound_validate_rules_checks_effect_reference_when_validator_present()
     fs::write(data_dir.join("beep.wav"), b"fake audio").unwrap();
     write_minimal_asset_json(&effects_dir, "reverb.json", 10, "reverb");
 
-    let validator = ProjectValidator::new(dir.path().to_path_buf()).unwrap();
+    let validator = ProjectValidator::new(
+        dir.path().to_path_buf(),
+        &am::presentation::InteractiveOutput,
+    )
+    .unwrap();
     let context = ProjectContext::new(dir.path().to_path_buf()).with_validator(validator);
 
     // Sound referencing a valid effect -> Ok
@@ -216,7 +228,11 @@ fn test_p1_validator_handles_empty_project_gracefully() {
     let dir = tempdir().unwrap();
     // No sources directory at all
 
-    let validator = ProjectValidator::new(dir.path().to_path_buf()).unwrap();
+    let validator = ProjectValidator::new(
+        dir.path().to_path_buf(),
+        &am::presentation::InteractiveOutput,
+    )
+    .unwrap();
 
     // All checks should fail for non-zero IDs
     assert!(validator.validate_sound_exists(1).is_err());
@@ -238,7 +254,11 @@ fn test_p1_validator_handles_partial_directories() {
     fs::create_dir_all(&sounds_dir).unwrap();
     write_sound_json(&sounds_dir, "test.json", 42, "test");
 
-    let validator = ProjectValidator::new(dir.path().to_path_buf()).unwrap();
+    let validator = ProjectValidator::new(
+        dir.path().to_path_buf(),
+        &am::presentation::InteractiveOutput,
+    )
+    .unwrap();
 
     // Sound exists
     assert!(validator.validate_sound_exists(42).is_ok());
@@ -273,7 +293,11 @@ fn test_p1_validator_skips_malformed_and_non_json_files() {
     // Subdirectory (should be ignored)
     fs::create_dir_all(sounds_dir.join("subdir")).unwrap();
 
-    let validator = ProjectValidator::new(dir.path().to_path_buf()).unwrap();
+    let validator = ProjectValidator::new(
+        dir.path().to_path_buf(),
+        &am::presentation::InteractiveOutput,
+    )
+    .unwrap();
 
     // Only the valid sound should be found
     assert!(validator.validate_sound_exists(42).is_ok());

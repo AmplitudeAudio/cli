@@ -199,6 +199,7 @@ fn test_generated_sound_definition_roundtrip() {
         effect: 0,
         near_field_gain: None,
         pitch: None,
+        spread: None,
     };
 
     let json = serde_json::to_string(&sound).unwrap();
@@ -235,6 +236,7 @@ fn test_generated_sound_definition_loop_field_renamed() {
         effect: 0,
         near_field_gain: None,
         pitch: None,
+        spread: None,
     };
 
     let json_value: serde_json::Value = serde_json::to_value(&sound).unwrap();

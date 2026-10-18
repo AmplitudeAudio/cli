@@ -222,8 +222,8 @@ mod non_interactive_tests {
             err_msg
         );
         assert!(
-            err_msg.contains("command-line arguments"),
-            "Error should suggest using command-line arguments: {}",
+            err_msg.contains("command-line flags"),
+            "Error should suggest using command-line flags: {}",
             err_msg
         );
     }

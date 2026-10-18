@@ -139,6 +139,7 @@ fn test_p0_sound_create_command_parses_with_all_flags() {
                             loop_enabled,
                             loop_count,
                             spatialization,
+                            ..
                         },
                 },
         } => {
@@ -1136,6 +1137,7 @@ fn test_p0_sound_update_command_parses_with_all_flags() {
                             loop_enabled,
                             loop_count,
                             spatialization,
+                            ..
                         },
                 },
         } => {
@@ -1282,6 +1284,7 @@ async fn test_p0_sound_update_changes_gain_preserves_other_fields() {
             loop_enabled: None,
             loop_count: None,
             spatialization: None,
+            spread: None,
         },
         None,
         &input,
@@ -1353,6 +1356,7 @@ async fn test_p0_sound_update_not_found_returns_error() {
             loop_enabled: None,
             loop_count: None,
             spatialization: None,
+            spread: None,
         },
         None,
         &input,
@@ -1421,6 +1425,7 @@ async fn test_p1_sound_update_invalid_path_does_not_modify_original() {
             loop_enabled: None,
             loop_count: None,
             spatialization: None,
+            spread: None,
         },
         None,
         &input,
@@ -1488,6 +1493,7 @@ async fn test_p1_sound_update_json_output_envelope_format() {
             loop_enabled: None,
             loop_count: None,
             spatialization: None,
+            spread: None,
         },
         None,
         &input,
@@ -1576,6 +1582,7 @@ async fn test_p1_sound_update_only_updates_specified_flags() {
             loop_enabled: None,
             loop_count: None,
             spatialization: None,
+            spread: None,
         },
         None,
         &input,
@@ -1688,6 +1695,7 @@ async fn test_p1_sound_update_preserves_sound_id() {
             loop_enabled: None,
             loop_count: None,
             spatialization: Some("hrtf".to_string()),
+            spread: None,
         },
         None,
         &input,
@@ -1754,6 +1762,7 @@ async fn test_p1_sound_update_invalid_gain_returns_error() {
             loop_enabled: None,
             loop_count: None,
             spatialization: None,
+            spread: None,
         },
         None,
         &input,
@@ -1817,6 +1826,7 @@ async fn test_p1_sound_update_bus_field_updates_correctly() {
             loop_enabled: None,
             loop_count: None,
             spatialization: None,
+            spread: None,
         },
         None,
         &input,
@@ -1886,6 +1896,7 @@ async fn test_p1_sound_update_json_includes_updated_fields() {
             loop_enabled: None,
             loop_count: None,
             spatialization: None,
+            spread: None,
         },
         None,
         &input,
@@ -2005,5 +2016,89 @@ async fn test_p1_sound_list_table_truncates_long_paths() {
     assert!(
         long_path.len() > 40,
         "Test precondition: original path should be > 40 chars"
+    );
+}
+
+// =============================================================================
+// Spread Option Tests
+// =============================================================================
+
+#[test]
+fn test_p1_sound_create_parses_spread_flag() {
+    let app = App::try_parse_from([
+        "am", "asset", "sound", "create", "ambience", "--spread", "90",
+    ])
+    .expect("Should parse");
+
+    match app.command {
+        Commands::Asset {
+            command:
+                AssetCommands::Sound {
+                    command: SoundCommands::Create { spread, .. },
+                },
+        } => assert_eq!(spread, Some(90.0)),
+        _ => panic!("Expected Asset Sound Create command"),
+    }
+}
+
+#[test]
+fn test_p1_sound_builder_spread_roundtrips() {
+    let sound = Sound::builder(1, "wide").spread(120.0).build();
+    let json = serde_json::to_string(&sound).unwrap();
+    let parsed: Sound = serde_json::from_str(&json).unwrap();
+
+    assert_eq!(
+        parsed.spread.as_ref().and_then(|s| s.as_static()),
+        Some(120.0)
+    );
+}
+
+#[tokio::test]
+async fn test_p0_sound_update_sets_spread_and_rejects_out_of_range() {
+    let fixture = TestProjectFixture::new("test_project").unwrap();
+    let project_path = fixture.project_path();
+
+    std::fs::create_dir_all(project_path).unwrap();
+    create_amproject(project_path, "test_project").unwrap();
+    let sounds_dir = project_path.join("sources").join("sounds");
+    std::fs::create_dir_all(&sounds_dir).unwrap();
+    let data_dir = project_path.join("data").join("sfx");
+    std::fs::create_dir_all(&data_dir).unwrap();
+    std::fs::write(data_dir.join("explosion.wav"), b"fake audio").unwrap();
+    create_sound_file(&sounds_dir, "explosion", 12345, 1.0).unwrap();
+
+    let original_dir = std::env::current_dir().ok();
+    std::env::set_current_dir(project_path).unwrap();
+
+    let input = NonInteractiveInput;
+    let output = CaptureOutput::json();
+    let update = |spread: f32| SoundCommands::Update {
+        name: "explosion".to_string(),
+        file: None,
+        gain: None,
+        bus: None,
+        priority: None,
+        stream: None,
+        loop_enabled: None,
+        loop_count: None,
+        spatialization: None,
+        spread: Some(spread),
+    };
+
+    let ok = handle_sound_command(&update(90.0), None, &input, &output).await;
+    let rejected = handle_sound_command(&update(400.0), None, &input, &output).await;
+
+    if let Some(dir) = original_dir {
+        let _ = std::env::set_current_dir(dir);
+    }
+
+    assert!(ok.is_ok(), "Valid spread should be accepted: {:?}", ok);
+    assert!(rejected.is_err(), "Spread above 360 should be rejected");
+
+    let content = std::fs::read_to_string(sounds_dir.join("explosion.json")).unwrap();
+    let updated: Sound = serde_json::from_str(&content).unwrap();
+    assert_eq!(
+        updated.spread.as_ref().and_then(|s| s.as_static()),
+        Some(90.0)
     );
 }

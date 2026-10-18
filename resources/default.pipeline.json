@@ -9,7 +9,7 @@
     },
     {
       "id": 2,
-      "name": "StereoPanning",
+      "name": "SpeakerPanning",
       "consume": [
         1
       ]

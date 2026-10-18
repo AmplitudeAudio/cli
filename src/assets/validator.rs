@@ -36,13 +36,13 @@
 //! validator.validate_sound_exists(999)?;       // Err if no sound with ID 999
 //! ```
 
-use std::collections::{HashMap, HashSet};
-use std::fs;
-use std::path::{Path, PathBuf};
-use log::{debug, info};
 use super::{AssetType, ValidationError, ValidationLayer};
 use crate::common::errors::codes;
 use crate::presentation::Output;
+use log::{debug, info};
+use std::collections::{HashMap, HashSet};
+use std::fs;
+use std::path::{Path, PathBuf};
 
 /// Runtime binary extensions mapped to their source equivalent.
 /// Soundbank references use these runtime names; the validator needs to
@@ -532,9 +532,11 @@ mod tests {
         .unwrap();
 
         for separator in ["/", "\\"] {
-            assert!(validator.asset_exists_by_path(&format!(
-                "sounds{separator}nested{separator}footstep.json"
-            )));
+            assert!(
+                validator.asset_exists_by_path(&format!(
+                    "sounds{separator}nested{separator}footstep.json"
+                ))
+            );
             assert!(validator.asset_exists_by_path(&format!(
                 "sounds{separator}nested{separator}footstep.amsound"
             )));

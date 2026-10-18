@@ -93,6 +93,10 @@ impl Output for MockOutput {
         self.progress_calls.borrow_mut().push(message.to_string());
     }
 
+    fn print(&self, _message: &str) {}
+
+    fn warning(&self, _message: &str) {}
+
     fn table(&self, _title: Option<&str>, _data: serde_json::Value) {
         // Mock implementation - does nothing for testing
     }
