@@ -93,7 +93,7 @@ impl SwitchContainerBuilder {
                 gain: Some(RtpcCompatibleValue::static_value(DEFAULT_GAIN)),
                 priority: Some(RtpcCompatibleValue::static_value(DEFAULT_PRIORITY)),
                 pitch: None,
-                fader: None,
+                fader: Some("Linear".to_string()),
                 spatialization: Spatialization::None,
                 scope: Scope::World,
                 switch_group: NO_REFERENCE,
@@ -245,60 +245,9 @@ impl Asset for SwitchContainer {
             .with_field("switch_group"));
         }
 
-        // If we have a validator, perform cross-asset reference validation
+        // Cross-asset references and the checks the SDK performs when it loads the definition.
         if let Some(validator) = &context.validator {
-            // Validate the controlling switch exists
-            validator.validate_switch_exists(self.switch_group)?;
-
-            // Validate default_switch_state is set
-            if self.default_switch_state == NO_REFERENCE {
-                return Err(ValidationError::type_rule_violation(
-                    "SwitchContainer has no default state",
-                    "SwitchContainer assets must specify a default switch state",
-                )
-                .with_suggestion(
-                    "Set the 'default_switch_state' field to one of the switch's state IDs",
-                )
-                .with_field("default_switch_state"));
-            }
-
-            // Get entries list (treat None as empty)
-            let entries = self.entries.as_deref().unwrap_or(&[]);
-
-            // Collect all unique state IDs referenced by entries for validation
-            let mut referenced_state_ids: Vec<u64> = Vec::new();
-
-            for (idx, entry) in entries.iter().enumerate() {
-                // Validate the entry's object (sound or collection) exists
-                // Try as sound first, then collection
-                let sound_result = validator.validate_sound_exists(entry.object);
-                let collection_result = validator.validate_collection_exists(entry.object);
-
-                if sound_result.is_err() && collection_result.is_err() {
-                    return Err(ValidationError::type_rule_violation(
-                        format!("Entry {} references non-existent audio asset with ID {}", idx, entry.object),
-                        "SwitchContainer entries must reference existing Sound or Collection assets",
-                    )
-                    .with_suggestion(format!(
-                        "Create a Sound or Collection with ID {} first, or use an existing valid ID",
-                        entry.object
-                    ))
-                    .with_field(format!("entries[{}].object", idx)));
-                }
-
-                // Collect state IDs for this entry
-                for state_id in &entry.switch_states {
-                    referenced_state_ids.push(*state_id);
-                }
-            }
-
-            // Validate that default_switch_state is referenced by at least one entry
-            // (This ensures the default state has a sound mapped to it)
-            if !referenced_state_ids.contains(&self.default_switch_state) {
-                // This is a warning-level issue, not a hard error
-                // The container will play nothing when in the default state
-                // For now, we'll allow it but could add stricter validation later
-            }
+            super::switch_container_checks::check_container(self, validator)?;
         }
 
         Ok(())

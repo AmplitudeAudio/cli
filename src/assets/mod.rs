@@ -79,6 +79,7 @@ mod sound;
 mod soundbank;
 mod switch;
 mod switch_container;
+mod switch_container_checks;
 /// Cross-asset reference validation infrastructure.
 pub mod validator;
 

@@ -30,6 +30,7 @@ pub const NONE_LABEL: &str = "(none)";
 pub fn target_label(target: RefTarget) -> String {
     match target {
         RefTarget::Bus => "bus".to_string(),
+        RefTarget::SwitchState => "switch state".to_string(),
         RefTarget::Asset(asset_type) => asset_type.to_string().to_lowercase(),
         RefTarget::AnyOf(_) => {
             let labels: Vec<String> = target.members().into_iter().map(target_label).collect();
@@ -46,6 +47,7 @@ pub fn target_label(target: RefTarget) -> String {
 fn single_command(target: RefTarget, verb: &str) -> String {
     match target {
         RefTarget::Bus => format!("am asset bus {verb}"),
+        RefTarget::SwitchState => format!("am asset switch {verb}"),
         RefTarget::Asset(asset_type) => format!(
             "am asset {} {verb}",
             asset_type.to_string().to_lowercase().replace(' ', "-")

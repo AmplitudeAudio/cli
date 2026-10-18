@@ -35,6 +35,10 @@ pub enum RefTarget {
     Asset(AssetType),
     /// A bus defined in a `*.buses.json` file of the project root.
     Bus,
+    /// A state of some switch asset. A rule with this target only checks that the
+    /// state exists in a switch; the owning asset checks that it belongs to the
+    /// switch it uses (for a switch container, its `switch_group`).
+    SwitchState,
     /// An object of any one of the listed targets (for example the sound, collection
     /// or switch container an event action plays).
     AnyOf(&'static [RefTarget]),
@@ -121,6 +125,10 @@ const COLLECTION_RULES: &[RefRule] = &[
     ),
 ];
 
+/// What a switch container entry plays: `SwitchContainer.cpp` accepts an id found in the
+/// sound or the collection map, and nothing else.
+const ENTRY_OBJECTS: RefTarget = RefTarget::AnyOf(&[SOUND, COLLECTION]);
+
 const SWITCH_CONTAINER_RULES: &[RefRule] = &[
     rule(AssetType::SwitchContainer, "bus", BUS, true),
     rule(
@@ -135,6 +143,22 @@ const SWITCH_CONTAINER_RULES: &[RefRule] = &[
         "attenuation",
         ATTENUATION,
         false,
+    ),
+    // `SwitchContainer.cpp` rejects an entry whose object is 0 or neither a sound nor a collection.
+    rule(AssetType::SwitchContainer, "entries.object", ENTRY_OBJECTS, true),
+    // `GetSoundObjects` looks the default state up with `.at()` when the switch has no
+    // current state, so a 0 or foreign default state throws at play time.
+    rule(
+        AssetType::SwitchContainer,
+        "default_switch_state",
+        RefTarget::SwitchState,
+        true,
+    ),
+    rule(
+        AssetType::SwitchContainer,
+        "entries.switch_states",
+        RefTarget::SwitchState,
+        true,
     ),
 ];
 
@@ -188,6 +212,8 @@ pub const RTPC_VALUE_FIELDS: &[(AssetType, &str)] = &[
 pub const NESTED_RTPC_VALUE_FIELDS: &[(AssetType, &str)] = &[
     (AssetType::Collection, "sounds.gain"),
     (AssetType::Collection, "sounds.pitch"),
+    (AssetType::SwitchContainer, "entries.gain"),
+    (AssetType::SwitchContainer, "entries.pitch"),
 ];
 
 /// Every asset type that can hold references.

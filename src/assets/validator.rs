@@ -115,6 +115,8 @@ pub struct ProjectValidator {
     asset_paths: HashSet<String>,
     /// (id, name) pairs per asset type, for pick-lists and reference resolution.
     asset_refs: HashMap<AssetType, Vec<AssetRef>>,
+    /// The states of each switch asset, by switch id, in file order.
+    switch_states: HashMap<u64, Vec<AssetRef>>,
     /// Buses defined in the `*.buses.json` files of the project root.
     buses: Vec<AssetRef>,
     /// The buses of each bus file, by file name (without `.buses.json`).
@@ -165,6 +167,7 @@ impl ProjectValidator {
             asset_locations: HashMap::new(),
             asset_paths: HashSet::new(),
             asset_refs: HashMap::new(),
+            switch_states: HashMap::new(),
             buses: Vec::new(),
             bus_files: Vec::new(),
             active_bus_file: None,
@@ -205,6 +208,7 @@ impl ProjectValidator {
             asset_locations: HashMap::new(),
             asset_paths: HashSet::new(),
             asset_refs: HashMap::new(),
+            switch_states: HashMap::new(),
             buses: Vec::new(),
             bus_files: Vec::new(),
             active_bus_file: None,
@@ -350,20 +354,56 @@ impl ProjectValidator {
         }
     }
 
-    /// Validates that a Switch state exists within a given Switch.
+    /// Validates that `state_id` is a state of the switch `switch_id`.
     ///
-    /// Currently validates only that the parent Switch exists. Full state
-    /// validation will be added in Epic 4 when the Switch struct is implemented.
-    ///
-    /// Returns `Ok(())` if `switch_id == 0` (no reference).
+    /// Returns `Ok(())` if `switch_id == 0` or `state_id == 0` (no reference). The switch itself must
+    /// exist; a state of another switch is a reference error that lists the states
+    /// the switch does have.
     pub fn validate_switch_state_exists(
         &self,
         switch_id: u64,
-        _state_id: u64,
+        state_id: u64,
     ) -> Result<(), ValidationError> {
-        // For now, just validate the switch itself exists.
-        // State validation deferred to Epic 4 when Switch struct is implemented.
-        self.validate_switch_exists(switch_id)
+        if switch_id == 0 {
+            return Ok(());
+        }
+        self.validate_switch_exists(switch_id)?;
+        if state_id == 0 {
+            return Ok(());
+        }
+        let states = self.switch_states(switch_id).unwrap_or(&[]);
+        if states.iter().any(|s| s.id == state_id) {
+            return Ok(());
+        }
+        Err(ValidationError::new(
+            ValidationLayer::TypeRules,
+            codes::ERR_VALIDATION_REFERENCE,
+            format!("Switch state with ID {state_id} not found in the switch"),
+            format!("The switch has no state with ID {state_id}"),
+        )
+        .with_suggestion(self.describe_states(switch_id)))
+    }
+
+    /// The states of the switch `switch_id`, or `None` when no such switch exists.
+    pub fn switch_states(&self, switch_id: u64) -> Option<&[AssetRef]> {
+        self.switch_states.get(&switch_id).map(Vec::as_slice)
+    }
+
+    /// "Valid states of switch 'x': a, b" (or a hint when the switch has none), for error messages.
+    pub fn describe_states(&self, switch_id: u64) -> String {
+        let switch = self.resolve(RefTarget::Asset(AssetType::Switch), switch_id);
+        let name = switch.map_or_else(|| format!("ID {switch_id}"), |s| format!("'{}'", s.name));
+        match self.switch_states(switch_id) {
+            Some(states) if !states.is_empty() => format!(
+                "Valid states of switch {name}: {}",
+                states
+                    .iter()
+                    .map(|s| s.name.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
+            _ => format!("Switch {name} has no states; add some with 'am asset switch update'"),
+        }
     }
 
     /// Checks if an asset exists at the given path relative to the sources directory.
@@ -395,6 +435,7 @@ impl ProjectValidator {
                 RefTarget::Asset(asset_type) => {
                     self.asset_refs.get(&asset_type).cloned().unwrap_or_default()
                 }
+                RefTarget::SwitchState => self.switch_states.values().flatten().cloned().collect(),
                 _ => self.visible_buses().clone(),
             })
             .collect();
@@ -443,6 +484,14 @@ impl ProjectValidator {
         target.members().into_iter().find_map(|member| {
             let source = match member {
                 RefTarget::Asset(asset_type) => self.asset_refs.get(&asset_type)?,
+                RefTarget::SwitchState => {
+                    return self
+                        .switch_states
+                        .values()
+                        .flatten()
+                        .find(|r| r.id == id)
+                        .cloned();
+                }
                 _ => self.visible_buses(),
             };
             source.iter().find(|r| r.id == id).cloned()
@@ -597,6 +646,24 @@ impl ProjectValidator {
                     id,
                     name: name.to_string(),
                 });
+            }
+
+            if asset_type == AssetType::Switch
+                && let Some(id) = value.get("id").and_then(|v| v.as_u64())
+            {
+                let states = value
+                    .get("states")
+                    .and_then(|s| s.as_array())
+                    .into_iter()
+                    .flatten()
+                    .filter_map(|s| {
+                        Some(AssetRef {
+                            id: s.get("id")?.as_u64()?,
+                            name: s.get("name")?.as_str()?.to_string(),
+                        })
+                    })
+                    .collect();
+                self.switch_states.insert(id, states);
             }
 
             if let Some(name) = value.get("name").and_then(|v| v.as_str()) {
@@ -866,11 +933,15 @@ mod tests {
     }
 
     #[test]
-    fn test_p1_validate_switch_state_exists_stub() {
+    fn test_p1_validate_switch_state_exists() {
         let dir = tempdir().unwrap();
         let switches_dir = dir.path().join("sources/switches");
         fs::create_dir_all(&switches_dir).unwrap();
-        write_minimal_asset_json(&switches_dir, "surface.json", 50, "surface");
+        fs::write(
+            switches_dir.join("surface.json"),
+            r#"{"id": 50, "name": "surface", "states": [{"id": 1, "name": "wood"}]}"#,
+        )
+        .unwrap();
 
         let validator = ProjectValidator::new(
             dir.path().to_path_buf(),
@@ -878,9 +949,9 @@ mod tests {
         )
         .unwrap();
 
-        // Switch exists - state validation is a no-op (stub)
+        // The state belongs to the switch; an unknown one is a reference error
         assert!(validator.validate_switch_state_exists(50, 1).is_ok());
-        assert!(validator.validate_switch_state_exists(50, 999).is_ok());
+        assert!(validator.validate_switch_state_exists(50, 999).is_err());
 
         // Switch doesn't exist - should fail
         assert!(validator.validate_switch_state_exists(999, 1).is_err());
@@ -888,7 +959,7 @@ mod tests {
         // Zero switch ID - always ok
         assert!(validator.validate_switch_state_exists(0, 1).is_ok());
 
-        // Valid switch, zero state ID - ok (stub; state_id=0 means "no state reference")
+        // Valid switch, zero state ID - ok (state_id=0 means "no state reference")
         assert!(validator.validate_switch_state_exists(50, 0).is_ok());
     }
 
