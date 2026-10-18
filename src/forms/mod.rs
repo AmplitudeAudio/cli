@@ -18,4 +18,6 @@ pub mod coverage;
 pub mod describe;
 pub mod field;
 pub mod field_docs;
+pub mod pick;
 pub mod references;
+pub mod rtpc_value;
