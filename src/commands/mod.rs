@@ -14,6 +14,7 @@
 
 pub mod asset;
 pub mod project;
+mod project_root_files;
 pub mod sdk;
 pub mod sudo;
 pub mod template;

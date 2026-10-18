@@ -49,6 +49,7 @@ use crate::{
     presentation::{Output, OutputMode},
     schema::loader::load_schemas,
 };
+use super::project_root_files::{RootFileFinding, validate_root_files};
 use clap::{Subcommand, value_parser};
 use inquire::{CustomUserError, validator::Validation};
 use serde_json::json;
@@ -167,6 +168,26 @@ pub enum ProjectCommands {
         /// Validate only soundbanks
         #[arg(long)]
         soundbanks_only: bool,
+
+        /// Validate only attenuations
+        #[arg(long)]
+        attenuations_only: bool,
+
+        /// Validate only RTPCs
+        #[arg(long)]
+        rtpc_only: bool,
+
+        /// Validate only pipelines
+        #[arg(long)]
+        pipelines_only: bool,
+
+        /// Validate only bus files (*.buses.json)
+        #[arg(long)]
+        buses_only: bool,
+
+        /// Validate only engine config files (*.config.json)
+        #[arg(long)]
+        engine_configs_only: bool,
     },
 
     /// Build project assets for runtime consumption
@@ -300,17 +321,27 @@ pub async fn handler(
             switch_containers_only,
             events_only,
             soundbanks_only,
+            attenuations_only,
+            rtpc_only,
+            pipelines_only,
+            buses_only,
+            engine_configs_only,
         } => {
-            let filter = resolve_type_filter(
-                *sounds_only,
-                *collections_only,
-                *effects_only,
-                *switches_only,
-                *switch_containers_only,
-                *events_only,
-                *soundbanks_only,
-            );
-            handle_validate_project_command(filter, output).await
+            let scope = resolve_scope(&TypeFilterFlags {
+                sounds: *sounds_only,
+                collections: *collections_only,
+                effects: *effects_only,
+                switches: *switches_only,
+                switch_containers: *switch_containers_only,
+                events: *events_only,
+                soundbanks: *soundbanks_only,
+                attenuations: *attenuations_only,
+                rtpc: *rtpc_only,
+                pipelines: *pipelines_only,
+                buses: *buses_only,
+                engine_configs: *engine_configs_only,
+            });
+            handle_validate_project_command(scope, output).await
         }
         ProjectCommands::Build {
             output: output_dir,
@@ -1090,49 +1121,103 @@ fn register_project(
 // Validate Command
 // =============================================================================
 
-/// Resolve which asset types to validate based on filter flags.
-/// If no flags are set, returns None (validate all types).
-fn resolve_type_filter(
-    sounds_only: bool,
-    collections_only: bool,
-    effects_only: bool,
-    switches_only: bool,
-    switch_containers_only: bool,
-    events_only: bool,
-    soundbanks_only: bool,
-) -> Option<Vec<AssetType>> {
-    let mut types = Vec::new();
+/// The `--*-only` filter flags of `am project validate`.
+#[derive(Debug, Default, Clone, Copy)]
+struct TypeFilterFlags {
+    sounds: bool,
+    collections: bool,
+    effects: bool,
+    switches: bool,
+    switch_containers: bool,
+    events: bool,
+    soundbanks: bool,
+    attenuations: bool,
+    rtpc: bool,
+    pipelines: bool,
+    buses: bool,
+    engine_configs: bool,
+}
 
-    if sounds_only {
-        types.push(AssetType::Sound);
-    }
-    if collections_only {
-        types.push(AssetType::Collection);
-    }
-    if effects_only {
-        types.push(AssetType::Effect);
-    }
-    if switches_only {
-        types.push(AssetType::Switch);
-    }
-    if switch_containers_only {
-        types.push(AssetType::SwitchContainer);
-    }
-    if events_only {
-        types.push(AssetType::Event);
-    }
-    if soundbanks_only {
-        types.push(AssetType::Soundbank);
-    }
+/// What `am project validate` checks: asset types plus the root-level files.
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct ValidateScope {
+    types: Vec<AssetType>,
+    buses: bool,
+    engine_configs: bool,
+}
 
-    if types.is_empty() { None } else { Some(types) }
+impl ValidateScope {
+    /// Everything the project can hold.
+    fn all() -> Self {
+        Self {
+            types: ALL_VALIDATED_TYPES.to_vec(),
+            buses: true,
+            engine_configs: true,
+        }
+    }
+}
+
+/// Every asset type that lives under `sources/`, in validation order.
+const ALL_VALIDATED_TYPES: [AssetType; 10] = [
+    AssetType::Sound,
+    AssetType::Collection,
+    AssetType::Effect,
+    AssetType::Switch,
+    AssetType::SwitchContainer,
+    AssetType::Event,
+    AssetType::Soundbank,
+    AssetType::Attenuation,
+    AssetType::Rtpc,
+    AssetType::Pipeline,
+];
+
+/// Resolve what to validate based on filter flags.
+/// If no flags are set, everything is validated.
+fn resolve_scope(flags: &TypeFilterFlags) -> ValidateScope {
+    let selected = [
+        (flags.sounds, AssetType::Sound),
+        (flags.collections, AssetType::Collection),
+        (flags.effects, AssetType::Effect),
+        (flags.switches, AssetType::Switch),
+        (flags.switch_containers, AssetType::SwitchContainer),
+        (flags.events, AssetType::Event),
+        (flags.soundbanks, AssetType::Soundbank),
+        (flags.attenuations, AssetType::Attenuation),
+        (flags.rtpc, AssetType::Rtpc),
+        (flags.pipelines, AssetType::Pipeline),
+    ];
+    let types: Vec<AssetType> = selected
+        .iter()
+        .filter(|(on, _)| *on)
+        .map(|(_, t)| *t)
+        .collect();
+
+    if types.is_empty() && !flags.buses && !flags.engine_configs {
+        return ValidateScope::all();
+    }
+    ValidateScope {
+        types,
+        buses: flags.buses,
+        engine_configs: flags.engine_configs,
+    }
+}
+
+fn root_finding_to_result(f: RootFileFinding) -> ValidationResult {
+    ValidationResult {
+        file: f.file,
+        kind: f.kind.label().to_string(),
+        error: f.error,
+        why: f.why,
+        suggestion: f.suggestion,
+        field: f.field,
+    }
 }
 
 /// A single validation error with file context.
 #[derive(Debug)]
 struct ValidationResult {
     file: String,
-    asset_type: AssetType,
+    kind: String,
     error: String,
     why: String,
     suggestion: String,
@@ -1141,7 +1226,7 @@ struct ValidationResult {
 
 /// Validate all assets in the current project.
 async fn handle_validate_project_command(
-    type_filter: Option<Vec<AssetType>>,
+    scope: ValidateScope,
     output: &dyn Output,
 ) -> Result<()> {
     let current_dir = env::current_dir()?;
@@ -1192,17 +1277,7 @@ async fn handle_validate_project_command(
     let context = ProjectContext::new(current_dir.clone()).with_validator(validator);
 
     // Determine which types to validate
-    let types_to_validate: Vec<AssetType> = type_filter.unwrap_or_else(|| {
-        vec![
-            AssetType::Sound,
-            AssetType::Collection,
-            AssetType::Effect,
-            AssetType::Switch,
-            AssetType::SwitchContainer,
-            AssetType::Event,
-            AssetType::Soundbank,
-        ]
-    });
+    let types_to_validate: Vec<AssetType> = scope.types.clone();
 
     let sources_dir = if project_config.sources_dir.is_empty() {
         current_dir.clone()
@@ -1261,7 +1336,7 @@ async fn handle_validate_project_command(
                 Err(e) => {
                     errors.push(ValidationResult {
                         file: relative_path,
-                        asset_type: *asset_type,
+                        kind: asset_type.to_string(),
                         error: format!("Failed to read file: {}", e),
                         why: "The file could not be read".to_string(),
                         suggestion: "Check file permissions".to_string(),
@@ -1283,6 +1358,22 @@ async fn handle_validate_project_command(
         total_validated += type_count;
     }
 
+    let root_report = validate_root_files(
+        &current_dir,
+        &sources_dir,
+        scope.buses,
+        scope.engine_configs,
+    );
+    if scope.buses {
+        asset_summary.insert("buses".to_string(), root_report.bus_files);
+        total_validated += root_report.bus_files;
+    }
+    if scope.engine_configs {
+        asset_summary.insert("engine_configs".to_string(), root_report.engine_configs);
+        total_validated += root_report.engine_configs;
+    }
+    errors.extend(root_report.findings.into_iter().map(root_finding_to_result));
+
     // Output results
     let is_valid = errors.is_empty();
 
@@ -1293,7 +1384,7 @@ async fn handle_validate_project_command(
                 .map(|e| {
                     let mut obj = json!({
                         "file": e.file,
-                        "type": format!("{}", e.asset_type),
+                        "type": e.kind,
                         "error": e.error,
                         "why": e.why,
                         "fix": e.suggestion,
@@ -1439,7 +1530,7 @@ fn validate_typed_asset<T: Asset>(
         Err(e) => {
             results.push(ValidationResult {
                 file: file_path.to_string(),
-                asset_type,
+                kind: asset_type.to_string(),
                 error: format!("Invalid JSON structure: {}", e),
                 why: "The file does not match the expected schema for this asset type".to_string(),
                 suggestion: "Check JSON syntax and ensure all required fields are present"
@@ -1454,7 +1545,7 @@ fn validate_typed_asset<T: Asset>(
     if let Err(validation_err) = asset.validate_rules(context) {
         results.push(ValidationResult {
             file: file_path.to_string(),
-            asset_type,
+            kind: asset_type.to_string(),
             error: validation_err.what().to_string(),
             why: validation_err.why().to_string(),
             suggestion: validation_err.suggestion().to_string(),
@@ -1513,15 +1604,7 @@ async fn handle_build_project_command(
     let context = ProjectContext::new(current_dir.clone()).with_validator(validator);
 
     let sources_dir = current_dir.join(&project_config.sources_dir);
-    let asset_types = vec![
-        AssetType::Sound,
-        AssetType::Collection,
-        AssetType::Effect,
-        AssetType::Switch,
-        AssetType::SwitchContainer,
-        AssetType::Event,
-        AssetType::Soundbank,
-    ];
+    let asset_types = ALL_VALIDATED_TYPES.to_vec();
 
     let mut validation_errors: Vec<ValidationResult> = Vec::new();
 
