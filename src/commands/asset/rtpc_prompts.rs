@@ -37,16 +37,16 @@ fn validate_finite(text: &str) -> Result<Validation, inquire::CustomUserError> {
     })
 }
 
-fn validate_duration(text: &str) -> Result<Validation, inquire::CustomUserError> {
+pub(super) fn validate_duration(text: &str) -> Result<Validation, inquire::CustomUserError> {
     Ok(match text.trim().parse::<f64>() {
         Ok(v) if v.is_finite() && v >= 0.0 => Validation::Valid,
         _ => Validation::Invalid("Enter a number of seconds, 0 or more".into()),
     })
 }
 
-type TextValidator = fn(&str) -> Result<Validation, inquire::CustomUserError>;
+pub(super) type TextValidator = fn(&str) -> Result<Validation, inquire::CustomUserError>;
 
-fn ask(
+pub(super) fn ask(
     input: &dyn Input,
     label: &str,
     default: Option<f64>,
@@ -61,7 +61,7 @@ fn ask(
     Ok(text.trim().parse()?)
 }
 
-fn ask_fader(input: &dyn Input, label: &str, current: &str) -> Result<String> {
+pub(super) fn ask_fader(input: &dyn Input, label: &str, current: &str) -> Result<String> {
     let mut faders: Vec<String> = FADER_ALGORITHM_NAMES
         .iter()
         .map(|s| s.to_string())

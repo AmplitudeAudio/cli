@@ -15,5 +15,6 @@
 //! Create/update logic shared by every front end (flags, prompts, TUI).
 
 pub mod attenuation;
+pub mod bus;
 pub mod rtpc;
 pub mod sound;

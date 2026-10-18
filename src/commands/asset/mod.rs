@@ -20,6 +20,11 @@
 mod attenuation;
 mod attenuation_args;
 mod attenuation_prompts;
+mod bus;
+mod bus_args;
+mod bus_file;
+mod bus_prompts;
+mod bus_shared;
 mod collection;
 mod effect;
 mod event;
@@ -34,6 +39,8 @@ mod switch;
 mod switch_container;
 
 pub use attenuation::{AttenuationCommands, handler as handle_attenuation_command};
+pub use bus::{BusCommands, handler as handle_bus_command};
+pub use bus_file::{BusFileCommands, handler as handle_bus_file_command};
 pub use collection::{CollectionCommands, handler as handle_collection_command};
 pub use effect::{EffectCommands, handler as handle_effect_command};
 pub use event::{EventCommands, handler as handle_event_command};
@@ -142,6 +149,16 @@ pub enum AssetCommands {
         #[command(subcommand)]
         command: RtpcCommands,
     },
+    /// Bus asset management (buses inside '*.buses.json' files)
+    Bus {
+        #[command(subcommand)]
+        command: BusCommands,
+    },
+    /// Bus file management ('<name>.buses.json' files in the project root)
+    BusFile {
+        #[command(subcommand)]
+        command: BusFileCommands,
+    },
 }
 
 /// Handle asset commands by routing to the appropriate subcommand handler.
@@ -178,6 +195,12 @@ pub async fn handler(
         }
         AssetCommands::Rtpc { command } => {
             handle_rtpc_command(command, database, input, output).await
+        }
+        AssetCommands::Bus { command } => {
+            handle_bus_command(command, database, input, output).await
+        }
+        AssetCommands::BusFile { command } => {
+            handle_bus_file_command(command, database, input, output).await
         }
     }
 }

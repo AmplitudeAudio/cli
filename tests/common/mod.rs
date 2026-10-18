@@ -17,5 +17,6 @@
 //! This module provides shared test infrastructure for all test modules.
 
 pub mod fixtures;
+pub mod flatc;
 #[allow(dead_code)]
 pub mod scripted_input;

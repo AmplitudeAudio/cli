@@ -126,6 +126,22 @@ pub const KNOWN_GAPS: &[(AssetType, &str)] = &[
     (AssetType::Pipeline, "nodes"),
 ];
 
+/// Fields of `BusDefinition` the bus commands cover.
+///
+/// Buses are entries of `*.buses.json` files, not an [`AssetType`], so they
+/// have their own lists; `unit_schema_coverage_test` checks them against the schema.
+pub const BUS_SUPPORTED_FIELDS: &[&str] =
+    &["id", "name", "gain", "child_buses", "duck_buses", "fader"];
+
+/// Fields of `DuckBusDefinition` the `--duck` flag covers.
+pub const DUCK_BUS_SUPPORTED_FIELDS: &[&str] = &["id", "target_gain", "fade_in", "fade_out"];
+
+/// `BusDefinition` fields not covered by any bus command (none today).
+pub const BUS_KNOWN_GAPS: &[&str] = &[];
+
+/// `DuckBusDefinition` fields not covered by any bus command (none today).
+pub const DUCK_BUS_KNOWN_GAPS: &[&str] = &[];
+
 /// Returns every schema field name of `asset_type`, covered or not.
 ///
 /// Covered fields come from [`supported_fields`]; gaps come from [`KNOWN_GAPS`]. The

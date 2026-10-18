@@ -251,8 +251,8 @@ impl AssetTestFixture {
             project_root.join("main.buses.json"),
             serde_json::to_string_pretty(&serde_json::json!({
                 "buses": [
-                    { "id": 1, "name": "master", "child_buses": [2] },
-                    { "id": 2, "name": "sfx" }
+                    { "id": 1, "name": "master", "gain": 1.0, "child_buses": [2], "fader": "Linear" },
+                    { "id": 2, "name": "sfx", "gain": 1.0, "fader": "Linear" }
                 ]
             }))?,
         )?;

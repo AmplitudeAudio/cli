@@ -222,6 +222,34 @@ pub fn load_schemas(sdk: &SdkLocation, output: &dyn Output) -> Result<SchemaRegi
     })
 }
 
+/// Field names of the table `table` (leaf name) in the SDK schema file `file_name`.
+///
+/// Used for tables that are not an [`AssetType`], such as `BusDefinition`
+/// (buses live in `*.buses.json` files, not under `sources/`).
+pub fn table_field_names(
+    sdk: &SdkLocation,
+    file_name: &str,
+    table: &str,
+) -> Result<Vec<String>, String> {
+    use flatbuffers_reflection::reflection;
+
+    let path = sdk.schemas_dir().join(file_name);
+    let bytes = fs::read(&path).map_err(|e| format!("Failed to read {}: {e}", path.display()))?;
+    let schema = reflection::root_as_schema(&bytes)
+        .map_err(|e| format!("Failed to parse binary schema: {e}"))?;
+    let objects = schema.objects();
+    (0..objects.len())
+        .map(|i| objects.get(i))
+        .find(|obj| leaf_name(obj.name()) == table)
+        .map(|obj| {
+            let fields = obj.fields();
+            (0..fields.len())
+                .map(|j| fields.get(j).name().to_string())
+                .collect()
+        })
+        .ok_or_else(|| format!("Table '{table}' not found in {file_name}"))
+}
+
 /// Load and parse a single `.bfbs` schema file.
 ///
 /// Returns asset schemas for each top-level asset type table found in the file.

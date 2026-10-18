@@ -16,9 +16,12 @@
 
 use am::assets::AssetType;
 use am::config::sdk::discover_sdk;
-use am::forms::coverage::{KNOWN_GAPS, supported_fields};
+use am::forms::coverage::{
+    BUS_KNOWN_GAPS, BUS_SUPPORTED_FIELDS, DUCK_BUS_KNOWN_GAPS, DUCK_BUS_SUPPORTED_FIELDS,
+    KNOWN_GAPS, supported_fields,
+};
 use am::presentation::JsonOutput;
-use am::schema::loader::{SchemaRegistry, load_schemas};
+use am::schema::loader::{SchemaRegistry, load_schemas, table_field_names};
 
 const ALL_TYPES: [AssetType; 10] = [
     AssetType::Attenuation,
@@ -88,5 +91,43 @@ fn test_supported_fields_are_real_schema_fields() {
                 "supported field {t:?}.{name} is not a schema field"
             );
         }
+    }
+}
+
+fn bus_table_fields(table: &str) -> Vec<String> {
+    let sdk = discover_sdk().expect("AM_SDK_PATH must point at an SDK with schemas/*.bfbs");
+    table_field_names(&sdk, "buses_definition.bfbs", table).expect("bus schema must load")
+}
+
+/// Buses are not an `AssetType`, so their tables are checked separately.
+#[test]
+fn test_every_bus_schema_field_is_supported_or_a_known_gap() {
+    for (table, supported, gaps) in [
+        ("BusDefinition", BUS_SUPPORTED_FIELDS, BUS_KNOWN_GAPS),
+        (
+            "DuckBusDefinition",
+            DUCK_BUS_SUPPORTED_FIELDS,
+            DUCK_BUS_KNOWN_GAPS,
+        ),
+    ] {
+        let fields = bus_table_fields(table);
+        let missing: Vec<&String> = fields
+            .iter()
+            .filter(|f| !supported.contains(&f.as_str()) && !gaps.contains(&f.as_str()))
+            .collect();
+        assert!(
+            missing.is_empty(),
+            "{table} fields neither supported nor known gaps: {missing:?}"
+        );
+        for name in supported.iter().chain(gaps) {
+            assert!(
+                fields.iter().any(|f| f == name),
+                "{table}.{name} is not a schema field"
+            );
+        }
+        assert!(
+            gaps.iter().all(|g| !supported.contains(g)),
+            "{table}: a field is both supported and a known gap"
+        );
     }
 }
