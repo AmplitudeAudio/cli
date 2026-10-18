@@ -215,9 +215,13 @@ async fn test_full_flow_on_fresh_project() {
     // The template's own pipeline is `pc` and builds to `pc.ampipeline`, the
     // file its config names.
     assert!(flow.sources().join("pipelines/pc.json").exists());
-    let listed = names(&flow.ok(&["asset", "pipeline", "list"]).await, "pipelines", "name");
+    let listed = names(
+        &flow.ok(&["asset", "pipeline", "list"]).await,
+        "pipelines",
+        "name",
+    );
     assert_eq!(listed, vec!["pc".to_string()]);
-    let (result, _)= flow.am(&["asset", "pipeline", "delete", "pc"]).await;
+    let (result, _) = flow.am(&["asset", "pipeline", "delete", "pc"]).await;
     assert_eq!(code_of(&result.unwrap_err()), codes::ERR_ASSET_IN_USE);
     let (result, _) = flow.am(&["asset", "bus-file", "delete", "pc"]).await;
     assert!(result.is_err(), "the bus file in use must not be deleted");

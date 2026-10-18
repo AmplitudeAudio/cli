@@ -254,30 +254,34 @@ pub fn reference_problems(
         .and_then(Value::as_str)
         .map(pipeline_ref_name);
     if let Some(name) = pipeline.filter(|n| !pipeline_names.iter().any(|p| p == n)) {
-        problems.push(CliError::new(
-            codes::ERR_VALIDATION_REFERENCE,
-            format!("No pipeline named '{name}'"),
-            format!(
-                "--mixer-pipeline must name an existing pipeline asset; available: {}",
-                list_or_none(pipeline_names)
-            ),
-        )
-        .with_suggestion("Create one with 'am asset pipeline create', or pick an existing one"));
+        problems.push(
+            CliError::new(
+                codes::ERR_VALIDATION_REFERENCE,
+                format!("No pipeline named '{name}'"),
+                format!(
+                    "--mixer-pipeline must name an existing pipeline asset; available: {}",
+                    list_or_none(pipeline_names)
+                ),
+            )
+            .with_suggestion("Create one with 'am asset pipeline create', or pick an existing one"),
+        );
     }
     let buses = config
         .get("buses_file")
         .and_then(Value::as_str)
         .map(buses_ref_name);
     if let Some(name) = buses.filter(|n| !bus_file_names.iter().any(|f| f == n)) {
-        problems.push(CliError::new(
-            codes::ERR_VALIDATION_REFERENCE,
-            format!("No bus file named '{name}'"),
-            format!(
-                "--buses-file must name an existing '*.buses.json' file; available: {}",
-                list_or_none(bus_file_names)
-            ),
-        )
-        .with_suggestion("Create one with 'am asset bus-file create <file-name>'"));
+        problems.push(
+            CliError::new(
+                codes::ERR_VALIDATION_REFERENCE,
+                format!("No bus file named '{name}'"),
+                format!(
+                    "--buses-file must name an existing '*.buses.json' file; available: {}",
+                    list_or_none(bus_file_names)
+                ),
+            )
+            .with_suggestion("Create one with 'am asset bus-file create <file-name>'"),
+        );
     }
     problems
 }

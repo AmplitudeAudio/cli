@@ -473,9 +473,7 @@ async fn handle_init_project_command(
 
         if let Some(file) = Resource::get("default.pipeline.json") {
             fs::write(
-                sources_dir
-                    .join(ASSET_DIR_PIPELINES)
-                    .join("pc.json"),
+                sources_dir.join(ASSET_DIR_PIPELINES).join("pc.json"),
                 file.data,
             )?;
         }
