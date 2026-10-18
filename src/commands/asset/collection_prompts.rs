@@ -36,7 +36,7 @@ use crate::services::sound::{DEFAULT_GAIN, DEFAULT_PRIORITY};
 use super::collection_entry_prompts::{prompt_entry_edits, prompt_new_entries};
 use super::sound_prompts::{
     ACCEPT_DEFAULTS_PROMPT, DEFAULT_FADER, DEFAULT_PITCH, SCOPE_LABELS, SCOPES,
-    SPATIALIZATION_LABELS, SPATIALIZATIONS, ask_bool, ask_choice, ask_reference, ask_rtpc,
+    SPATIALIZATION_LABELS, SPATIALIZATIONS, ask_bool, ask_choice, ask_choice_or_unset, ask_reference, ask_rtpc,
     pick_optional, prompt_checked_rtpc, prompt_optional_rtpc, to_labels,
 };
 
@@ -337,9 +337,8 @@ pub fn prompt_update_patch(
     let faders = to_labels(FADER_ALGORITHM_NAMES);
     let current_fader = faders
         .iter()
-        .position(|f| Some(f.as_str()) == collection.fader.as_deref())
-        .unwrap_or(0);
-    patch.fader = ask_choice(input, "Fader", &faders, current_fader)?.map(|i| faders[i].clone());
+        .position(|f| Some(f.as_str()) == collection.fader.as_deref());
+    patch.fader = ask_choice_or_unset(input, "Fader", &faders, current_fader)?.map(|i| faders[i].clone());
 
     let current_play = PLAY_MODES
         .iter()

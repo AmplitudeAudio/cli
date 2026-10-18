@@ -779,3 +779,27 @@ async fn test_interactive_update_offers_the_new_fields() {
     expected.spatialization = Spatialization::Position;
     assert_eq!(after, expected);
 }
+
+#[tokio::test]
+async fn test_interactive_update_repairs_a_sound_without_fader_and_bus() {
+    let fx = fixture("update_legacy_sound");
+    fx.write_asset_json(
+        "sounds",
+        "old",
+        json!({"id": 5, "name": "old", "path": "a.wav", "bus": 0, "attenuation": 0,
+               "effect": 0, "scope": "World", "spatialization": "None", "stream": false,
+               "loop": {"enabled": false, "loop_count": 0}}),
+    )
+    .unwrap();
+    // "Constant" is the first fader option: picking it must count as a change.
+    let input = ScriptedInput::new(
+        &["sfx", "(keep current)", "(keep current)", "World", "Constant", "None"],
+        &["a.wav"],
+    )
+    .with_confirms(&[false, false, false, false, false, false, false]);
+    let (result, _) = run(&fx, &["update", "old"], &input).await;
+    result.unwrap();
+    input.assert_all_consumed();
+    let sound = read_sound(&fx, "old");
+    assert_eq!((sound.bus, sound.fader.as_deref()), (2, Some("Constant")));
+}

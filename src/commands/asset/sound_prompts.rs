@@ -337,9 +337,23 @@ pub(super) fn ask_choice(
     options: &[String],
     current: usize,
 ) -> Result<Option<usize>> {
-    let prompt = format!("{label} (current: {})", options[current]);
+    ask_choice_or_unset(input, label, options, Some(current))
+}
+
+/// Like [`ask_choice`], for a value that may be missing or invalid in the file.
+///
+/// With `current == None` the prompt says "unset" and any pick is a change, so an
+/// interactive update can repair a file whose value the SDK would reject.
+pub(super) fn ask_choice_or_unset(
+    input: &dyn Input,
+    label: &str,
+    options: &[String],
+    current: Option<usize>,
+) -> Result<Option<usize>> {
+    let shown = current.map_or("unset", |i| options[i].as_str());
+    let prompt = format!("{label} (current: {shown})");
     let chosen = select_index(input, &prompt, options)?;
-    Ok((chosen != current).then_some(chosen))
+    Ok((Some(chosen) != current).then_some(chosen))
 }
 
 /// Reference chooser with a "(keep current)" entry; `None` when unchanged.
@@ -353,9 +367,10 @@ pub(super) fn ask_reference(
     let rule = rule_for(asset_type, field)
         .ok_or_else(|| anyhow::anyhow!("{asset_type} has no reference rule for '{field}'"))?;
     let candidates = validator.list(rule.target);
+    let unresolved = if rule.required { "unset" } else { NONE_LABEL };
     let current_name = validator
         .resolve(rule.target, current)
-        .map_or_else(|| NONE_LABEL.to_string(), |r| r.name);
+        .map_or_else(|| unresolved.to_string(), |r| r.name);
 
     let mut labels = vec![KEEP_LABEL.to_string()];
     labels.extend(candidates.iter().map(|c| c.name.clone()));
@@ -409,9 +424,8 @@ pub fn prompt_update_patch(
     let faders = to_labels(FADER_ALGORITHM_NAMES);
     let current_fader = faders
         .iter()
-        .position(|f| Some(f.as_str()) == sound.fader.as_deref())
-        .unwrap_or(0);
-    let fader = ask_choice(input, "Fader", &faders, current_fader)?.map(|i| faders[i].clone());
+        .position(|f| Some(f.as_str()) == sound.fader.as_deref());
+    let fader = ask_choice_or_unset(input, "Fader", &faders, current_fader)?.map(|i| faders[i].clone());
 
     let gain = ask_rtpc(input, validator, "Gain", &sound.gain, DEFAULT_GAIN, Some((0.0, 1.0)))?;
     let pitch = ask_rtpc(input, validator, "Pitch", &sound.pitch, DEFAULT_PITCH, None)?;

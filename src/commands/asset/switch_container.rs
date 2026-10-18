@@ -17,6 +17,11 @@
 //! Implements CRUD operations for SwitchContainer assets in Amplitude projects. The
 //! create/update handlers only gather values (flags, then prompts when the
 //! session is interactive); building and merging lives in `services::switch_container`.
+//!
+//! Limitation: when an update leaves the entries alone they are written back verbatim
+//! (unknown per-entry keys survive), but a partial entry edit (`--add-entry`,
+//! `--remove-entry`, `--map`) re-serializes every entry from the typed model, which
+//! drops per-entry keys the CLI does not model. Unknown top-level keys always survive.
 
 use std::env;
 use std::fs;
@@ -462,6 +467,14 @@ async fn update_switch_container(
                 "Run 'am asset switch-container update {name} --default-switch-state <state>' with a state of the container's switch. {}",
                 validator.describe_states(container.switch_group)
             )),
+            Some("fader") => Some(format!(
+                "Run 'am asset switch-container update {name} --fader <name>' (for example Linear)"
+            )),
+            Some(field) if field.contains(".fade_") || field.ends_with("fade_in") || field.ends_with("fade_out") => {
+                Some(format!(
+                    "Entry fades are missing or invalid; re-create the entries with 'am asset switch-container update {name} --entry OBJECT,states=...' or --entries-from-json (each entry then gets a fade_in and fade_out), or fix them with --remove-entry <object> --add-entry <object>,states=...,fade-in=0"
+                ))
+            }
             _ => None,
         };
         match suggestion {

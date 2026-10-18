@@ -30,7 +30,7 @@ use crate::services::sound::{DEFAULT_GAIN, DEFAULT_PRIORITY};
 
 use super::sound_prompts::{
     ACCEPT_DEFAULTS_PROMPT, DEFAULT_FADER, DEFAULT_PITCH, SCOPE_LABELS, SCOPES,
-    SPATIALIZATION_LABELS, SPATIALIZATIONS, ask_choice, ask_reference, ask_rtpc, pick_optional,
+    SPATIALIZATION_LABELS, SPATIALIZATIONS, ask_choice, ask_choice_or_unset, ask_reference, ask_rtpc, pick_optional,
     prompt_checked_rtpc, prompt_optional_rtpc, to_labels,
 };
 use super::switch_container_args::UPDATE_BEHAVIOR_NAMES;
@@ -193,8 +193,8 @@ fn ask_default_state(
         return Ok(None);
     }
     let labels: Vec<String> = states.iter().map(|s| s.name.clone()).collect();
-    let position = states.iter().position(|s| s.id == current).unwrap_or(0);
-    Ok(ask_choice(input, "Default switch state", &labels, position)?.map(|i| states[i].id))
+    let position = states.iter().position(|s| s.id == current);
+    Ok(ask_choice_or_unset(input, "Default switch state", &labels, position)?.map(|i| states[i].id))
 }
 
 /// Offers every container field with the current value; unchanged fields stay out of the patch.
@@ -218,9 +218,8 @@ pub fn prompt_update_patch(
     let faders = to_labels(FADER_ALGORITHM_NAMES);
     let current_fader = faders
         .iter()
-        .position(|f| Some(f.as_str()) == container.fader.as_deref())
-        .unwrap_or(0);
-    patch.fader = ask_choice(input, "Fader", &faders, current_fader)?.map(|i| faders[i].clone());
+        .position(|f| Some(f.as_str()) == container.fader.as_deref());
+    patch.fader = ask_choice_or_unset(input, "Fader", &faders, current_fader)?.map(|i| faders[i].clone());
 
     let current_behavior = UPDATE_BEHAVIORS
         .iter()

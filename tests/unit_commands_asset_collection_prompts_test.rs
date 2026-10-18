@@ -352,3 +352,27 @@ async fn test_update_with_flags_does_not_prompt() {
     result.unwrap();
     assert!(input.prompts.lock().unwrap().is_empty());
 }
+
+#[tokio::test]
+async fn test_interactive_update_repairs_a_collection_without_fader_and_bus() {
+    let fx = fixture("col_update_legacy");
+    fx.write_asset_json(
+        "collections",
+        "old",
+        serde_json::json!({"id": 5, "name": "old", "bus": 0, "attenuation": 0, "effect": 0,
+            "scope": "World", "play_mode": "PlayOne", "spatialization": "None",
+            "scheduler": {"mode": "Random"}}),
+    )
+    .unwrap();
+    // "Constant" is the first fader option: picking it must count as a change.
+    let input = ScriptedInput::new(
+        &["sfx", "(keep current)", "(keep current)", "World", "Constant", "PlayOne", "Random", "None"],
+        &[],
+    )
+    .with_confirms(&[false, false, false, false, false]);
+    let (result, _) = run(&fx, &["update", "old"], &input).await;
+    result.unwrap();
+    input.assert_all_consumed();
+    let c = read_collection(&fx, "old");
+    assert_eq!((c.bus, c.fader.as_deref()), (2, Some("Constant")));
+}
