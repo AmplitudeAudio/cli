@@ -51,8 +51,10 @@ use crate::common::errors::CliError;
 /// mirror the SDK's data definitions (enums, tables, structs) and are always in sync
 /// with the installed SDK version.
 ///
-/// **Unions:** FlatBuffer union types are skipped (noted with TODO comments in the
-/// generated file) and will be handled in a future story.
+/// **Unions:** FlatBuffer unions are generated as Rust enums without a `NONE` member
+/// (absence is `Option::None`). Tables holding union fields serialize to flatc's JSON
+/// form: a `<field>_type` tag next to the `<field>` payload (parallel arrays for
+/// vectors of unions), and deserialize by reading the tag first.
 #[allow(non_snake_case, non_camel_case_types, clippy::upper_case_acronyms)]
 pub mod generated {
     include!(concat!(env!("OUT_DIR"), "/generated_assets.rs"));

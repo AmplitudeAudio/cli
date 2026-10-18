@@ -71,6 +71,18 @@ struct FieldDef {
     is_optional: bool,
     default_value: Option<String>,
     serde_rename: Option<String>,
+    union_kind: UnionKind,
+}
+
+/// Whether a field holds a FlatBuffers union, or a vector of unions.
+///
+/// flatc's JSON represents these as a `<name>_type` tag sibling (an array of tags
+/// for vectors) next to the `<name>` payload, so they need custom serde glue.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum UnionKind {
+    NotUnion,
+    Single,
+    Vector,
 }
 
 // =============================================================================
@@ -306,12 +318,25 @@ fn process_schema(
                 final_rename = serde_rename;
             }
 
+            let union_kind = match (base, ty.element()) {
+                (BaseType::Union, _) => UnionKind::Single,
+                (BaseType::Vector, BaseType::Union) => UnionKind::Vector,
+                _ => UnionKind::NotUnion,
+            };
+            if union_kind != UnionKind::NotUnion && !is_optional {
+                panic!(
+                    "Union field {}.{} is not optional; unsupported by the JSON generator",
+                    name, field_name
+                );
+            }
+
             fields.push(FieldDef {
                 name: final_name,
                 rust_type,
                 is_optional,
                 default_value,
                 serde_rename: final_rename,
+                union_kind,
             });
         }
 
@@ -482,28 +507,13 @@ fn generate_code(
     writeln!(out).unwrap();
     writeln!(out, "use serde::{{Serialize, Deserialize}};").unwrap();
     writeln!(out).unwrap();
+    out.push_str(UNION_HELPERS);
+    writeln!(out).unwrap();
 
     // Generate enums
     for (fqn, def) in enums {
         if def.is_union {
-            writeln!(
-                out,
-                "#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]"
-            )
-            .unwrap();
-            writeln!(out, "#[serde(untagged)]").unwrap();
-            writeln!(out, "pub enum {} {{", def.name).unwrap();
-            for variant in &def.variants {
-                let rust_name = &variant.name;
-                if rust_name == "NONE" {
-                    writeln!(out, "    None,").unwrap();
-                } else {
-                    let ty = variant.rust_type.as_deref().unwrap_or(rust_name);
-                    writeln!(out, "    {}({}),", rust_name, ty).unwrap();
-                }
-            }
-            writeln!(out, "}}").unwrap();
-            writeln!(out).unwrap();
+            generate_union(&mut out, def);
             continue;
         }
 
@@ -516,6 +526,143 @@ fn generate_code(
     }
 
     out
+}
+
+/// Runtime helpers emitted at the top of the generated file. They implement the
+/// flatc JSON union convention: a `<field>_type` tag next to the `<field>` payload.
+const UNION_HELPERS: &str = r#"
+#[allow(dead_code)]
+fn __union_from_wire<U>(
+    field: &str,
+    tag: Option<String>,
+    payload: Option<serde_json::Value>,
+    from_tag_value: fn(&str, serde_json::Value) -> Result<U, String>,
+) -> Result<Option<U>, String> {
+    match (tag, payload) {
+        (None, None) => Ok(None),
+        (Some(t), None) if t == "NONE" => Ok(None),
+        (Some(t), Some(_)) if t == "NONE" => Err(format!(
+            "field '{field}' has a payload but '{field}_type' is NONE"
+        )),
+        (None, Some(_)) => Err(format!("field '{field}' requires a '{field}_type' tag")),
+        (Some(_), None) => Err(format!(
+            "field '{field}_type' is set but '{field}' is missing"
+        )),
+        (Some(t), Some(v)) => from_tag_value(&t, v).map(Some),
+    }
+}
+
+#[allow(dead_code)]
+fn __union_vec_from_wire<U>(
+    field: &str,
+    tags: Option<Vec<String>>,
+    payloads: Option<Vec<serde_json::Value>>,
+    from_tag_value: fn(&str, serde_json::Value) -> Result<U, String>,
+) -> Result<Option<Vec<U>>, String> {
+    match (tags, payloads) {
+        (None, None) => Ok(None),
+        (Some(_), None) => Err(format!(
+            "field '{field}_type' is set but '{field}' is missing"
+        )),
+        (None, Some(p)) if p.is_empty() => Ok(Some(Vec::new())),
+        (None, Some(_)) => Err(format!("field '{field}' requires a '{field}_type' array")),
+        (Some(t), Some(p)) => {
+            if t.len() != p.len() {
+                return Err(format!(
+                    "'{field}_type' has {} entries but '{field}' has {}",
+                    t.len(),
+                    p.len()
+                ));
+            }
+            t.iter()
+                .zip(p)
+                .map(|(tag, value)| from_tag_value(tag, value))
+                .collect::<Result<Vec<_>, _>>()
+                .map(Some)
+        }
+    }
+}
+"#;
+
+/// Emits a union as a plain Rust enum (no `NONE` member: absence is `Option::None`)
+/// with helpers to read/write its flatc JSON tag and payload.
+fn generate_union(out: &mut String, def: &EnumDef) {
+    let members: Vec<(&str, &str)> = def
+        .variants
+        .iter()
+        .filter(|v| v.name != "NONE")
+        .map(|v| {
+            (
+                v.name.as_str(),
+                v.rust_type.as_deref().unwrap_or(v.name.as_str()),
+            )
+        })
+        .collect();
+
+    writeln!(out, "#[derive(Debug, Clone, PartialEq)]").unwrap();
+    writeln!(out, "pub enum {} {{", def.name).unwrap();
+    for (name, ty) in &members {
+        writeln!(out, "    {}({}),", name, ty).unwrap();
+    }
+    writeln!(out, "}}").unwrap();
+    writeln!(out).unwrap();
+
+    writeln!(out, "impl {} {{", def.name).unwrap();
+    writeln!(out, "    /// The flatc JSON type tag of the active variant.").unwrap();
+    writeln!(out, "    pub fn tag(&self) -> &'static str {{").unwrap();
+    writeln!(out, "        match self {{").unwrap();
+    for (name, _) in &members {
+        writeln!(out, "            Self::{}(_) => \"{}\",", name, name).unwrap();
+    }
+    writeln!(out, "        }}").unwrap();
+    writeln!(out, "    }}").unwrap();
+    writeln!(out).unwrap();
+    writeln!(
+        out,
+        "    /// Serializes the active variant's payload (without the tag)."
+    )
+    .unwrap();
+    writeln!(
+        out,
+        "    pub fn payload_to_value(&self) -> Result<serde_json::Value, serde_json::Error> {{"
+    )
+    .unwrap();
+    writeln!(out, "        match self {{").unwrap();
+    for (name, _) in &members {
+        writeln!(out, "            Self::{}(v) => serde_json::to_value(v),", name).unwrap();
+    }
+    writeln!(out, "        }}").unwrap();
+    writeln!(out, "    }}").unwrap();
+    writeln!(out).unwrap();
+    writeln!(
+        out,
+        "    /// Builds the variant named by `tag` from its JSON payload."
+    )
+    .unwrap();
+    writeln!(
+        out,
+        "    pub fn from_tag_value(tag: &str, value: serde_json::Value) -> Result<Self, String> {{"
+    )
+    .unwrap();
+    writeln!(out, "        match tag {{").unwrap();
+    for (name, _) in &members {
+        writeln!(
+            out,
+            "            \"{0}\" => serde_json::from_value(value).map(Self::{0}).map_err(|e| e.to_string()),",
+            name
+        )
+        .unwrap();
+    }
+    writeln!(
+        out,
+        "            other => Err(format!(\"unknown {} type '{{other}}'\")),",
+        def.name
+    )
+    .unwrap();
+    writeln!(out, "        }}").unwrap();
+    writeln!(out, "    }}").unwrap();
+    writeln!(out, "}}").unwrap();
+    writeln!(out).unwrap();
 }
 
 fn generate_enum(out: &mut String, def: &EnumDef, _fqn: &str) {
@@ -677,7 +824,205 @@ fn generate_enum(out: &mut String, def: &EnumDef, _fqn: &str) {
     writeln!(out).unwrap();
 }
 
+/// The JSON key of a field (its serde rename, or its Rust name).
+fn json_key(field: &FieldDef) -> &str {
+    field.serde_rename.as_deref().unwrap_or(&field.name)
+}
+
+/// Emits one wire-struct field with the attributes shared by plain fields.
+fn write_wire_field(
+    out: &mut String,
+    def: &StructDef,
+    field: &FieldDef,
+    default_fns: &mut Vec<(String, String, String)>,
+) {
+    if let Some(rename) = &field.serde_rename {
+        writeln!(out, "    #[serde(rename = \"{}\")]", rename).unwrap();
+    }
+    if let Some(default_val) = &field.default_value {
+        let fn_name = format!("default_{}_{}", def.name, field.name);
+        writeln!(out, "    #[serde(default = \"{}\")]", fn_name).unwrap();
+        default_fns.push((fn_name, field.rust_type.clone(), default_val.clone()));
+    }
+    if field.is_optional {
+        writeln!(
+            out,
+            "    #[serde(skip_serializing_if = \"Option::is_none\")]"
+        )
+        .unwrap();
+    }
+    let full_type = if field.is_optional {
+        format!("Option<{}>", field.rust_type)
+    } else {
+        field.rust_type.clone()
+    };
+    writeln!(out, "    {}: {},", field.name, full_type).unwrap();
+}
+
+/// Emits one `Wire` field pair (tag, payload) for a union field.
+fn write_union_wire_fields(out: &mut String, field: &FieldDef) {
+    let (tag_ty, payload_ty) = if field.union_kind == UnionKind::Single {
+        ("Option<String>", "Option<serde_json::Value>")
+    } else {
+        ("Option<Vec<String>>", "Option<Vec<serde_json::Value>>")
+    };
+    let key = json_key(field);
+    for (rust, json, ty) in [
+        (format!("{}_tag", field.name), format!("{}_type", key), tag_ty),
+        (field.name.clone(), key.to_string(), payload_ty),
+    ] {
+        writeln!(
+            out,
+            "    #[serde(rename = \"{}\", default, skip_serializing_if = \"Option::is_none\")]",
+            json
+        )
+        .unwrap();
+        writeln!(out, "    {}: {},", rust, ty).unwrap();
+    }
+}
+
+/// Emits the manual `Serialize` impl of a table containing union fields.
+fn write_union_struct_serialize(out: &mut String, def: &StructDef, wire: &str) {
+    writeln!(out, "impl serde::Serialize for {} {{", def.name).unwrap();
+    writeln!(
+        out,
+        "    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {{"
+    )
+    .unwrap();
+    writeln!(out, "        let wire = {} {{", wire).unwrap();
+    for field in &def.fields {
+        let n = &field.name;
+        match field.union_kind {
+            UnionKind::NotUnion => writeln!(out, "            {n}: self.{n}.clone(),").unwrap(),
+            UnionKind::Single => {
+                writeln!(
+                    out,
+                    "            {n}_tag: self.{n}.as_ref().map(|u| u.tag().to_string()),"
+                )
+                .unwrap();
+                writeln!(
+                    out,
+                    "            {n}: self.{n}.as_ref().map(|u| u.payload_to_value()).transpose().map_err(serde::ser::Error::custom)?,"
+                )
+                .unwrap();
+            }
+            UnionKind::Vector => {
+                writeln!(
+                    out,
+                    "            {n}_tag: self.{n}.as_ref().map(|v| v.iter().map(|u| u.tag().to_string()).collect()),"
+                )
+                .unwrap();
+                writeln!(
+                    out,
+                    "            {n}: self.{n}.as_ref().map(|v| v.iter().map(|u| u.payload_to_value()).collect::<Result<Vec<_>, _>>()).transpose().map_err(serde::ser::Error::custom)?,"
+                )
+                .unwrap();
+            }
+        }
+    }
+    writeln!(out, "        }};").unwrap();
+    writeln!(out, "        wire.serialize(serializer)").unwrap();
+    writeln!(out, "    }}").unwrap();
+    writeln!(out, "}}").unwrap();
+    writeln!(out).unwrap();
+}
+
+/// Emits the manual `Deserialize` impl of a table containing union fields.
+fn write_union_struct_deserialize(out: &mut String, def: &StructDef, wire: &str) {
+    writeln!(out, "impl<'de> serde::Deserialize<'de> for {} {{", def.name).unwrap();
+    writeln!(
+        out,
+        "    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {{"
+    )
+    .unwrap();
+    writeln!(
+        out,
+        "        let wire = <{} as serde::Deserialize>::deserialize(deserializer)?;",
+        wire
+    )
+    .unwrap();
+    writeln!(out, "        Ok(Self {{").unwrap();
+    for field in &def.fields {
+        let n = &field.name;
+        let key = json_key(field);
+        let enum_ty = field
+            .rust_type
+            .strip_prefix("Vec<")
+            .and_then(|t| t.strip_suffix('>'))
+            .unwrap_or(&field.rust_type);
+        match field.union_kind {
+            UnionKind::NotUnion => writeln!(out, "            {n}: wire.{n},").unwrap(),
+            UnionKind::Single => writeln!(
+                out,
+                "            {n}: __union_from_wire(\"{key}\", wire.{n}_tag, wire.{n}, {enum_ty}::from_tag_value).map_err(serde::de::Error::custom)?,"
+            )
+            .unwrap(),
+            UnionKind::Vector => writeln!(
+                out,
+                "            {n}: __union_vec_from_wire(\"{key}\", wire.{n}_tag, wire.{n}, {enum_ty}::from_tag_value).map_err(serde::de::Error::custom)?,"
+            )
+            .unwrap(),
+        }
+    }
+    writeln!(out, "        }})").unwrap();
+    writeln!(out, "    }}").unwrap();
+    writeln!(out, "}}").unwrap();
+    writeln!(out).unwrap();
+}
+
+/// Emits a table containing union fields. The public struct keeps ergonomic
+/// `Option<Union>` fields; serde goes through a private wire struct that carries
+/// the `<field>_type` tag next to the payload, exactly as flatc's JSON does.
+fn generate_union_struct(out: &mut String, def: &StructDef) {
+    let wire = format!("{}Wire", def.name);
+    let mut default_fns: Vec<(String, String, String)> = Vec::new();
+
+    // Public struct (no serde derives: see the manual impls below).
+    writeln!(out, "#[derive(Debug, Clone, PartialEq)]").unwrap();
+    writeln!(out, "pub struct {} {{", def.name).unwrap();
+    for field in &def.fields {
+        let ty = if field.is_optional {
+            format!("Option<{}>", field.rust_type)
+        } else {
+            field.rust_type.clone()
+        };
+        writeln!(out, "    pub {}: {},", field.name, ty).unwrap();
+    }
+    writeln!(out, "}}").unwrap();
+    writeln!(out).unwrap();
+
+    // Wire struct: the tag is declared right before its payload because flatc's
+    // parser requires the type to appear first.
+    writeln!(out, "#[derive(Serialize, Deserialize)]").unwrap();
+    writeln!(out, "struct {} {{", wire).unwrap();
+    for field in &def.fields {
+        if field.union_kind == UnionKind::NotUnion {
+            write_wire_field(out, def, field, &mut default_fns);
+        } else {
+            write_union_wire_fields(out, field);
+        }
+    }
+    writeln!(out, "}}").unwrap();
+    writeln!(out).unwrap();
+
+    write_union_struct_serialize(out, def, &wire);
+    write_union_struct_deserialize(out, def, &wire);
+
+    for (fn_name, ty, value) in &default_fns {
+        writeln!(out, "fn {}() -> {} {{ {} }}", fn_name, ty, value).unwrap();
+        writeln!(out).unwrap();
+    }
+}
+
 fn generate_struct(out: &mut String, def: &StructDef, _fqn: &str) {
+    if def
+        .fields
+        .iter()
+        .any(|f| f.union_kind != UnionKind::NotUnion)
+    {
+        generate_union_struct(out, def);
+        return;
+    }
     writeln!(
         out,
         "#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]"
