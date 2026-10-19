@@ -76,14 +76,14 @@ jobs:
         shell: bash
         run: |
           cd amplitude-sdk
-          python3 scripts/build_schemas.py --flatc $(which flatc) -b schemas
+          python3 scripts/build_schemas.py -f $(which flatc) -b schemas -p $AM_SDK_PATH
 
       - name: Compile SDK schemas to .bfbs (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
           Push-Location amplitude-sdk
-          python3 scripts/build_schemas.py --flatc "$env:USERPROFILE/flatc.exe" -b schemas
+          python3 scripts/build_schemas.py -f "$env:USERPROFILE/flatc.exe" -b schemas -p "$env:AM_SDK_PATH"
           Pop-Location
 
       - name: Check formatting
