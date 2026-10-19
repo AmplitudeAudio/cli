@@ -205,19 +205,57 @@ jobs:
         with:
           key: ${{ matrix.target }}
 
-      - name: Setup Amplitude Audio SDK
-        id: setup-sdk
-        uses: AmplitudeAudio/action-setup-sdk@main
-        with:
-          platforms: ${{ matrix.sdk_platform }}
-          version: nightly
-          config: release
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Clone Amplitude Audio SDK
+        run: git clone https://github.com/AmplitudeAudio/sdk.git amplitude-sdk
 
       - name: Set AM_SDK_PATH
         shell: bash
-        run: echo "AM_SDK_PATH=${{ steps.setup-sdk.outputs.path }}" >> "$GITHUB_ENV"
+        run: echo "AM_SDK_PATH=$(pwd)/amplitude-sdk" >> "$GITHUB_ENV"
+
+      - name: Install flatc (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          TAG=$(curl -sL https://api.github.com/repos/google/flatbuffers/releases/latest | python3 -c "import sys,json; print(json.load(sys.stdin)['tag_name'])")
+          curl -sL "https://github.com/google/flatbuffers/releases/download/$TAG/Linux.flatc.binary.g%2B%2B-13.zip" -o flatc.zip
+          unzip -o flatc.zip -d flatc-bin
+          sudo cp flatc-bin/flatc /usr/local/bin/
+          flatc --version
+
+      - name: Install flatc (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          TAG=$(curl -sL https://api.github.com/repos/google/flatbuffers/releases/latest | python3 -c "import sys,json; print(json.load(sys.stdin)['tag_name'])")
+          curl -sL "https://github.com/google/flatbuffers/releases/download/$TAG/Mac.flatc.binary.zip" -o flatc.zip
+          unzip -o flatc.zip -d flatc-bin
+          sudo cp flatc-bin/flatc /usr/local/bin/
+          flatc --version
+
+      - name: Install flatc (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $tag = (Invoke-RestMethod -Uri https://api.github.com/repos/google/flatbuffers/releases/latest).tag_name
+          Invoke-WebRequest -Uri "https://github.com/google/flatbuffers/releases/download/$tag/Windows.flatc.binary.zip" -OutFile flatc.zip
+          Expand-Archive -Path flatc.zip -DestinationPath flatc-bin -Force
+          Copy-Item flatc-bin/flatc.exe -Destination $env:USERPROFILE/flatc.exe
+          $env:PATH += ";$env:USERPROFILE"
+          echo "PATH=$env:PATH" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
+          flatc.exe --version
+
+      - name: Compile SDK schemas to .bfbs (Unix)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          cd amplitude-sdk
+          python3 scripts/build_schemas.py --flatc $(which flatc) -b schemas
+
+      - name: Compile SDK schemas to .bfbs (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Push-Location amplitude-sdk
+          python3 scripts/build_schemas.py --flatc "$env:USERPROFILE/flatc.exe" -b schemas
+          Pop-Location
 
       - name: Build (native)
         if: matrix.cross == false
