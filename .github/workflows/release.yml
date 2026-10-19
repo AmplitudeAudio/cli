@@ -208,9 +208,15 @@ jobs:
       - name: Clone Amplitude Audio SDK
         run: git clone https://github.com/AmplitudeAudio/sdk.git amplitude-sdk
 
-      - name: Set AM_SDK_PATH
+      - name: Set AM_SDK_PATH (Unix)
+        if: runner.os != 'Windows'
         shell: bash
         run: echo "AM_SDK_PATH=$(pwd)/amplitude-sdk" >> "$GITHUB_ENV"
+
+      - name: Set AM_SDK_PATH (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: echo "AM_SDK_PATH=$PWD/amplitude-sdk" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
 
       - name: Install flatc (Linux)
         if: runner.os == 'Linux'

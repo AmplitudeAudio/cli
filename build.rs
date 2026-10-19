@@ -1163,7 +1163,7 @@ See the README for detailed setup instructions.
         fs::write(
             &out_path,
             format!(
-                "compile_error!(\"AM_SDK_PATH schemas directory not found: {}\");",
+                r#"compile_error!("AM_SDK_PATH schemas directory not found: {}");"#,
                 schemas_dir.display()
             ),
         )
@@ -1202,7 +1202,7 @@ See the README for detailed setup instructions.
         fs::write(
             &out_path,
             format!(
-                "compile_error!(\"No .bfbs schema files found in: {}\");",
+                r#"compile_error!("No .bfbs schema files found in: {}");"#,
                 schemas_dir.display()
             ),
         )
